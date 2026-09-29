@@ -169,7 +169,7 @@ def validate(data: dict, rep: Report) -> dict:
         p, e = rel_path(data["icon"])
         if e:
             rep.err("icon", f'"{data["icon"]}": {e}')
-        elif posixpath.splitext(p)[1] not in (".png", ".svg"):
+        elif posixpath.splitext(p)[1].lower() not in (".png", ".svg"):
             rep.err("icon", f'"{data["icon"]}": use PNG or SVG')
         else:
             m["icon"] = p

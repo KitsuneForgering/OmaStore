@@ -160,6 +160,15 @@ func relPath(p string) (string, error) {
 	return c, nil
 }
 
+// isIconPath accepts the formats the hicolor theme supports.
+func isIconPath(p string) bool {
+	switch strings.ToLower(path.Ext(p)) {
+	case ".png", ".svg":
+		return true
+	}
+	return false
+}
+
 func isImagePath(p string) bool {
 	switch strings.ToLower(path.Ext(p)) {
 	case ".png", ".svg", ".jpg", ".jpeg", ".webp", ".gif":
@@ -233,7 +242,7 @@ func (m *Manifest) sanitize() []Problem {
 		case err != nil:
 			errf("icon", "%q: %v", m.Icon, err)
 			p = ""
-		case !isImagePath(p) || (path.Ext(p) != ".png" && path.Ext(p) != ".svg"):
+		case !isIconPath(p):
 			errf("icon", "%q: use PNG or SVG", m.Icon)
 			p = ""
 		}

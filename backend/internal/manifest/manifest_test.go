@@ -185,3 +185,17 @@ func TestExecPlaceholders(t *testing.T) {
 		t.Errorf("invalid placeholder in exec: %v", ps)
 	}
 }
+
+// The icon extension is case-insensitive, like the icon heuristic
+// (gitrepo.FindIcon) and the screenshots: "Icon.PNG" is a PNG.
+func TestIconExtensionIgnoresCase(t *testing.T) {
+	for _, icon := range []string{"assets/Icon.PNG", "logo.Svg"} {
+		m, ps, err := Parse([]byte(`icon = "`+icon+`"`), true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m.Icon != icon || len(ps) != 0 {
+			t.Errorf("%s: icon = %q, problems = %v", icon, m.Icon, ps)
+		}
+	}
+}
