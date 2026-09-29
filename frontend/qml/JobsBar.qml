@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-// Faixa inferior com os jobs em andamento.
+// Bottom strip with the running jobs.
 Rectangle {
     id: bar
     implicitHeight: backend.jobs.runningCount > 0 ? list.contentHeight + 16 : 0
@@ -34,8 +34,8 @@ Rectangle {
                 Layout.preferredWidth: 280
                 elide: Text.ElideRight
                 color: theme.foreground
-                text: kind === "index" ? qsTr("Indexando catálogo") + (message ? " — " + message : "")
-                      : (kind === "update" ? qsTr("Atualizando %1") : qsTr("Instalando %1")).arg(repo)
+                text: kind === "index" ? qsTr("Indexing catalog") + (message ? " — " + message : "")
+                      : (kind === "update" ? qsTr("Updating %1") : qsTr("Installing %1")).arg(repo)
             }
             ProgressBar {
                 Layout.fillWidth: true
@@ -47,7 +47,7 @@ Rectangle {
                 text: stage
             }
             Button {
-                text: qsTr("Cancelar")
+                text: qsTr("Cancel")
                 flat: true
                 onClicked: backend.cancelJob(jobId)
             }

@@ -2,13 +2,13 @@
 
 #include <QQmlNetworkAccessManagerFactory>
 
-// Fábrica de QNetworkAccessManager para o QML engine que só permite
-// recursos locais (file:, qrc:, data:). O frontend não acessa a rede: tudo
-// que é remoto passa pelo daemon (image.get).
+// QNetworkAccessManager factory for the QML engine that only allows local
+// resources (file:, qrc:, data:). The frontend does not access the network:
+// everything remote goes through the daemon (image.get).
 class OfflineNamFactory : public QQmlNetworkAccessManagerFactory {
 public:
     QNetworkAccessManager *create(QObject *parent) override;
 };
 
-// Diz se uma URL é local (permitida).
+// Reports whether a URL is local (allowed).
 bool isLocalUrl(const QUrl &url);

@@ -25,7 +25,7 @@ private slots:
         d.handler = [](const QString &m, const QJsonObject &p) {
             if (m == "echo")
                 return QJsonObject{{"result", p}};
-            return QJsonObject{{"error", QJsonObject{{"code", -32601}, {"message", "método desconhecido"}}}};
+            return QJsonObject{{"error", QJsonObject{{"code", -32601}, {"message", "unknown method"}}}};
         };
         QVERIFY(d.listen());
         auto c = connectTo(d);
@@ -40,7 +40,7 @@ private slots:
         RpcError err;
         c->call("nope", {}, [&](const QJsonValue &, const RpcError &e) { err = e; });
         QTRY_COMPARE(err.code, -32601);
-        QCOMPARE(err.message, QStringLiteral("método desconhecido"));
+        QCOMPARE(err.message, QStringLiteral("unknown method"));
 
         const QJsonObject sent = d.received.first();
         QCOMPARE(sent.value("jsonrpc").toString(), QStringLiteral("2.0"));
@@ -51,7 +51,7 @@ private slots:
     {
         FakeDaemon d;
         QList<QJsonObject> held;
-        d.handler = [](const QString &, const QJsonObject &) { return QJsonObject{}; }; // não responde
+        d.handler = [](const QString &, const QJsonObject &) { return QJsonObject{}; }; // does not answer
         QVERIFY(d.listen());
         auto c = connectTo(d);
         QTRY_VERIFY(c->isConnected());
@@ -60,7 +60,7 @@ private slots:
         const qint64 id1 = c->call("a", {}, [&](const QJsonValue &r, const RpcError &) { first = r.toString(); });
         const qint64 id2 = c->call("b", {}, [&](const QJsonValue &r, const RpcError &) { second = r.toString(); });
         QTRY_COMPARE(d.received.size(), 2);
-        // Responde primeiro o segundo pedido, e numa escrita partida ao meio.
+        // Answers the second request first, in a write split in half.
         const QByteArray r2 = QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", id2}, {"result", "B"}}).toJson(QJsonDocument::Compact);
         const QByteArray r1 = QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", id1}, {"result", "A"}}).toJson(QJsonDocument::Compact);
         d.writeRaw(r2.left(5));
@@ -79,11 +79,11 @@ private slots:
         QTRY_VERIFY(c->isConnected());
         QTRY_VERIFY(d.hasClient());
         QSignalSpy spy(c.get(), &RpcClient::notification);
-        d.writeRaw("isto não é json\n\n");
+        d.writeRaw("this is not json\n\n");
         d.notify("job.progress", QJsonObject{{"id", "job-1"}});
         QTRY_COMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("job.progress"));
-        QVERIFY(c->isConnected()); // lixo não derruba a conexão
+        QVERIFY(c->isConnected()); // garbage does not drop the connection
     }
 
     void pendingFailOnDisconnectAndReconnect()
@@ -102,13 +102,13 @@ private slots:
         QTRY_COMPARE(err.code, int(RpcClient::DisconnectedCode));
         QTRY_VERIFY(!c->isConnected());
 
-        // Chamada sem conexão falha de forma assíncrona e só uma vez.
+        // A call without a connection fails asynchronously and only once.
         int offline = 0;
         c->call("x", {}, [&](const QJsonValue &, const RpcError &e) { offline += e.code == RpcClient::DisconnectedCode; });
         QCOMPARE(offline, 0);
         QTRY_COMPARE(offline, 1);
 
-        // O daemon volta: o cliente reconecta sozinho.
+        // The daemon comes back: the client reconnects on its own.
         QVERIFY(d.listen());
         QTRY_VERIFY_WITH_TIMEOUT(c->isConnected(), 3000);
         QCOMPARE(calls, 1);
@@ -116,8 +116,8 @@ private slots:
 
     void findDaemonIgnoresPath()
     {
-        // Um "omastored" no PATH (ex.: instalado por um app em ~/.local/bin)
-        // nunca deve ser usado.
+        // An "omastored" in PATH (e.g. installed by an app in ~/.local/bin)
+        // must never be used.
         QTemporaryDir dir;
         const QString fake = dir.path() + "/omastored";
         QFile f(fake);

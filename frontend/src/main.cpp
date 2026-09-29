@@ -22,15 +22,15 @@ int main(int argc, char *argv[])
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     QCommandLineParser args;
-    args.setApplicationDescription(QStringLiteral("Loja de apps do Omarchy"));
+    args.setApplicationDescription(QStringLiteral("App store for Omarchy"));
     args.addHelpOption();
     const QCommandLineOption openOpt(QStringLiteral("open"), QStringLiteral("Abre o app owner/repo."),
                                      QStringLiteral("repo"));
     const QCommandLineOption shotOpt(QStringLiteral("screenshot"),
-                                     QStringLiteral("Salva a janela em <arquivo> e sai (desenvolvimento)."),
-                                     QStringLiteral("arquivo"));
+                                     QStringLiteral("Saves the window to <file> and exits (development)."),
+                                     QStringLiteral("file"));
     const QCommandLineOption delayOpt(QStringLiteral("screenshot-delay"),
-                                      QStringLiteral("Espera antes do screenshot, em ms."), QStringLiteral("ms"),
+                                      QStringLiteral("Delay before the screenshot, in ms."), QStringLiteral("ms"),
                                       QStringLiteral("3000"));
     args.addOptions({openOpt, shotOpt, delayOpt});
     args.process(app);
@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
     RpcClient rpc;
     Backend backend(&rpc);
     Theme theme;
-    // Text.MarkdownText usa a paleta global para links, não a do QML.
+    // Text.MarkdownText uses the global palette for links, not QML's.
     auto applyLinkColor = [&app, &theme] {
         QPalette p = app.palette();
         p.setColor(QPalette::Link, theme.accent());
@@ -68,7 +68,7 @@ int main(int argc, char *argv[])
             auto *win = roots.isEmpty() ? nullptr : qobject_cast<QQuickWindow *>(roots.first());
             const bool ok = win && win->grabWindow().save(file);
             if (!ok)
-                qWarning("não foi possível salvar o screenshot em %s", qPrintable(file));
+                qWarning("could not save the screenshot to %s", qPrintable(file));
             QCoreApplication::exit(ok ? 0 : 1);
         });
     }

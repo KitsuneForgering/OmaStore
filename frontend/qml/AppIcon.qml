@@ -1,6 +1,6 @@
 import QtQuick
 
-// Ícone de app carregado pelo daemon; mostra a inicial enquanto não há imagem.
+// App icon loaded by the daemon; shows the initial while there is no image.
 Item {
     id: root
     property string url: ""

@@ -29,7 +29,7 @@ Backend::Backend(RpcClient *rpc, QObject *parent)
             loadCategories();
             reloadDetail();
             if (!m_detailRepo.isEmpty())
-                loadSimilar(m_detailRepo); // detalhe aberto antes de conectar (ex.: --open)
+                loadSimilar(m_detailRepo); // detail opened before connecting (e.g. --open)
             maybeIndexOnFirstRun();
         }
     });
@@ -41,7 +41,7 @@ Backend::Backend(RpcClient *rpc, QObject *parent)
         if (!m_detailRepo.isEmpty() && (repo.isEmpty() || repo.compare(m_detailRepo, Qt::CaseInsensitive) == 0))
             reloadDetail();
         if (!m_detailRepo.isEmpty() && repo.isEmpty())
-            loadSimilar(m_detailRepo); // índice novo pode mudar os parecidos
+            loadSimilar(m_detailRepo); // a new index may change the similar apps
     });
     connect(m_jobs, &JobsModel::finished, this, [this](const QVariantMap &job) {
         const QString state = job.value(QStringLiteral("state")).toString();
@@ -49,9 +49,9 @@ Backend::Backend(RpcClient *rpc, QObject *parent)
         const QVariantMap error = job.value(QStringLiteral("error")).toMap();
         if (state == QLatin1String("done")) {
             if (kind == QLatin1String("install"))
-                emit notice(tr("%1 instalado").arg(repoOf(job)));
+                emit notice(tr("%1 installed").arg(repoOf(job)));
             else if (kind == QLatin1String("update"))
-                emit notice(tr("%1 atualizado").arg(repoOf(job)));
+                emit notice(tr("%1 updated").arg(repoOf(job)));
         } else if (state == QLatin1String("failed")) {
             emit errorOccurred(friendlyError(error.value(QStringLiteral("code")).toInt(),
                                              error.value(QStringLiteral("message")).toString()));
@@ -76,22 +76,22 @@ QString Backend::friendlyError(int code, const QString &message)
 {
     switch (code) {
     case RpcClient::DisconnectedCode:
-        return tr("Sem conexão com o omastored. Tentando reconectar…");
+        return tr("No connection to omastored. Trying to reconnect…");
     case -32002:
-        return tr("Já existe uma operação em andamento para este item.");
+        return tr("An operation is already running for this item.");
     case -32003:
-        return tr("Um arquivo com o mesmo nome já existe e não pertence ao OmaStore:\n%1").arg(message);
+        return tr("A file with the same name already exists and does not belong to OmaStore:\n%1").arg(message);
     case -32004:
-        return tr("Este app não publica um binário para a sua arquitetura.");
+        return tr("This app does not publish a binary for your architecture.");
     case -32005:
-        return tr("Limite de requisições do GitHub esgotado. Faça `gh auth login` ou defina GITHUB_TOKEN.\n%1")
+        return tr("GitHub request limit exhausted. Run `gh auth login` or set GITHUB_TOKEN.\n%1")
             .arg(message);
     case -32007:
-        return tr("O app já está na versão mais recente.");
+        return tr("The app is already at the latest version.");
     case -32008:
-        return tr("O arquivo baixado não confere com o checksum publicado. Nada foi instalado.");
+        return tr("The downloaded file does not match the published checksum. Nothing was installed.");
     case -32009:
-        return tr("Operação cancelada.");
+        return tr("Operation canceled.");
     }
     return message;
 }
@@ -153,7 +153,7 @@ void Backend::reloadDetail()
     m_rpc->call(QStringLiteral("catalog.get"), {{QStringLiteral("repo"), repo}},
                 [this, repo](const QJsonValue &result, const RpcError &err) {
         if (repo != m_detailRepo)
-            return; // o usuário já abriu outro app
+            return; // the user already opened another app
         m_detailLoading = false;
         if (!err.ok()) {
             emit detailChanged();
@@ -203,7 +203,7 @@ void Backend::uninstall(const QString &repo)
         if (!err.ok())
             emit errorOccurred(friendlyError(err.code, err.message));
         else
-            emit notice(tr("%1 removido").arg(repo));
+            emit notice(tr("%1 removed").arg(repo));
     });
 }
 
@@ -213,7 +213,7 @@ void Backend::refreshIndex(bool force)
     if (force)
         params.insert(QStringLiteral("force"), true);
     m_rpc->call(QStringLiteral("index.start"), params, [this](const QJsonValue &, const RpcError &err) {
-        if (!err.ok() && err.code != -32002) // já indexando: nada a fazer
+        if (!err.ok() && err.code != -32002) // already indexing: nothing to do
             emit errorOccurred(friendlyError(err.code, err.message));
     });
 }
@@ -228,7 +228,7 @@ QString Backend::readmeForDisplay(const QString &markdown) const
     return Markdown::stripImages(markdown);
 }
 
-// Na primeira execução o catálogo está vazio: indexa automaticamente.
+// On the first run the catalog is empty: index automatically.
 void Backend::maybeIndexOnFirstRun()
 {
     if (m_checkedEmpty)

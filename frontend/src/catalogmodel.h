@@ -7,8 +7,8 @@
 
 class RpcClient;
 
-// Lista de apps vinda de catalog.list. Recarrega sozinho quando os filtros
-// mudam, quando a conexão volta e quando o daemon avisa catalog.changed.
+// App list coming from catalog.list. Reloads on its own when the filters
+// change, when the connection comes back and when the daemon sends catalog.changed.
 class CatalogModel : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(QString category READ category WRITE setCategory NOTIFY categoryChanged)
@@ -50,14 +50,14 @@ public:
     void setQuery(const QString &q);
     void setInstalledOnly(bool on);
 
-    // Intervalo de espera antes de recarregar após mudança de filtro.
+    // Wait before reloading after a filter change.
     void setDebounce(int ms) { m_debounce.setInterval(ms); }
 
     Q_INVOKABLE void reload();
     Q_INVOKABLE QVariantMap get(int row) const;
     Q_INVOKABLE int indexOf(const QString &repo) const;
 
-    // Substitui o conteúdo (usado ao receber a resposta; público para testes).
+    // Replaces the content (used when the response arrives; public for tests).
     void setItems(const QJsonArray &items);
 
 signals:
@@ -81,5 +81,5 @@ private:
     bool m_loading = false;
     QString m_error;
     QTimer m_debounce;
-    quint64 m_generation = 0; // descarta respostas de pedidos antigos
+    quint64 m_generation = 0; // discards responses to old requests
 };

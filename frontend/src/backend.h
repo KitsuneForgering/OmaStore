@@ -9,9 +9,9 @@
 
 class RpcClient;
 
-// Fachada exposta ao QML: modelos, detalhe do app selecionado, categorias e
-// ações (instalar, atualizar, remover, indexar). Toda a lógica fica no
-// daemon; aqui só há chamadas RPC e estado de apresentação.
+// Facade exposed to QML: models, detail of the selected app, categories and
+// actions (install, update, remove, index). All the logic lives in the
+// daemon; here there are only RPC calls and presentation state.
 class Backend : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
@@ -45,10 +45,10 @@ public:
     Q_INVOKABLE void updateAll();
     Q_INVOKABLE void refreshIndex(bool force = false);
     Q_INVOKABLE void cancelJob(const QString &jobId);
-    // Markdown do README pronto para exibir (sem imagens remotas).
+    // README markdown ready to display (without remote images).
     Q_INVOKABLE QString readmeForDisplay(const QString &markdown) const;
 
-    // Mensagem amigável para um código de erro do daemon (docs/ipc.md).
+    // Friendly message for a daemon error code (docs/ipc.md).
     static QString friendlyError(int code, const QString &message);
 
 signals:
@@ -57,9 +57,9 @@ signals:
     void detailChanged();
     void similarChanged();
     void updatesAvailableChanged();
-    // Erro para mostrar ao usuário.
+    // Error to show to the user.
     void errorOccurred(const QString &message);
-    // Aviso informativo (ex.: instalação concluída).
+    // Informational notice (e.g. installation finished).
     void notice(const QString &message);
 
 private:

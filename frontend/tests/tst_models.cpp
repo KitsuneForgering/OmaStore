@@ -16,7 +16,7 @@ QJsonObject app(const QString &repo, const QString &category, bool update = fals
             {"installedVersion", installed}, {"updateAvailable", update}, {"screenshots", QJsonArray{"https://x/a.png"}}};
 }
 
-// Daemon falso com um catálogo filtrável.
+// Fake daemon with a filterable catalog.
 void serveCatalog(FakeDaemon &d, QJsonArray *all)
 {
     d.handler = [all](const QString &m, const QJsonObject &p) -> QJsonObject {
@@ -88,7 +88,7 @@ private slots:
         QTRY_COMPARE(m.data(m.index(0), CatalogModel::RepoRole).toString(), QStringLiteral("a/photo"));
         QCOMPARE(m.rowCount(), 1);
 
-        // catalog.changed recarrega.
+        // catalog.changed reloads.
         m.setQuery({});
         QTRY_COMPARE(m.rowCount(), 2);
         all.append(app("a/new", "Office"));
@@ -101,7 +101,7 @@ private slots:
     {
         FakeDaemon d;
         QVERIFY(d.listen());
-        // Primeiro pedido nunca responde a tempo; o segundo responde.
+        // The first request never answers in time; the second one does.
         int n = 0;
         d.handler = [&n](const QString &m, const QJsonObject &p) -> QJsonObject {
             if (m != "catalog.list")
@@ -164,7 +164,7 @@ private slots:
         QCOMPARE(jobs.runningCount(), 0);
         QVERIFY(jobs.forRepo("a/vm").isEmpty());
 
-        // Um progresso atrasado não ressuscita um job concluído.
+        // A late progress update does not revive a finished job.
         d.notify("job.progress", QJsonObject{{"id", "job-1"}, {"state", "running"}});
         QTest::qWait(50);
         QCOMPARE(jobs.runningCount(), 0);
@@ -187,7 +187,7 @@ private slots:
         Backend b(&rpc);
         rpc.start();
 
-        // Catálogo vazio na primeira conexão dispara index.start.
+        // An empty catalog on the first connection triggers index.start.
         QTRY_COMPARE(d.count("index.start"), 1);
         QTRY_COMPARE(b.categories().size(), 1);
 
@@ -196,7 +196,7 @@ private slots:
         QTRY_COMPARE(b.similar().size(), 1);
         QCOMPARE(b.similar().first().toMap().value("repo").toString(), QStringLiteral("a/draw"));
         QVERIFY(!b.detailLoading());
-        // catalog.changed do mesmo repo recarrega o detalhe.
+        // catalog.changed for the same repo reloads the detail.
         const int gets = d.count("catalog.get");
         d.notify("catalog.changed", QJsonObject{{"repo", "a/photo"}});
         QTRY_COMPARE(d.count("catalog.get"), gets + 1);
@@ -207,12 +207,12 @@ private slots:
         QSignalSpy errors(&b, &Backend::errorOccurred);
         b.install("a/photo");
         QTRY_COMPARE(d.count("install.start"), 1);
-        b.uninstall("a/photo"); // o falso responde erro -32601
+        b.uninstall("a/photo"); // the fake answers error -32601
         QTRY_COMPARE(errors.count(), 1);
     }
 
-    // Detalhe aberto antes da conexão (ex.: omastore-gui --open) carrega o
-    // detalhe e os parecidos assim que conectar.
+    // A detail opened before connecting (e.g. omastore-gui --open) loads the
+    // detail and the similar apps as soon as it connects.
     void detailOpenedBeforeConnect()
     {
         FakeDaemon d;
@@ -222,7 +222,7 @@ private slots:
         RpcClient rpc(d.path());
         rpc.setAutoStart(false);
         Backend b(&rpc);
-        b.openDetail("a/photo"); // ainda sem conexão
+        b.openDetail("a/photo"); // still not connected
         QTest::qWait(20);
         QVERIFY(b.similar().isEmpty());
         rpc.start();

@@ -10,7 +10,7 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Network Quick QuickControls2 T
 qt_standard_project_setup(REQUIRES 6.5)
 qt_policy(SET QTP0004 NEW)
 
-# Lógica C++ sem QML (cliente IPC, modelos, tema), usada pelo app e pelos testes.
+# C++ logic without QML (IPC client, models, theme), used by the app and the tests.
 add_library(omastore-core STATIC
     src/rpcclient.h src/rpcclient.cpp
     src/catalogmodel.h src/catalogmodel.cpp

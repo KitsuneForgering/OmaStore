@@ -2,8 +2,8 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-// Cartão do grid do catálogo. Os roles do CatalogModel chegam como
-// propriedades obrigatórias.
+// Catalog grid card. The CatalogModel roles arrive as required
+// properties.
 Rectangle {
     id: card
     required property string repo
@@ -94,7 +94,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
             Text {
                 visible: card.installedVersion !== ""
-                text: card.updateAvailable ? qsTr("atualização disponível") : qsTr("instalado")
+                text: card.updateAvailable ? qsTr("update available") : qsTr("installed")
                 color: card.updateAvailable ? theme.warning : theme.success
                 font.pixelSize: 12
             }

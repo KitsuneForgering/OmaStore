@@ -9,16 +9,16 @@
 
 #include <functional>
 
-// Erro de uma chamada JSON-RPC. code == 0 significa sucesso.
+// Error of a JSON-RPC call. code == 0 means success.
 struct RpcError {
     int code = 0;
     QString message;
     bool ok() const { return code == 0; }
 };
 
-// Cliente JSON-RPC 2.0 do omastored sobre QLocalSocket (uma mensagem por
-// linha). Reconecta sozinho e, se o daemon não estiver rodando, tenta
-// iniciá-lo. Ver docs/ipc.md.
+// JSON-RPC 2.0 client for omastored over QLocalSocket (one message per
+// line). Reconnects on its own and, if the daemon is not running, tries to
+// start it. See docs/ipc.md.
 class RpcClient : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool connected READ isConnected NOTIFY connectedChanged)
@@ -26,30 +26,30 @@ class RpcClient : public QObject {
 public:
     using Callback = std::function<void(const QJsonValue &result, const RpcError &error)>;
 
-    // Código usado quando a conexão cai com chamadas pendentes.
+    // Code used when the connection drops with pending calls.
     static constexpr int DisconnectedCode = -1;
 
     explicit RpcClient(QString socketPath = defaultSocketPath(), QObject *parent = nullptr);
     ~RpcClient() override;
 
     static QString defaultSocketPath();
-    // Onde procurar o daemon. Nunca usa o PATH, que inclui ~/.local/bin
-    // (onde ficam os apps instalados pela loja).
+    // Where to look for the daemon. Never uses PATH, which includes ~/.local/bin
+    // (where the apps installed by the store live).
     static QString findDaemon();
 
     bool isConnected() const;
     QString socketPath() const { return m_path; }
 
-    // Liga/desliga a tentativa de iniciar o daemon (desligado nos testes).
+    // Turns the attempt to start the daemon on/off (off in tests).
     void setAutoStart(bool on) { m_autoStart = on; }
     void setReconnectInterval(int ms) { m_reconnect.setInterval(ms); }
 
-    // Inicia a conexão (e as reconexões automáticas).
+    // Starts the connection (and the automatic reconnections).
     void start();
     void stop();
 
-    // Envia uma chamada; cb é chamado exatamente uma vez (com erro
-    // DisconnectedCode se a conexão cair antes da resposta).
+    // Sends a call; cb is called exactly once (with error
+    // DisconnectedCode if the connection drops before the response).
     qint64 call(const QString &method, const QJsonObject &params = {}, Callback cb = {});
 
 signals:

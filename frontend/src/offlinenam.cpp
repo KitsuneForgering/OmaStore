@@ -20,8 +20,8 @@ protected:
     {
         if (isLocalUrl(req.url()))
             return QNetworkAccessManager::createRequest(op, req, data);
-        qWarning("OmaStore: acesso de rede bloqueado no frontend: %s", qPrintable(req.url().toDisplayString()));
-        // Uma URL inválida faz o QNAM responder com erro, sem tocar a rede.
+        qWarning("OmaStore: network access blocked in the frontend: %s", qPrintable(req.url().toDisplayString()));
+        // An invalid URL makes the QNAM reply with an error, without touching the network.
         QNetworkRequest blocked(req);
         blocked.setUrl(QUrl(QStringLiteral("blocked:")));
         return QNetworkAccessManager::createRequest(op, blocked, data);

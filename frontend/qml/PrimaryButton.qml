@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 
-// Botão de ação principal, na cor de destaque do tema.
+// Main action button, in the theme's accent color.
 Button {
     id: control
     contentItem: Text {

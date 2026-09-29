@@ -27,7 +27,7 @@ ApplicationWindow {
         linkVisited: theme.accent
     }
 
-    // "discover" ou "installed"
+    // "discover" or "installed"
     property string section: "discover"
 
     function openApp(repo) {
@@ -95,7 +95,7 @@ ApplicationWindow {
         }
     }
 
-    // Avisos e erros vindos do backend.
+    // Notices and errors coming from the backend.
     Rectangle {
         id: toast
         property bool isError: false

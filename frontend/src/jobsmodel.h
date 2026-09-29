@@ -6,13 +6,13 @@
 
 class RpcClient;
 
-// Jobs em andamento e recém-concluídos, mantidos pelas notificações
-// job.started/progress/done/failed (e por jobs.list ao conectar).
+// Running and recently finished jobs, kept up to date by the
+// job.started/progress/done/failed notifications (and by jobs.list on connect).
 class JobsModel : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
     Q_PROPERTY(int runningCount READ runningCount NOTIFY runningCountChanged)
-    // Incrementado a cada mudança; permite bindings em QML reavaliarem forRepo().
+    // Incremented on every change; lets QML bindings re-evaluate forRepo().
     Q_PROPERTY(int revision READ revision NOTIFY revisionChanged)
 
 public:
@@ -24,7 +24,7 @@ public:
         StageRole,
         DoneRole,
         TotalRole,
-        ProgressRole, // 0..1, ou -1 se indeterminado
+        ProgressRole, // 0..1, or -1 if indeterminate
         MessageRole,
         ErrorRole,
     };
@@ -39,14 +39,14 @@ public:
     int runningCount() const;
     int revision() const { return m_revision; }
 
-    // Job em andamento do repo (vazio se não houver).
+    // Running job of the repo (empty if there is none).
     Q_INVOKABLE QVariantMap forRepo(const QString &repo) const;
-    // Job de índice em andamento (vazio se não houver).
+    // Running index job (empty if there is none).
     Q_INVOKABLE QVariantMap indexJob() const;
-    // Remove da lista os jobs concluídos.
+    // Removes the finished jobs from the list.
     Q_INVOKABLE void clearFinished();
 
-    // Aplica o estado de um job (público para testes).
+    // Applies a job's state (public for tests).
     void upsert(const QJsonObject &job);
 
     static double progressOf(const QJsonObject &job);
@@ -55,7 +55,7 @@ signals:
     void countChanged();
     void runningCountChanged();
     void revisionChanged();
-    // Emitido quando um job termina (state = done/failed/canceled).
+    // Emitted when a job finishes (state = done/failed/canceled).
     void finished(const QVariantMap &job);
 
 private:

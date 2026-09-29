@@ -9,7 +9,7 @@
 #include <QStandardPaths>
 
 namespace {
-// Limite de uma linha recebida (o daemon tem limite igual na direção oposta).
+// Limit of a received line (the daemon has the same limit in the other direction).
 constexpr qint64 MaxLine = 16 * 1024 * 1024;
 }
 
@@ -25,7 +25,7 @@ RpcClient::RpcClient(QString socketPath, QObject *parent)
     connect(&m_socket, &QLocalSocket::errorOccurred, this, [this](QLocalSocket::LocalSocketError err) {
         if (m_socket.state() == QLocalSocket::ConnectedState)
             return;
-        // Daemon ausente: tenta iniciá-lo, no máximo a cada 10 s.
+        // Daemon missing: try to start it, at most every 10 s.
         const bool absent = err == QLocalSocket::ServerNotFoundError
             || err == QLocalSocket::ConnectionRefusedError;
         const qint64 now = QDateTime::currentMSecsSinceEpoch();
@@ -40,10 +40,10 @@ RpcClient::RpcClient(QString socketPath, QObject *parent)
     });
 }
 
-// O QLocalSocket (membro) emite disconnected() no próprio destrutor, quando
-// os outros membros (m_pending) já foram destruídos. Desligamos os sinais
-// antes; callbacks pendentes são descartados sem serem chamados, pois quem
-// os registrou pode já não existir.
+// The QLocalSocket (a member) emits disconnected() in its own destructor, when
+// the other members (m_pending) have already been destroyed. We disconnect the
+// signals first; pending callbacks are dropped without being called, since
+// whoever registered them may no longer exist.
 RpcClient::~RpcClient()
 {
     m_running = false;
@@ -69,7 +69,7 @@ QString RpcClient::findDaemon()
         candidates << env;
     const QString appDir = QCoreApplication::applicationDirPath();
     candidates << appDir + QStringLiteral("/omastored")
-               << appDir + QStringLiteral("/../../bin/omastored") // árvore de desenvolvimento
+               << appDir + QStringLiteral("/../../bin/omastored") // development tree
                << QStringLiteral("/usr/bin/omastored")
                << QStringLiteral("/usr/local/bin/omastored");
     for (const QString &c : candidates) {
@@ -110,9 +110,9 @@ qint64 RpcClient::call(const QString &method, const QJsonObject &params, Callbac
     const qint64 id = ++m_seq;
     if (!isConnected()) {
         if (cb) {
-            // Resposta assíncrona, como seria uma resposta real.
+            // Asynchronous response, as a real response would be.
             QMetaObject::invokeMethod(this, [cb] {
-                cb({}, {DisconnectedCode, QStringLiteral("sem conexão com o omastored")});
+                cb({}, {DisconnectedCode, QStringLiteral("no connection to omastored")});
             }, Qt::QueuedConnection);
         }
         return id;
@@ -138,7 +138,7 @@ void RpcClient::onReadyRead()
         if (!line.isEmpty())
             handleLine(line);
     }
-    // Linha sem '\n' maior que o limite: o fluxo está corrompido.
+    // A line without '\n' larger than the limit: the stream is corrupted.
     if (m_socket.bytesAvailable() > MaxLine)
         m_socket.abort();
 }
@@ -148,7 +148,7 @@ void RpcClient::handleLine(const QByteArray &line)
     QJsonParseError perr;
     const QJsonDocument doc = QJsonDocument::fromJson(line, &perr);
     if (perr.error != QJsonParseError::NoError || !doc.isObject()) {
-        qWarning("omastored enviou JSON inválido: %s", qPrintable(perr.errorString()));
+        qWarning("omastored sent invalid JSON: %s", qPrintable(perr.errorString()));
         return;
     }
     const QJsonObject msg = doc.object();
@@ -181,7 +181,7 @@ void RpcClient::failPending(const QString &why)
 
 void RpcClient::onDisconnected()
 {
-    failPending(QStringLiteral("conexão com o omastored perdida"));
+    failPending(QStringLiteral("connection to omastored lost"));
     emit connectedChanged();
     if (m_running)
         m_reconnect.start();

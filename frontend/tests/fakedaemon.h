@@ -1,7 +1,7 @@
 #pragma once
 
-// Servidor falso do omastored para os testes: responde por uma função
-// configurável e permite enviar notificações.
+// Fake omastored server for the tests: answers through a configurable
+// function and can send notifications.
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -15,8 +15,8 @@
 class FakeDaemon : public QObject {
     Q_OBJECT
 public:
-    // Recebe (method, params) e devolve {"result": ...} ou {"error": {...}};
-    // um objeto vazio significa "não responder".
+    // Receives (method, params) and returns {"result": ...} or {"error": {...}};
+    // an empty object means "do not respond".
     std::function<QJsonObject(const QString &, const QJsonObject &)> handler;
     QList<QJsonObject> received;
 
@@ -52,7 +52,7 @@ public:
         m_server.close();
     }
     QString path() const { return m_path; }
-    // O cliente pode se ver conectado antes de o servidor aceitar a conexão.
+    // The client may see itself connected before the server accepts the connection.
     bool hasClient() const { return !m_client.isNull(); }
 
     void notify(const QString &method, const QJsonValue &params)

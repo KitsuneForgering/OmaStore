@@ -20,7 +20,7 @@ JobsModel::JobsModel(RpcClient *rpc, QObject *parent)
         if (method.startsWith(QLatin1String("job.")))
             upsert(params.toObject());
     });
-    // Ao (re)conectar, sincroniza com o que o daemon já está fazendo.
+    // On (re)connect, sync with what the daemon is already doing.
     connect(rpc, &RpcClient::connectedChanged, this, [this, rpc] {
         if (!rpc->isConnected())
             return;
@@ -113,8 +113,8 @@ void JobsModel::upsert(const QJsonObject &job)
         emit countChanged();
         justFinished = str(job, "state") != Running;
     } else {
-        // Notificações podem chegar fora de ordem entre jobs.list e o fluxo
-        // de eventos: um job concluído nunca volta a "running".
+        // Notifications may arrive out of order between jobs.list and the event
+        // stream: a finished job never goes back to "running".
         const QJsonObject &old = m_jobs.at(row);
         if (str(old, "state") != Running && str(job, "state") == Running)
             return;

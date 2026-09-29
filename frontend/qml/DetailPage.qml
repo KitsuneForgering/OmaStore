@@ -23,25 +23,25 @@ Page {
 
     function stageText(stage) {
         switch (stage) {
-        case "download": return qsTr("Baixando")
-        case "verify": return qsTr("Verificando")
-        case "extract": return qsTr("Extraindo")
-        case "integrate": return qsTr("Integrando ao sistema")
-        case "done": return qsTr("Concluído")
+        case "download": return qsTr("Downloading")
+        case "verify": return qsTr("Verifying")
+        case "extract": return qsTr("Extracting")
+        case "integrate": return qsTr("Integrating with the system")
+        case "done": return qsTr("Done")
         }
-        return qsTr("Preparando")
+        return qsTr("Preparing")
     }
 
     Dialog {
         id: confirmUnverified
         anchors.centerIn: parent
         modal: true
-        title: qsTr("Instalar sem verificação?")
+        title: qsTr("Install without verification?")
         standardButtons: Dialog.Yes | Dialog.No
         Label {
             width: 360
             wrapMode: Text.Wrap
-            text: qsTr("Esta release não publica checksum, então o OmaStore não consegue confirmar que o arquivo baixado é o que o autor publicou.")
+            text: qsTr("This release publishes no checksum, so OmaStore cannot confirm that the downloaded file is the one the author published.")
         }
         onAccepted: backend.install(page.app.repo)
     }
@@ -50,7 +50,7 @@ Page {
         id: confirmRemove
         anchors.centerIn: parent
         modal: true
-        title: qsTr("Remover %1?").arg(page.app.name || "")
+        title: qsTr("Remove %1?").arg(page.app.name || "")
         standardButtons: Dialog.Yes | Dialog.No
         onAccepted: backend.uninstall(page.app.repo)
     }
@@ -70,7 +70,7 @@ Page {
             spacing: 20
 
             Button {
-                text: qsTr("← Voltar")
+                text: qsTr("← Back")
                 flat: true
                 onClicked: page.backRequested()
             }
@@ -123,8 +123,8 @@ Page {
                             "★ " + (page.app.stars || 0),
                             page.app.category,
                             page.app.license,
-                            page.app.latestVersion ? qsTr("versão %1").arg(page.app.latestVersion) : "",
-                            page.installed ? qsTr("instalada: %1").arg(page.app.install.version) : "",
+                            page.app.latestVersion ? qsTr("version %1").arg(page.app.latestVersion) : "",
+                            page.installed ? qsTr("installed: %1").arg(page.app.install.version) : "",
                         ].filter(s => !!s).join("  ·  ")
                     }
                 }
@@ -136,17 +136,17 @@ Page {
                     PrimaryButton {
                         visible: !page.installed && !page.busy
                         enabled: backend.connected && !!page.app.installable
-                        text: page.app.installable ? qsTr("Instalar") : qsTr("Sem binário para Linux")
+                        text: page.app.installable ? qsTr("Install") : qsTr("No Linux binary")
                         onClicked: page.unverified ? confirmUnverified.open() : backend.install(page.app.repo)
                     }
                     PrimaryButton {
                         visible: page.installed && !!page.app.updateAvailable && !page.busy
-                        text: qsTr("Atualizar para %1").arg(page.app.latestVersion)
+                        text: qsTr("Update to %1").arg(page.app.latestVersion)
                         onClicked: backend.update(page.app.repo)
                     }
                     Button {
                         visible: page.installed && !page.busy
-                        text: qsTr("Remover")
+                        text: qsTr("Remove")
                         onClicked: confirmRemove.open()
                     }
                     ColumnLayout {
@@ -162,14 +162,14 @@ Page {
                             value: page.job.progress > 0 ? page.job.progress : 0
                         }
                         Button {
-                            text: qsTr("Cancelar")
+                            text: qsTr("Cancel")
                             flat: true
                             onClicked: backend.cancelJob(page.job.id)
                         }
                     }
                     Text {
                         visible: page.unverified && !page.installed
-                        text: qsTr("⚠ sem checksum")
+                        text: qsTr("⚠ no checksum")
                         color: theme.warning
                         font.pixelSize: 11
                     }
@@ -204,13 +204,13 @@ Page {
                 ScrollBar.horizontal: ScrollBar {}
             }
 
-            // Apps parecidos (recomendação local do daemon).
+            // Similar apps (local recommendation from the daemon).
             ColumnLayout {
                 Layout.fillWidth: true
                 visible: backend.similar.length > 0
                 spacing: 8
                 Text {
-                    text: qsTr("Apps parecidos")
+                    text: qsTr("Similar apps")
                     color: theme.foreground
                     font.pixelSize: 16
                     font.bold: true
@@ -276,7 +276,7 @@ Page {
                 color: theme.foreground
                 linkColor: theme.accent
                 onLinkActivated: (link) => {
-                    // Só abre links web no navegador; nada de esquemas locais.
+                    // Only opens web links in the browser; no local schemes.
                     if (link.startsWith("https://") || link.startsWith("http://"))
                         Qt.openUrlExternally(link)
                 }

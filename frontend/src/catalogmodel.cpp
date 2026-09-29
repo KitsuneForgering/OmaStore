@@ -113,7 +113,7 @@ void CatalogModel::reload()
     m_rpc->call(QStringLiteral("catalog.list"), params,
                 [this, gen, guard = QPointer<CatalogModel>(this)](const QJsonValue &result, const RpcError &err) {
         if (!guard || gen != m_generation)
-            return; // resposta de um pedido já substituído
+            return; // response to a request that was already superseded
         setLoading(false);
         if (!err.ok()) {
             setError(err.message);

@@ -55,11 +55,11 @@ QQuickImageResponse *DaemonImageProvider::requestImageResponse(const QString &id
     if (!rpc || !url.startsWith(QLatin1String("https://"))) {
         QMetaObject::invokeMethod(resp, [guard] {
             if (guard)
-                guard->finish({}, QStringLiteral("URL de imagem inválida"));
+                guard->finish({}, QStringLiteral("invalid image URL"));
         }, Qt::QueuedConnection);
         return resp;
     }
-    // O pedido pode vir de outra thread; o cliente RPC vive na thread da GUI.
+    // The request may come from another thread; the RPC client lives in the GUI thread.
     QMetaObject::invokeMethod(rpc, [rpc, url, requestedSize, guard] {
         rpc->call(QStringLiteral("image.get"), {{QStringLiteral("url"), url}},
                   [requestedSize, guard](const QJsonValue &result, const RpcError &err) {
@@ -71,7 +71,7 @@ QQuickImageResponse *DaemonImageProvider::requestImageResponse(const QString &id
             }
             const QString path = result.toObject().value(QStringLiteral("path")).toString();
             QImage img = load(path, requestedSize);
-            guard->finish(img, img.isNull() ? QStringLiteral("não foi possível ler %1").arg(path) : QString());
+            guard->finish(img, img.isNull() ? QStringLiteral("could not read %1").arg(path) : QString());
         });
     }, Qt::QueuedConnection);
     return resp;

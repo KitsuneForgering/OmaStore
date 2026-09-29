@@ -50,19 +50,19 @@ Rectangle {
         }
 
         NavItem {
-            text: qsTr("Descobrir")
+            text: qsTr("Discover")
             selected: root.section === "discover" && backend.catalog.category === ""
             onClicked: { backend.catalog.category = ""; root.sectionSelected("discover") }
         }
         NavItem {
-            text: qsTr("Instalados")
+            text: qsTr("Installed")
             selected: root.section === "installed"
-            badge: backend.updatesAvailable > 0 ? qsTr("%n atualização(ões)", "", backend.updatesAvailable) : ""
+            badge: backend.updatesAvailable > 0 ? qsTr("%n update(s)", "", backend.updatesAvailable) : ""
             onClicked: root.sectionSelected("installed")
         }
 
         Text {
-            text: qsTr("Categorias")
+            text: qsTr("Categories")
             color: theme.muted
             font.pixelSize: 12
             Layout.topMargin: 16
@@ -87,10 +87,10 @@ Rectangle {
             Layout.fillWidth: true
             readonly property var job: { backend.jobs.revision; return backend.jobs.indexJob() }
             enabled: backend.connected && !job.id
-            text: job.id ? qsTr("Atualizando catálogo…") : qsTr("Atualizar catálogo")
+            text: job.id ? qsTr("Refreshing catalog…") : qsTr("Refresh catalog")
             onClicked: backend.refreshIndex(false)
             ToolTip.visible: hovered
-            ToolTip.text: qsTr("Busca apps novos e versões no GitHub (Ctrl+R)")
+            ToolTip.text: qsTr("Looks for new apps and versions on GitHub (Ctrl+R)")
         }
 
         RowLayout {
@@ -102,7 +102,7 @@ Rectangle {
                 color: backend.connected ? theme.success : theme.danger
             }
             Text {
-                text: backend.connected ? qsTr("conectado") : qsTr("conectando ao omastored…")
+                text: backend.connected ? qsTr("connected") : qsTr("connecting to omastored…")
                 color: theme.muted
                 font.pixelSize: 11
             }

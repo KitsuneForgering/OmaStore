@@ -21,11 +21,11 @@ private slots:
     {
         const auto c = Theme::parseColors(
             "mode = \"light\"\n"
-            "# comentário\n"
-            "accent = \"#3ee8ff\"   # ciano\n"
+            "# comment\n"
+            "accent = \"#3ee8ff\"   # cyan\n"
             "background='#08090a'\n"
-            "[secao]\n"
-            "lixo sem igual\n");
+            "[section]\n"
+            "garbage without equals\n");
         QCOMPARE(c.value("mode"), QStringLiteral("light"));
         QCOMPARE(c.value("accent"), QStringLiteral("#3ee8ff"));
         QCOMPARE(c.value("background"), QStringLiteral("#08090a"));
@@ -38,20 +38,20 @@ private slots:
         const QString state = tmp.path() + "/state/current/theme";
         const QString config = tmp.path() + "/config/current/theme";
         write(config + "/colors.toml", "accent = \"#ff0000\"\n");
-        write(state + "/colors.toml", "mode = \"light\"\naccent = \"#3ee8ff\"\nforeground = \"inválida\"\n");
+        write(state + "/colors.toml", "mode = \"light\"\naccent = \"#3ee8ff\"\nforeground = \"invalid\"\n");
         write(tmp.path() + "/state/current/theme.name", "sword-art-omarchy\n");
 
         Theme t({state, config});
         QCOMPARE(t.accent(), QColor("#3ee8ff"));
         QVERIFY(!t.dark());
         QCOMPARE(t.name(), QStringLiteral("sword-art-omarchy"));
-        QVERIFY(t.foreground().isValid()); // cor inválida cai no padrão
+        QVERIFY(t.foreground().isValid()); // an invalid color falls back to the default
         QVERIFY(t.background().isValid());
     }
 
     void noOmarchyUsesDefaults()
     {
-        Theme t({"/nao/existe"});
+        Theme t({"/does/not/exist"});
         QVERIFY(t.dark());
         QVERIFY(t.accent().isValid());
         QVERIFY(t.name().isEmpty());
@@ -65,7 +65,7 @@ private slots:
         Theme t({dir});
         QSignalSpy spy(&t, &Theme::changed);
 
-        // Como o Omarchy faz: substitui o diretório inteiro.
+        // Like Omarchy does: replaces the whole directory.
         QDir(dir).removeRecursively();
         write(dir + "/colors.toml", "accent = \"#222222\"\n");
         QTRY_COMPARE_WITH_TIMEOUT(t.accent(), QColor("#222222"), 3000);

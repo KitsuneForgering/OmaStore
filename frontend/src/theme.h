@@ -6,8 +6,8 @@
 #include <QObject>
 #include <QTimer>
 
-// Cores do tema ativo do Omarchy (colors.toml), com recarga automática
-// quando o usuário troca de tema. Sem Omarchy, usa uma paleta escura padrão.
+// Colors of the active Omarchy theme (colors.toml), reloaded automatically
+// when the user switches themes. Without Omarchy, uses a default dark palette.
 class Theme : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool dark READ dark NOTIFY changed)
@@ -24,14 +24,14 @@ class Theme : public QObject {
     Q_PROPERTY(QColor warning READ warning NOTIFY changed)
 
 public:
-    // dirs: diretórios de tema em ordem de preferência. Vazio = padrão do
-    // Omarchy (~/.local/state/omarchy/current/theme e o caminho antigo
+    // dirs: theme directories in order of preference. Empty = Omarchy's
+    // default (~/.local/state/omarchy/current/theme and the old path
     // ~/.config/omarchy/current/theme).
     explicit Theme(QStringList dirs = {}, QObject *parent = nullptr);
 
     static QStringList defaultDirs();
-    // Lê pares chave = "valor" de um colors.toml (subconjunto do TOML usado
-    // pelos temas do Omarchy).
+    // Reads key = "value" pairs from a colors.toml (the subset of TOML used
+    // by Omarchy themes).
     static QHash<QString, QString> parseColors(const QByteArray &toml);
 
     bool dark() const { return m_dark; }

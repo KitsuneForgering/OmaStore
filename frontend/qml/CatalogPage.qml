@@ -25,8 +25,8 @@ Page {
             spacing: 12
 
             Text {
-                text: page.installedView ? qsTr("Instalados")
-                                         : (page.model.category !== "" ? page.model.category : qsTr("Descobrir"))
+                text: page.installedView ? qsTr("Installed")
+                                         : (page.model.category !== "" ? page.model.category : qsTr("Discover"))
                 color: theme.foreground
                 font.pixelSize: 20
                 font.bold: true
@@ -34,13 +34,13 @@ Page {
             Item { Layout.fillWidth: true }
             PrimaryButton {
                 visible: page.installedView && backend.updatesAvailable > 0
-                text: qsTr("Atualizar todos")
+                text: qsTr("Update all")
                 onClicked: backend.updateAll()
             }
             TextField {
                 id: search
                 Layout.preferredWidth: 280
-                placeholderText: qsTr("Buscar apps  ( / )")
+                placeholderText: qsTr("Search apps  ( / )")
                 text: page.model.query
                 onTextChanged: page.model.query = text
                 Keys.onDownPressed: grid.forceActiveFocus()
@@ -91,7 +91,7 @@ Page {
         Keys.onReturnPressed: if (currentIndex >= 0) page.appActivated(page.model.get(currentIndex).repo)
     }
 
-    // Estados vazios.
+    // Empty states.
     ColumnLayout {
         anchors.centerIn: parent
         visible: grid.count === 0
@@ -108,22 +108,22 @@ Page {
             color: theme.muted
             text: {
                 if (!backend.connected)
-                    return qsTr("Conectando ao omastored…")
+                    return qsTr("Connecting to omastored…")
                 if (parent.job.id)
-                    return qsTr("Indexando o catálogo… %1/%2\n%3").arg(parent.job.done).arg(parent.job.total).arg(parent.job.message || "")
+                    return qsTr("Indexing the catalog… %1/%2\n%3").arg(parent.job.done).arg(parent.job.total).arg(parent.job.message || "")
                 if (page.model.error !== "")
                     return page.model.error
                 if (page.installedView)
-                    return qsTr("Nenhum app instalado ainda.")
+                    return qsTr("No apps installed yet.")
                 if (page.model.query !== "")
-                    return qsTr("Nada encontrado para “%1”.").arg(page.model.query)
-                return qsTr("Nenhum app compatível ainda.\nApps entram na loja quando o repositório publica um omastore.toml.")
+                    return qsTr("Nothing found for “%1”.").arg(page.model.query)
+                return qsTr("No compatible apps yet.\nApps join the store when their repository publishes an omastore.toml.")
             }
         }
         Button {
             Layout.alignment: Qt.AlignHCenter
             visible: backend.connected && !parent.job.id && !page.installedView && page.model.query === ""
-            text: qsTr("Atualizar catálogo")
+            text: qsTr("Refresh catalog")
             onClicked: backend.refreshIndex(false)
         }
     }

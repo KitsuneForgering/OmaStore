@@ -6,7 +6,7 @@
 #include <QRegularExpression>
 
 namespace {
-// Paleta usada sem Omarchy (e para chaves ausentes no tema).
+// Palette used without Omarchy (and for keys missing from the theme).
 const QHash<QString, QColor> &fallback()
 {
     static const QHash<QString, QColor> colors{
@@ -94,8 +94,8 @@ void Theme::reload()
         emit changed();
 }
 
-// O Omarchy troca de tema substituindo o diretório "current/theme"; por
-// isso observamos o diretório pai, o próprio tema e o colors.toml.
+// Omarchy switches themes by replacing the "current/theme" directory; so we
+// watch the parent directory, the theme itself and colors.toml.
 void Theme::watch()
 {
     if (!m_watcher.files().isEmpty())
