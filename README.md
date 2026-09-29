@@ -1,129 +1,173 @@
-# OmaStore
+<p align="center"><img src="packaging/desktop/omastore-mark.svg" width="112" alt="OmaStore icon"></p>
 
-Loja de aplicativos para o [Omarchy](https://omarchy.org). A OmaStore encontra
-apps publicados no GitHub, mostra descrição, ícone e screenshots tirados do
-próprio repositório e instala o binário da última release com um clique, no
-seu `$HOME`, sem `sudo`, gerando o atalho no menu (`.desktop`).
+<h1 align="center">OmaStore</h1>
 
-![Catálogo](docs/screenshots/catalogo.png)
+<p align="center">Standalone apps for Omarchy, all in one place.</p>
 
-![Detalhe de um app](docs/screenshots/detalhe.png)
+<p align="center"><a href="#local-beta-testing">Try the beta</a> · <a href="#for-app-authors">Publish an app</a> · <a href="#how-it-works">How it works</a></p>
 
-## Como funciona
+OmaStore is an app store for [Omarchy](https://omarchy.org).
+It shows what each app does, installs the GitHub release into your account and
+creates the menu shortcut. You can also update and remove apps from the
+interface or the command line, without `sudo`.
 
-- **Descoberta:** só entram repositórios de **apps** com um `omastore.toml`
-  na raiz (plugins e temas ficam de fora). Eles são achados pela busca de
-  código do GitHub, pelo topic `omarchy` e por listas curadas. Para ser
-  instalável, a última release precisa ter um binário para Linux.
-- **Sem reprocessamento:** um banco SQLite guarda o estado de cada
-  repositório; com requisições condicionais (ETag), uma nova indexação só
-  reprocessa o que mudou no GitHub.
-- **Instalação segura:**
-  - o checksum é conferido (o `digest` da API do GitHub, ou `*.sha256`/`checksums.txt`);
-  - a extração é protegida contra *path traversal* e symlinks maliciosos;
-  - nada do pacote é executado durante a instalação;
-  - a instalação é desfeita por completo se algo falhar no meio;
-  - nunca sobrescreve arquivos que não sejam da loja nem encobre comandos do
-    sistema.
-- **Onde os apps ficam:**
-  - binários em `~/.local/share/omastore/apps/<owner>__<repo>/<versão>/`;
-  - lançador em `~/.local/bin/`;
-  - ícone no tema `hicolor` do usuário;
-  - atalho em `~/.local/share/applications/omastore-<owner>-<repo>.desktop`.
-- **Visual:** segue as cores do tema ativo do Omarchy e muda junto quando você
-  troca de tema.
+| Discover | See the details before installing |
+|---|---|
+| ![OmaStore catalog screen](docs/screenshots/catalogo.png) | ![An app's detail screen in OmaStore](docs/screenshots/detalhe.png) |
 
-## Instalação
+> **In beta:** the screenshots show the interface under development. Apps
+> get into the catalog when their authors publish an `omastore.toml`;
+> the current catalog may still be empty. [See how to publish an app](docs/autores.md).
 
-Arch/Omarchy, binário pré-compilado (a partir da primeira release):
+## Why use it
+
+- **Discover community apps:** find projects with descriptions, images,
+  categories and search in one place.
+- **Install without touching the system:** apps live in your account, with menu
+  shortcuts, and can be removed from the store.
+- **Know what you are downloading:** the store shows the release and verifies the
+  checksum of the downloaded file before installing.
+
+## How it works
+
+- **Discovery:** only **app** repositories with an `omastore.toml` at the root
+  get in (plugins and themes are left out). They are found through GitHub
+  code search, the `omarchy` topic and curated lists. To be
+  installable, the latest release must have a Linux binary.
+- **No reprocessing:** an SQLite database keeps the state of each
+  repository; with conditional requests (ETag), a new indexing run only
+  reprocesses what changed on GitHub.
+- **Safe installation:**
+  - the checksum is checked (the GitHub API `digest`, or `*.sha256`/`checksums.txt`);
+  - extraction is protected against *path traversal* and malicious symlinks;
+  - nothing from the package is executed during installation;
+  - the installation is fully undone if something fails midway;
+  - it never overwrites files that do not belong to the store nor shadows system
+    commands.
+- **Where apps live:**
+  - binaries in `~/.local/share/omastore/apps/<owner>__<repo>/<version>/`;
+  - launcher in `~/.local/bin/`;
+  - icon in the user's `hicolor` theme;
+  - shortcut in `~/.local/share/applications/omastore-<owner>-<repo>.desktop`.
+- **Look:** follows the colors of the active Omarchy theme and changes along when you
+  switch themes.
+
+## Installation
+
+After the first public release, on Arch/Omarchy, without `sudo`:
 
 ```sh
-# baixe o PKGBUILD anexado à release mais recente e:
+curl -fsSLO https://github.com/KitsuneSemCalda/OmaStore/releases/latest/download/install.sh
+sh install.sh
+```
+
+The script downloads the latest stable release for Linux x86_64, checks the SHA-256
+published alongside the tarball and installs the three executables into a folder in your
+account, with shortcuts in `~/.local/bin` and in the menu. It requires `curl`, `tar`,
+`sha256sum` and the Qt 6 libraries (`qt6-base`, `qt6-declarative`, `qt6-svg`).
+To update, run the same script again. If you prefer to manage the
+application with pacman:
+
+```sh
+# download the PKGBUILD attached to the latest release and:
 makepkg -si
 ```
 
-Ou compilando do código:
+### Local beta testing
+
+Until the first release is published, you can build and install
+a local tarball with the same script. It requires Go, a C compiler, CMake, Ninja and
+Qt 6 (see [Development](#development)):
+
+```sh
+git clone https://github.com/KitsuneSemCalda/OmaStore
+cd OmaStore
+make dist VERSION=v0.1.0-beta.1
+sh packaging/install.sh dist/omastore-0.1.0-beta.1-x86_64-linux.tar.gz
+```
+
+Or building from source:
 
 ```sh
 git clone https://github.com/KitsuneSemCalda/OmaStore
 cd OmaStore/packaging/arch
 makepkg -si
-systemctl --user enable --now omastored.socket       # opcional: daemon sob demanda
-systemctl --user enable --now omastore-index.timer   # opcional: catálogo diário + aviso de atualizações
+systemctl --user enable --now omastored.socket       # optional: on-demand daemon
+systemctl --user enable --now omastore-index.timer   # optional: daily catalog + update notifications
 ```
 
-Com o socket do systemd, o daemon sobe na primeira conexão e encerra sozinho
-depois de 10 minutos ocioso. O timer atualiza o catálogo uma vez por dia e
-mostra uma notificação quando há versões novas dos apps instalados; nada é
-instalado sem você pedir.
+With the systemd socket, the daemon starts on the first connection and exits on its own
+after 10 idle minutes. The timer refreshes the catalog once a day and
+shows a notification when there are new versions of the installed apps; nothing is
+installed without you asking.
 
-Sem o systemd, a interface inicia o daemon sozinha quando precisa.
+Without systemd, the interface starts the daemon on its own when needed.
 
-Recomendado: `gh auth login` (ou `export GITHUB_TOKEN=...`). Sem token, o
-GitHub limita a 60 requisições por hora, o que não basta para indexar o
-catálogo inteiro.
+Recommended: `gh auth login` (or `export GITHUB_TOKEN=...`). Without a token,
+GitHub limits you to 60 requests per hour, which is not enough to index the
+whole catalog.
 
-## Uso
+## Usage
 
-Interface: abra **OmaStore** no menu ou rode `omastore-gui`.
+Interface: open **OmaStore** from the menu or run `omastore-gui`.
 
-| Atalho | Ação |
+| Shortcut | Action |
 |---|---|
-| `/` | buscar |
-| `Esc` | voltar |
-| `Ctrl+R` | atualizar o catálogo |
-| setas + `Enter` | navegar e abrir um app |
+| `/` | search |
+| `Esc` | go back |
+| `Ctrl+R` | refresh the catalog |
+| arrows + `Enter` | navigate and open an app |
 
-`omastore-gui --open owner/repo` abre direto a página de um app.
+`omastore-gui --open owner/repo` opens an app's page directly.
 
-Linha de comando (mesmo backend, sem interface):
+Command line (same backend, no interface):
 
 ```sh
-omastore index                  # atualiza o catálogo
+omastore index                  # refreshes the catalog
 omastore list --category Graphics
 omastore show pch/rawmakase
 omastore install pch/rawmakase
-omastore update                 # atualiza todos os apps instalados
-omastore update --check         # só lista o que tem versão nova
+omastore update                 # updates all installed apps
+omastore update --check         # only lists what has a new version
 omastore uninstall pch/rawmakase
 ```
 
-## Arquitetura
+## Architecture
 
 ```
-omastore-gui (C++/Qt Quick)  ── JSON-RPC 2.0 / socket Unix ──▶  omastored (Go)
-  só apresentação                                                 indexador, cache SQLite,
-                                                                  instalador, cache de imagens
+omastore-gui (C++/Qt Quick)  ── JSON-RPC 2.0 / Unix socket ──▶  omastored (Go)
+  presentation only                                               indexer, SQLite cache,
+                                                                  installer, image cache
 ```
 
 - `backend/` — Go: `internal/{github,gitrepo,index,store,install,imagecache,rpc}`,
-  daemon em `cmd/omastored`, CLI em `cmd/omastore`.
-- `frontend/` — Qt 6 / QML: cliente IPC, modelos e telas. O frontend não
-  acessa a rede; tudo passa pelo daemon.
-- Protocolo IPC: [`docs/ipc.md`](docs/ipc.md).
-- Ideias em discussão: [`docs/ideas/`](docs/ideas/README.md).
+  daemon in `cmd/omastored`, CLI in `cmd/omastore`.
+- `frontend/` — Qt 6 / QML: IPC client, models and screens. The frontend does not
+  access the network; everything goes through the daemon.
+- IPC protocol: [`docs/ipc.md`](docs/ipc.md).
+- Ideas under discussion: [`docs/ideas/`](docs/ideas/README.md).
 
-## Para autores de apps
+## For app authors
 
-Quer seu app na loja? Veja [`docs/autores.md`](docs/autores.md): topic
-`omarchy`, nomes de assets, ícone, screenshots e checksums.
+Want your app in the store? See [`docs/autores.md`](docs/autores.md): the
+`omarchy` topic, asset names, icon, screenshots and checksums.
 
-## Desenvolvimento
+## Development
 
-Requisitos: Go 1.26+, um compilador C (CGO, para o SQLite), Qt 6.5+
-(`qt6-base`, `qt6-declarative`, `qt6-svg`), CMake e Ninja.
+Requirements: Go 1.26+, a C compiler (CGO, for SQLite), Qt 6.5+
+(`qt6-base`, `qt6-declarative`, `qt6-svg`), CMake and Ninja.
 
 ```sh
-make            # compila tudo (bin/ e frontend/build/)
-make check      # gofmt + vet + testes do backend
-make test       # todos os testes (backend e frontend)
-make run-gui    # abre a interface usando o daemon de bin/
-make help       # lista todos os alvos
+make            # builds everything (bin/ and frontend/build/)
+make check      # gofmt + vet + backend tests
+make test       # all tests (backend and frontend)
+make run-gui    # opens the interface using the daemon from bin/
+make help       # lists all targets
 ```
 
-Os testes não acessam a rede: a API do GitHub é simulada com `httptest` e o
-daemon com um servidor falso em `QLocalServer`.
+The tests do not access the network: the GitHub API is simulated with `httptest` and the
+daemon with a fake server in `QLocalServer`.
 
-## Licença
+## License
 
-MIT — veja [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
