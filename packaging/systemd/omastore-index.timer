@@ -1,0 +1,11 @@
+[Unit]
+Description=Atualização diária do catálogo do OmaStore
+Documentation=https://github.com/KitsuneSemCalda/OmaStore
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

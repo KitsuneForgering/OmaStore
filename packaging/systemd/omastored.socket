@@ -1,0 +1,10 @@
+[Unit]
+Description=Socket do daemon do OmaStore
+Documentation=https://github.com/KitsuneSemCalda/OmaStore
+
+[Socket]
+ListenStream=%t/omastore.sock
+SocketMode=0600
+
+[Install]
+WantedBy=sockets.target
