@@ -41,7 +41,7 @@ func gqlServer(t *testing.T, handle func(w http.ResponseWriter, req gqlReq)) (*C
 	mux.HandleFunc("POST /graphql", func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
 		if r.Header.Get("Authorization") != "Bearer tok" {
-			t.Errorf("sem token")
+			t.Errorf("missing token")
 		}
 		b, _ := io.ReadAll(r.Body)
 		var req gqlReq
@@ -55,25 +55,25 @@ func gqlServer(t *testing.T, handle func(w http.ResponseWriter, req gqlReq)) (*C
 
 func TestSnapshots(t *testing.T) {
 	c, hits := gqlServer(t, func(w http.ResponseWriter, req gqlReq) {
-		// Os nomes vão em variáveis, nunca no texto da consulta.
-		if strings.Contains(req.Query, "rawmakase") || strings.Contains(req.Query, "nao-existe") {
-			t.Errorf("nome interpolado na consulta")
+		// Names go in variables, never in the query text.
+		if strings.Contains(req.Query, "rawmakase") || strings.Contains(req.Query, "does-not-exist") {
+			t.Errorf("name interpolated into the query")
 		}
-		if req.Variables["o0"] != "pch" || req.Variables["n1"] != "nada" {
-			t.Errorf("variáveis = %v", req.Variables)
+		if req.Variables["o0"] != "pch" || req.Variables["n1"] != "nothing" {
+			t.Errorf("variables = %v", req.Variables)
 		}
 		writeJSON(w, []byte(`{"data": {"r0": `+gqlRepoJSON+`, "r1": null},
 			"errors": [{"type": "NOT_FOUND", "path": ["r1"], "message": "nope"}]}`))
 	})
-	got, err := c.Snapshots(context.Background(), []string{"pch/rawmakase", "nao-existe/nada"})
+	got, err := c.Snapshots(context.Background(), []string{"pch/rawmakase", "does-not-exist/nothing"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if hits.Load() != 1 || len(got) != 2 {
 		t.Fatalf("hits=%d got=%v", hits.Load(), got)
 	}
-	if s, ok := got["nao-existe/nada"]; !ok || s != nil {
-		t.Errorf("inexistente deve ser nil: %v %v", s, ok)
+	if s, ok := got["does-not-exist/nothing"]; !ok || s != nil {
+		t.Errorf("missing repo must be nil: %v %v", s, ok)
 	}
 	s := got["pch/rawmakase"]
 	if s.HeadSHA != "5a02a0e6" || s.Repo.Stars != 116 || s.Repo.License != "MIT" || s.Repo.DefaultBranch != "main" ||
@@ -83,7 +83,7 @@ func TestSnapshots(t *testing.T) {
 		t.Errorf("snapshot = %+v", s)
 	}
 	if c.Requests() < 1 {
-		t.Error("contador de requisições não andou")
+		t.Error("request counter did not move")
 	}
 }
 
@@ -103,7 +103,7 @@ func TestSnapshotsBatchesOf50(t *testing.T) {
 			data["r"+itoa(i)] = json.RawMessage("null")
 		}
 		b, _ := json.Marshal(map[string]any{"data": data})
-		// Todos inexistentes, mas sem erro NOT_FOUND para r0: também aceito.
+		// All missing, but without a NOT_FOUND error for r0: also accepted.
 		writeJSON(w, b)
 	})
 	names := make([]string, 120)
@@ -131,7 +131,7 @@ func TestSnapshotsErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := anon.Snapshots(context.Background(), []string{"a/b"}); !errors.Is(err, ErrNoToken) {
-		t.Errorf("sem token: %v", err)
+		t.Errorf("no token: %v", err)
 	}
 
 	c, _ := gqlServer(t, func(w http.ResponseWriter, req gqlReq) {
@@ -147,14 +147,14 @@ func TestSnapshotsErrors(t *testing.T) {
 	})
 	got, err := c2.Snapshots(context.Background(), []string{"a/b"})
 	if err != nil || got["a/b"] == nil || got["a/b"].Release != nil {
-		t.Errorf("pre-release deve ser ignorada: %+v %v", got["a/b"], err)
+		t.Errorf("pre-release must be ignored: %+v %v", got["a/b"], err)
 	}
 
 	c3, _ := gqlServer(t, func(w http.ResponseWriter, req gqlReq) {
 		writeJSON(w, []byte(`{"data": {}}`))
 	})
 	if _, err := c3.Snapshots(context.Background(), []string{"a/b"}); err == nil {
-		t.Error("resposta sem o alias deveria ser erro")
+		t.Error("response without the alias should be an error")
 	}
 }
 
@@ -170,7 +170,7 @@ func TestSecondaryRateLimitRetryResendsBody(t *testing.T) {
 			return
 		}
 		if len(b) == 0 {
-			t.Error("segunda tentativa enviou corpo vazio")
+			t.Error("second attempt sent an empty body")
 		}
 		writeJSON(w, []byte(`{"data": {"r0": null}, "errors": [{"type":"NOT_FOUND","path":["r0"]}]}`))
 	})
@@ -198,7 +198,7 @@ func TestSnapshotManifestAbsentOrUnusable(t *testing.T) {
 	}
 	for n, s := range got {
 		if s.Manifest != nil {
-			t.Errorf("%s: manifesto deveria ser nil", n)
+			t.Errorf("%s: manifest should be nil", n)
 		}
 	}
 }
@@ -225,6 +225,6 @@ func TestSearchManifests(t *testing.T) {
 	}
 	anon, _ := New(Options{BaseURL: "http://127.0.0.1:1"})
 	if _, err := anon.SearchManifests(context.Background(), 0); !errors.Is(err, ErrNoToken) {
-		t.Errorf("sem token: %v", err)
+		t.Errorf("no token: %v", err)
 	}
 }

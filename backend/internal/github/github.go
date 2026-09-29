@@ -1,6 +1,6 @@
-// Package github embrulha o go-github com o que o OmaStore precisa:
-// busca por topic, metadados do repositório (com ETag), HEAD, última release
-// e README. Erros de rate limit são convertidos em *RateLimitError.
+// Package github wraps go-github with what OmaStore needs: topic search,
+// repository metadata (with ETag), HEAD, latest release and README.
+// Rate limit errors are converted into *RateLimitError.
 package github
 
 import (
@@ -17,27 +17,27 @@ import (
 	gh "github.com/google/go-github/v92/github"
 )
 
-// Client acessa a API do GitHub.
+// Client accesses the GitHub API.
 type Client struct {
 	gh            *gh.Client
 	authenticated bool
 	requests      atomic.Int64
 }
 
-// ghResponse é o tipo de resposta do go-github (apelido para os helpers).
+// ghResponse is go-github's response type (alias for the helpers).
 type ghResponse = gh.Response
 
-// Requests é o número de requisições HTTP feitas por este cliente.
+// Requests is the number of HTTP requests made by this client.
 func (c *Client) Requests() int64 { return c.requests.Load() }
 
-// Options configura New.
+// Options configures New.
 type Options struct {
-	Token      string       // vazio = anônimo
-	BaseURL    string       // vazio = api.github.com; usado nos testes
-	HTTPClient *http.Client // opcional
+	Token      string       // empty = anonymous
+	BaseURL    string       // empty = api.github.com; used by tests
+	HTTPClient *http.Client // optional
 }
 
-// New cria um cliente.
+// New creates a client.
 func New(o Options) (*Client, error) {
 	hc := o.HTTPClient
 	if hc == nil {
@@ -60,14 +60,14 @@ func New(o Options) (*Client, error) {
 	}
 	c, err := gh.NewClient(opts...)
 	if err != nil {
-		return nil, fmt.Errorf("criar cliente do GitHub: %w", err)
+		return nil, fmt.Errorf("create GitHub client: %w", err)
 	}
 	cl.gh = c
 	return cl, nil
 }
 
-// TokenFromEnv procura um token em GITHUB_TOKEN, GH_TOKEN e, por fim,
-// `gh auth token`. Retorna "" se nenhum existir.
+// TokenFromEnv looks for a token in GITHUB_TOKEN, GH_TOKEN and, last,
+// `gh auth token`. Returns "" if none exists.
 func TokenFromEnv(ctx context.Context) string {
 	for _, k := range []string{"GITHUB_TOKEN", "GH_TOKEN"} {
 		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
@@ -86,24 +86,24 @@ func TokenFromEnv(ctx context.Context) string {
 	return strings.TrimSpace(string(out))
 }
 
-// RateLimitError indica que o limite da API acabou até Reset.
+// RateLimitError means the API limit is exhausted until Reset.
 type RateLimitError struct {
 	Reset time.Time
 	Err   error
 }
 
 func (e *RateLimitError) Error() string {
-	return fmt.Sprintf("rate limit do GitHub esgotado até %s (defina GITHUB_TOKEN ou faça `gh auth login`): %v",
+	return fmt.Sprintf("GitHub rate limit exhausted until %s (set GITHUB_TOKEN or run `gh auth login`): %v",
 		e.Reset.Local().Format("15:04:05"), e.Err)
 }
 
 func (e *RateLimitError) Unwrap() error { return e.Err }
 
-// maxRetryWait é o maior Retry-After de limite secundário que aceitamos esperar.
+// maxRetryWait is the longest secondary-limit Retry-After we are willing to wait.
 const maxRetryWait = time.Minute
 
-// call executa fn convertendo erros de rate limit e repetindo uma vez em
-// caso de limite secundário com espera curta.
+// call runs fn, converting rate limit errors and retrying once on a
+// secondary limit with a short wait.
 func call[T any](ctx context.Context, fn func() (T, *gh.Response, error)) (T, *gh.Response, error) {
 	for attempt := 0; ; attempt++ {
 		v, resp, err := fn()
@@ -142,27 +142,27 @@ func statusOf(err error) int {
 	return 0
 }
 
-// ErrNotFound indica que o recurso não existe (404).
-var ErrNotFound = errors.New("não encontrado no GitHub")
+// ErrNotFound means the resource does not exist (404).
+var ErrNotFound = errors.New("not found on GitHub")
 
-// IsNotFound diz se err é um 404 da API.
+// IsNotFound reports whether err is an API 404.
 func IsNotFound(err error) bool {
 	return errors.Is(err, ErrNotFound) || statusOf(err) == http.StatusNotFound
 }
 
 func isNotModified(err error) bool { return statusOf(err) == http.StatusNotModified }
 
-// SplitFullName separa "owner/repo".
+// SplitFullName splits "owner/repo".
 func SplitFullName(fullName string) (owner, repo string, err error) {
 	owner, repo, ok := strings.Cut(fullName, "/")
 	if !ok || owner == "" || repo == "" || strings.Contains(repo, "/") {
-		return "", "", fmt.Errorf("nome de repositório inválido: %q", fullName)
+		return "", "", fmt.Errorf("invalid repository name: %q", fullName)
 	}
 	return owner, repo, nil
 }
 
-// SearchByTopic retorna os repositórios (owner/repo) com o topic, ordenados
-// por stars, até max resultados (a API de busca limita a 1000).
+// SearchByTopic returns the repositories (owner/repo) with the topic, sorted
+// by stars, up to max results (the search API caps at 1000).
 func (c *Client) SearchByTopic(ctx context.Context, topic string, max int) ([]string, error) {
 	if max <= 0 || max > 1000 {
 		max = 1000
@@ -175,7 +175,7 @@ func (c *Client) SearchByTopic(ctx context.Context, topic string, max int) ([]st
 			return c.gh.Search.Repositories(ctx, q, opts)
 		})
 		if err != nil {
-			return out, fmt.Errorf("buscar topic:%s: %w", topic, err)
+			return out, fmt.Errorf("search topic:%s: %w", topic, err)
 		}
 		for _, r := range res.Repositories {
 			out = append(out, r.GetFullName())
@@ -190,7 +190,7 @@ func (c *Client) SearchByTopic(ctx context.Context, topic string, max int) ([]st
 	}
 }
 
-// Repo são os metadados de um repositório.
+// Repo is a repository's metadata.
 type Repo struct {
 	FullName      string
 	Owner         string
@@ -206,9 +206,9 @@ type Repo struct {
 	Fork          bool
 }
 
-// GetRepo busca os metadados de um repositório. Se etag não for vazio, faz
-// uma requisição condicional: se nada mudou, retorna notModified = true e
-// repo nil (requisições 304 não contam no rate limit).
+// GetRepo fetches a repository's metadata. If etag is not empty, it makes
+// a conditional request: if nothing changed, it returns notModified = true and
+// a nil repo (304 responses do not count toward the rate limit).
 func (c *Client) GetRepo(ctx context.Context, fullName, etag string) (repo *Repo, newETag string, notModified bool, err error) {
 	owner, name, err := SplitFullName(fullName)
 	if err != nil {
@@ -225,7 +225,7 @@ func (c *Client) GetRepo(ctx context.Context, fullName, etag string) (repo *Repo
 		return nil, "", false, fmt.Errorf("repo %s: %w", fullName, ErrNotFound)
 	}
 	if err != nil {
-		return nil, "", false, fmt.Errorf("buscar repo %s: %w", fullName, err)
+		return nil, "", false, fmt.Errorf("fetch repo %s: %w", fullName, err)
 	}
 	out := &Repo{
 		FullName:      r.GetFullName(),
@@ -252,8 +252,8 @@ func (c *Client) GetRepo(ctx context.Context, fullName, etag string) (repo *Repo
 	return out, resp.Header.Get("ETag"), false, nil
 }
 
-// HeadSHA retorna o SHA do commit em ref. Com lastSHA, usa requisição
-// condicional e retorna lastSHA se nada mudou.
+// HeadSHA returns the commit SHA at ref. With lastSHA, it makes a conditional
+// request and returns lastSHA if nothing changed.
 func (c *Client) HeadSHA(ctx context.Context, fullName, ref, lastSHA string) (string, error) {
 	owner, name, err := SplitFullName(fullName)
 	if err != nil {
@@ -269,12 +269,12 @@ func (c *Client) HeadSHA(ctx context.Context, fullName, ref, lastSHA string) (st
 		return lastSHA, nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("buscar HEAD de %s: %w", fullName, err)
+		return "", fmt.Errorf("fetch HEAD of %s: %w", fullName, err)
 	}
 	return sha, nil
 }
 
-// Release é uma release publicada.
+// Release is a published release.
 type Release struct {
 	Tag         string
 	Name        string
@@ -283,16 +283,16 @@ type Release struct {
 	Assets      []ReleaseAsset
 }
 
-// ReleaseAsset é um arquivo de release.
+// ReleaseAsset is a release file.
 type ReleaseAsset struct {
 	Name        string
 	URL         string // browser_download_url
 	Size        int64
 	ContentType string
-	Digest      string // "sha256:<hex>" quando a API informa
+	Digest      string // "sha256:<hex>" when the API provides it
 }
 
-// LatestRelease retorna a última release estável, ou nil se não houver.
+// LatestRelease returns the latest stable release, or nil if there is none.
 func (c *Client) LatestRelease(ctx context.Context, fullName string) (*Release, error) {
 	owner, name, err := SplitFullName(fullName)
 	if err != nil {
@@ -305,7 +305,7 @@ func (c *Client) LatestRelease(ctx context.Context, fullName string) (*Release, 
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("buscar release de %s: %w", fullName, err)
+		return nil, fmt.Errorf("fetch release of %s: %w", fullName, err)
 	}
 	out := &Release{
 		Tag:         r.GetTagName(),
@@ -325,7 +325,7 @@ func (c *Client) LatestRelease(ctx context.Context, fullName string) (*Release, 
 	return out, nil
 }
 
-// Readme retorna o conteúdo (markdown) e o caminho do README, ou "" se não houver.
+// Readme returns the README content (markdown) and path, or "" if there is none.
 func (c *Client) Readme(ctx context.Context, fullName string) (content, path string, err error) {
 	owner, name, err := SplitFullName(fullName)
 	if err != nil {
@@ -338,16 +338,16 @@ func (c *Client) Readme(ctx context.Context, fullName string) (content, path str
 		return "", "", nil
 	}
 	if err != nil {
-		return "", "", fmt.Errorf("buscar README de %s: %w", fullName, err)
+		return "", "", fmt.Errorf("fetch README of %s: %w", fullName, err)
 	}
 	content, err = rc.GetContent()
 	if err != nil {
-		return "", "", fmt.Errorf("decodificar README de %s: %w", fullName, err)
+		return "", "", fmt.Errorf("decode README of %s: %w", fullName, err)
 	}
 	return content, rc.GetPath(), nil
 }
 
-// countingTransport conta as requisições (para medir o custo da indexação).
+// countingTransport counts requests (to measure the cost of indexing).
 type countingTransport struct {
 	base http.RoundTripper
 	n    *atomic.Int64
@@ -358,7 +358,7 @@ func (t countingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	return t.base.RoundTrip(req)
 }
 
-// etagKey carrega o ETag de uma requisição condicional pelo context.
+// etagKey carries a conditional request's ETag through the context.
 type etagKey struct{}
 
 func withETag(ctx context.Context, etag string) context.Context {
@@ -368,7 +368,7 @@ func withETag(ctx context.Context, etag string) context.Context {
 	return context.WithValue(ctx, etagKey{}, etag)
 }
 
-// etagTransport adiciona If-None-Match quando o context traz um ETag.
+// etagTransport adds If-None-Match when the context carries an ETag.
 type etagTransport struct{ base http.RoundTripper }
 
 func (t etagTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -379,8 +379,8 @@ func (t etagTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.base.RoundTrip(req)
 }
 
-// Tree lista os arquivos (blobs) do commit sha. truncated indica que a API
-// cortou a listagem (repositório grande); nesse caso vale clonar.
+// Tree lists the files (blobs) of commit sha. truncated means the API cut the
+// listing short (large repository); in that case cloning is worth it.
 func (c *Client) Tree(ctx context.Context, fullName, sha string) (files []string, truncated bool, err error) {
 	owner, name, err := SplitFullName(fullName)
 	if err != nil {
@@ -390,7 +390,7 @@ func (c *Client) Tree(ctx context.Context, fullName, sha string) (files []string
 		return c.gh.Git.GetTree(ctx, owner, name, sha, true)
 	})
 	if err != nil {
-		return nil, false, fmt.Errorf("listar árvore de %s: %w", fullName, err)
+		return nil, false, fmt.Errorf("list tree of %s: %w", fullName, err)
 	}
 	for _, e := range t.Entries {
 		if e.GetType() == "blob" {
@@ -400,9 +400,9 @@ func (c *Client) Tree(ctx context.Context, fullName, sha string) (files []string
 	return files, t.GetTruncated(), nil
 }
 
-// File retorna o conteúdo de um arquivo do repositório em ref. found é
-// false se ele não existir (um arquivo vazio tem found true). Arquivos
-// maiores que maxBytes são recusados.
+// File returns the content of a repository file at ref. found is false if
+// it does not exist (an empty file has found true). Files larger than
+// maxBytes are rejected.
 func (c *Client) File(ctx context.Context, fullName, path, ref string, maxBytes int) (content string, found bool, err error) {
 	owner, name, err := SplitFullName(fullName)
 	if err != nil {
@@ -417,23 +417,23 @@ func (c *Client) File(ctx context.Context, fullName, path, ref string, maxBytes 
 		return "", false, nil
 	}
 	if err != nil {
-		return "", false, fmt.Errorf("ler %s de %s: %w", path, fullName, err)
+		return "", false, fmt.Errorf("read %s of %s: %w", path, fullName, err)
 	}
 	if r.fc == nil {
-		return "", false, fmt.Errorf("%s em %s não é um arquivo", path, fullName)
+		return "", false, fmt.Errorf("%s in %s is not a file", path, fullName)
 	}
 	if r.fc.GetSize() > maxBytes {
-		return "", false, fmt.Errorf("%s em %s maior que %d bytes", path, fullName, maxBytes)
+		return "", false, fmt.Errorf("%s in %s is larger than %d bytes", path, fullName, maxBytes)
 	}
 	content, err = r.fc.GetContent()
 	if err != nil {
-		return "", false, fmt.Errorf("decodificar %s de %s: %w", path, fullName, err)
+		return "", false, fmt.Errorf("decode %s of %s: %w", path, fullName, err)
 	}
 	return content, true, nil
 }
 
-// SearchManifests encontra repositórios com omastore.toml na raiz, pela
-// busca de código (exige token). Retorna owner/repo em ordem estável.
+// SearchManifests finds repositories with omastore.toml at the root through
+// code search (requires a token). Returns owner/repo in a stable order.
 func (c *Client) SearchManifests(ctx context.Context, max int) ([]string, error) {
 	if !c.authenticated {
 		return nil, ErrNoToken
@@ -449,10 +449,10 @@ func (c *Client) SearchManifests(ctx context.Context, max int) ([]string, error)
 			return c.gh.Search.Code(ctx, "filename:"+ManifestPath, opts)
 		})
 		if err != nil {
-			return out, fmt.Errorf("buscar %s: %w", ManifestPath, err)
+			return out, fmt.Errorf("search %s: %w", ManifestPath, err)
 		}
 		for _, r := range res.CodeResults {
-			// Só o arquivo da raiz conta.
+			// Only the root file counts.
 			if r.GetPath() != ManifestPath {
 				continue
 			}

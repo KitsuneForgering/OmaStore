@@ -46,7 +46,7 @@ func TestSearchByTopicPaginates(t *testing.T) {
 			t.Errorf("q = %q", got)
 		}
 		if r.Header.Get("Authorization") != "Bearer tok" {
-			t.Errorf("sem token: %q", r.Header.Get("Authorization"))
+			t.Errorf("missing token: %q", r.Header.Get("Authorization"))
 		}
 		if r.URL.Query().Get("page") == "2" {
 			writeJSON(w, fixture(t, "search_p2.json"))
@@ -112,7 +112,7 @@ func TestGetRepoETag(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !nm || r != nil || etag2 != etag {
-		t.Errorf("esperava 304: nm=%v r=%v etag=%q", nm, r, etag2)
+		t.Errorf("expected 304: nm=%v r=%v etag=%q", nm, r, etag2)
 	}
 	if hits.Load() != 2 {
 		t.Errorf("hits = %d", hits.Load())
@@ -159,7 +159,7 @@ func TestLatestRelease(t *testing.T) {
 	}
 	none, err := c.LatestRelease(context.Background(), "acme/none")
 	if err != nil || none != nil {
-		t.Errorf("sem release: %v %v", none, err)
+		t.Errorf("no release: %v %v", none, err)
 	}
 }
 
@@ -173,12 +173,12 @@ func TestReadme(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if path != "README.md" || content != "# OmaPhoto\n\nEditor de fotos.\n" {
+	if path != "README.md" || content != "# OmaPhoto\n\nPhoto editor.\n" {
 		t.Errorf("path=%q content=%q", path, content)
 	}
 	none, _, err := c.Readme(context.Background(), "acme/x")
 	if err != nil || none != "" {
-		t.Errorf("sem readme: %q %v", none, err)
+		t.Errorf("no readme: %q %v", none, err)
 	}
 }
 
@@ -227,7 +227,7 @@ func TestSecondaryRateLimitRetries(t *testing.T) {
 func TestSplitFullName(t *testing.T) {
 	for _, bad := range []string{"", "a", "a/", "/b", "a/b/c"} {
 		if _, _, err := SplitFullName(bad); err == nil {
-			t.Errorf("%q deveria falhar", bad)
+			t.Errorf("%q should fail", bad)
 		}
 	}
 	o, r, err := SplitFullName("a/b")
@@ -247,7 +247,7 @@ func TestTree(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /repos/acme/omaphoto/git/trees/abc", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("recursive") == "" {
-			t.Error("sem recursive")
+			t.Error("missing recursive")
 		}
 		writeJSON(w, []byte(`{"sha":"abc","truncated":true,"tree":[
 			{"path":"assets","type":"tree"},
@@ -301,15 +301,15 @@ func TestFile(t *testing.T) {
 		t.Errorf("got %q %v, %v", got, found, err)
 	}
 	if got, found, err := c.File(ctx, "acme/none", "omastore.toml", "abc", 1024); err != nil || found || got != "" {
-		t.Errorf("inexistente: %q %v %v", got, found, err)
+		t.Errorf("missing: %q %v %v", got, found, err)
 	}
 	if got, found, err := c.File(ctx, "acme/empty", "omastore.toml", "abc", 1024); err != nil || !found || got != "" {
-		t.Errorf("vazio deve existir: %q %v %v", got, found, err)
+		t.Errorf("empty file must exist: %q %v %v", got, found, err)
 	}
 	if _, _, err := c.File(ctx, "acme/big", "omastore.toml", "abc", 1024); err == nil {
-		t.Error("arquivo grande aceito")
+		t.Error("large file accepted")
 	}
 	if _, _, err := c.File(ctx, "acme/dir", "omastore.toml", "abc", 1024); err == nil {
-		t.Error("diretório aceito como arquivo")
+		t.Error("directory accepted as a file")
 	}
 }

@@ -2,7 +2,7 @@
   "full_name": "acme/omaphoto",
   "name": "omaphoto",
   "owner": {"login": "acme"},
-  "description": "Editor de fotos para o Omarchy",
+  "description": "Photo editor for Omarchy",
   "stargazers_count": 42,
   "topics": ["omarchy", "photo"],
   "html_url": "https://github.com/acme/omaphoto",

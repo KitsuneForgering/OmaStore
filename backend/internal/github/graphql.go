@@ -10,38 +10,38 @@ import (
 	"time"
 )
 
-// ErrNoToken indica que a operação exige autenticação (GraphQL não aceita
-// acesso anônimo). Quem chama deve cair para a API REST.
-var ErrNoToken = errors.New("GraphQL exige token do GitHub")
+// ErrNoToken means the operation requires authentication (GraphQL does not
+// allow anonymous access). Callers should fall back to the REST API.
+var ErrNoToken = errors.New("GraphQL requires a GitHub token")
 
-// batchSize é quantos repositórios vão em cada consulta GraphQL e
-// batchParallel quantas consultas rodam ao mesmo tempo. Medido com ~230
-// repositórios reais: 5 lotes de 50 em série levavam ~30 s (cada consulta
-// pesada leva ~6 s no servidor).
+// batchSize is how many repositories go in each GraphQL query and
+// batchParallel how many queries run at once. Measured with ~230 real
+// repositories: 5 batches of 50 in series took ~30 s (each heavy query
+// takes ~6 s on the server).
 var (
 	batchSize     = 25
 	batchParallel = 3
 )
 
-// Snapshot é o estado de um repositório obtido em lote: tudo o que a
-// verificação de cache compara, mais a última release com os assets.
+// Snapshot is a repository's state fetched in a batch: everything the
+// cache check compares, plus the latest release with its assets.
 type Snapshot struct {
 	Repo    Repo
 	HeadSHA string
-	Release *Release // nil se não houver release estável
-	// Manifest é o conteúdo do omastore.toml da raiz no HEAD; nil se o
-	// arquivo não existir (ou não for texto, ou for grande demais).
+	Release *Release // nil if there is no stable release
+	// Manifest is the content of the root omastore.toml at HEAD; nil if the
+	// file does not exist (or is not text, or is too large).
 	Manifest *string
 }
 
-// ManifestPath é o arquivo buscado junto com o estado de cada repositório.
+// ManifestPath is the file fetched along with each repository's state.
 const ManifestPath = "omastore.toml"
 
-// maxManifestBytes descarta manifestos maiores que isso (o limite do
-// parser é o mesmo).
+// maxManifestBytes discards manifests larger than this (the parser's
+// limit is the same).
 const maxManifestBytes = 64 << 10
 
-// repoFields são os campos pedidos para cada repositório.
+// repoFields are the fields requested for each repository.
 const repoFields = `
 	nameWithOwner name owner { login } description stargazerCount pushedAt isArchived isFork url
 	licenseInfo { spdxId name }
@@ -158,15 +158,15 @@ type gqlResponse struct {
 	Errors []gqlError                 `json:"errors"`
 }
 
-// Snapshots busca em lote o estado de vários repositórios (uma requisição a
-// cada 50). O mapa tem uma entrada por nome pedido; o valor é nil quando o
-// repositório não existe. Sem token, retorna ErrNoToken.
+// Snapshots fetches the state of many repositories in batches (one request
+// per 50). The map has one entry per requested name; the value is nil when
+// the repository does not exist. Without a token, returns ErrNoToken.
 func (c *Client) Snapshots(ctx context.Context, names []string) (map[string]*Snapshot, error) {
 	if !c.authenticated {
 		return nil, ErrNoToken
 	}
-	// Os lotes rodam em paralelo, com limite baixo: o GitHub desaconselha
-	// muitas consultas GraphQL simultâneas (limite secundário).
+	// Batches run in parallel with a low limit: GitHub discourages many
+	// concurrent GraphQL queries (secondary limit).
 	out := make(map[string]*Snapshot, len(names))
 	var (
 		mu       sync.Mutex
@@ -214,7 +214,7 @@ func (c *Client) Snapshots(ctx context.Context, names []string) (map[string]*Sna
 }
 
 func (c *Client) snapshotBatch(ctx context.Context, names []string, out map[string]*Snapshot) error {
-	// Nomes vão como variáveis, nunca interpolados no texto da consulta.
+	// Names go in as variables, never interpolated into the query text.
 	var decl, body strings.Builder
 	vars := map[string]any{}
 	for i, n := range names {
@@ -231,7 +231,7 @@ func (c *Client) snapshotBatch(ctx context.Context, names []string, out map[stri
 
 	var resp gqlResponse
 	if _, _, err := call(ctx, func() (struct{}, *ghResponse, error) {
-		// A requisição é montada a cada tentativa: o corpo é consumido no envio.
+		// The request is built on every attempt: the body is consumed when sent.
 		req, err := c.gh.NewRequest(ctx, "POST", "graphql", map[string]any{"query": query, "variables": vars})
 		if err != nil {
 			return struct{}{}, nil, err
@@ -240,7 +240,7 @@ func (c *Client) snapshotBatch(ctx context.Context, names []string, out map[stri
 		r, err := c.gh.Do(req, &resp)
 		return struct{}{}, r, err
 	}); err != nil {
-		return fmt.Errorf("consulta GraphQL: %w", err)
+		return fmt.Errorf("GraphQL query: %w", err)
 	}
 
 	notFound := map[string]bool{}
@@ -253,7 +253,7 @@ func (c *Client) snapshotBatch(ctx context.Context, names []string, out map[stri
 		case "RATE_LIMITED":
 			return &RateLimitError{Reset: time.Now().Add(time.Hour), Err: errors.New(e.Message)}
 		default:
-			return fmt.Errorf("erro GraphQL (%s): %s", e.Type, e.Message)
+			return fmt.Errorf("GraphQL error (%s): %s", e.Type, e.Message)
 		}
 	}
 	for i, n := range names {
@@ -261,14 +261,14 @@ func (c *Client) snapshotBatch(ctx context.Context, names []string, out map[stri
 		raw, ok := resp.Data[alias]
 		if !ok || string(raw) == "null" {
 			if !ok && !notFound[alias] {
-				return fmt.Errorf("resposta GraphQL sem %s (%s)", alias, n)
+				return fmt.Errorf("GraphQL response missing %s (%s)", alias, n)
 			}
 			out[n] = nil
 			continue
 		}
 		var g gqlRepo
 		if err := json.Unmarshal(raw, &g); err != nil {
-			return fmt.Errorf("decodificar %s: %w", n, err)
+			return fmt.Errorf("decode %s: %w", n, err)
 		}
 		out[n] = g.snapshot()
 	}
