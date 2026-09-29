@@ -1,85 +1,86 @@
 ---
 name: omastore-manifest
-description: Cria, revisa e valida o omastore.toml que um app precisa ter na raiz do repositório para entrar na OmaStore (a loja de apps do Omarchy). Use sempre que o usuário quiser publicar, listar ou "colocar na OmaStore" um app, tornar um projeto compatível com a OmaStore/Omarchy, escrever ou corrigir o omastore.toml, ou quando o app não aparece na loja — mesmo que ele não cite o manifesto pelo nome.
+description: Creates, reviews and validates the omastore.toml an app needs at the root of its repository to be listed in OmaStore (the Omarchy app store). Use it whenever the user wants to publish, list or "put on OmaStore" an app, make a project compatible with OmaStore/Omarchy, write or fix omastore.toml, or when the app does not show up in the store — even if they do not mention the manifest by name.
 ---
 
-# Manifesto da OmaStore (`omastore.toml`)
+# OmaStore manifest (`omastore.toml`)
 
-A OmaStore só indexa repositórios que têm um `omastore.toml` na raiz do branch
-padrão e que declaram um **app** (não plugin nem tema do Omarchy). O arquivo
-pode até estar vazio: a presença dele é o opt-in do autor, e o que não for
-declarado a loja deduz sozinha. O manifesto serve para declarar o que a
-dedução erraria — ícone, executável, qual arquivo da release instalar.
+OmaStore only indexes repositories that have an `omastore.toml` at the root of
+the default branch and that declare an **app** (not an Omarchy plugin or
+theme). The file may even be empty: its presence is the author's opt-in, and
+whatever is not declared the store infers on its own. The manifest exists to
+declare what the inference would get wrong — icon, executable, which release
+file to install.
 
-A especificação completa está em `references/spec.md`. Leia-a antes de
-escrever campos que você não conhece de cor.
+The full specification is in `references/spec.md`. Read it before writing
+fields you do not know by heart.
 
-## Fluxo
+## Flow
 
-1. **Confirme que é um app.** Um programa standalone que o usuário abre ou
-   roda no terminal. Se for tema, plugin, dotfiles ou extensão do Omarchy,
-   explique que a OmaStore não distribui esse tipo de projeto e pare: um
-   `kind = "theme"` só serve para deixar isso explícito.
+1. **Confirm it is an app.** A standalone program the user opens or runs in
+   the terminal. If it is an Omarchy theme, plugin, dotfiles or extension,
+   explain that OmaStore does not distribute that kind of project and stop: a
+   `kind = "theme"` only serves to make that explicit.
 
-2. **Levante os fatos do repositório** (não invente; cada campo errado vira
-   um app quebrado na loja):
-   - nome de exibição (README, título, `Cargo.toml`/`package.json`/`go.mod`);
-   - resumo de uma frase (descrição do repo no GitHub, primeiro parágrafo do README);
-   - categoria freedesktop (veja a tabela em `references/spec.md`);
-   - ícone: um PNG (≥ 256×256) ou SVG versionado no repo;
-   - screenshots versionadas ou URLs `https://`;
-   - se roda no terminal (CLI/TUI) → `terminal = true`;
-   - releases: `gh release view --json tagName,assets` mostra a tag e os nomes
-     dos assets. Sem release com binário Linux o app entra na loja mas não
-     pode ser instalado — nesse caso, sugira a skill `omastore-release`.
+2. **Gather the repository's facts** (do not make things up; every wrong
+   field becomes a broken app in the store):
+   - display name (README, title, `Cargo.toml`/`package.json`/`go.mod`);
+   - one-sentence summary (GitHub repo description, first README paragraph);
+   - freedesktop category (see the table in `references/spec.md`);
+   - icon: a PNG (≥ 256×256) or SVG committed to the repo;
+   - committed screenshots or `https://` URLs;
+   - whether it runs in the terminal (CLI/TUI) → `terminal = true`;
+   - releases: `gh release view --json tagName,assets` shows the tag and the
+     asset names. Without a release with a Linux binary the app is listed but
+     cannot be installed — in that case, suggest the `omastore-release` skill.
 
-3. **Decida o que declarar.** Prefira um manifesto curto. Declare sempre:
-   `kind`, `categories` e `icon`. Declare `[linux.<arq>]` quando a release tiver
-   mais de um arquivo por arquitetura, nomes fora do padrão
-   `<app>-<versão>-<arq>-linux.tar.gz`, ou quando o executável não tiver o
-   nome do repositório (ex.: um script `bin/app` que chama `lib/app/app`).
-   Use `{version}` no padrão de asset, nunca a versão fixa — o manifesto tem
-   que continuar valendo nas próximas releases.
+3. **Decide what to declare.** Prefer a short manifest. Always declare:
+   `kind`, `categories` and `icon`. Declare `[linux.<arch>]` when the release
+   has more than one file per architecture, names outside the
+   `<app>-<version>-<arch>-linux.tar.gz` pattern, or when the executable is not
+   named after the repository (e.g. a `bin/app` script that calls `lib/app/app`).
+   Use `{version}` in the asset pattern, never the fixed version — the manifest
+   has to keep working for future releases.
 
-4. **Escreva o arquivo** na raiz do repositório, com comentários curtos só
-   onde a escolha não for óbvia.
+4. **Write the file** at the repository root, with short comments only where
+   the choice is not obvious.
 
-5. **Valide** e corrija até não haver erros:
+5. **Validate** and fix until there are no errors:
    ```sh
-   # com a OmaStore instalada (é a referência):
+   # with OmaStore installed (it is the reference):
    omastore lint-manifest .
-   # sem ela, o validador desta skill aplica as mesmas regras:
-   python3 <dir-desta-skill>/scripts/validate_manifest.py .
+   # without it, this skill's validator applies the same rules:
+   python3 <this-skill-dir>/scripts/validate_manifest.py .
    ```
-   Para conferir os padrões de asset contra a release real:
+   To check the asset patterns against the real release:
    ```sh
-   python3 <dir-desta-skill>/scripts/validate_manifest.py . --tag "$TAG" \
+   python3 <this-skill-dir>/scripts/validate_manifest.py . --tag "$TAG" \
      $(gh release view --json assets --jq '.assets[].name' | sed 's/^/--asset /')
    ```
 
-6. **Mostre o resultado antes do push**, se a OmaStore estiver instalada:
+6. **Show the result before pushing**, if OmaStore is installed:
    ```sh
    omastore index --manifest ./omastore.toml owner/repo && omastore show owner/repo
    ```
-   Isso indexa usando o arquivo local (num banco temporário, se preferir:
-   `HOME=$(mktemp -d) omastore ...`). Confira nome, categoria, ícone,
-   screenshots e se aparece `instalável: true`.
+   This indexes using the local file (in a temporary database, if you prefer:
+   `HOME=$(mktemp -d) omastore ...`). Check name, category, icon,
+   screenshots and that `installable: true` shows up.
 
-7. **Resuma para o usuário**: o que foi declarado e por quê, o que ficou para
-   a dedução automática, e o próximo passo (commit + push do `omastore.toml`;
-   se a release não tiver binário Linux, a skill `omastore-release`).
+7. **Summarize for the user**: what was declared and why, what was left to
+   automatic inference, and the next step (commit + push `omastore.toml`;
+   if the release has no Linux binary, the `omastore-release` skill).
 
-## Armadilhas comuns
+## Common pitfalls
 
-- **Arquivo fora da raiz ou em outro branch**: a loja lê `HEAD:omastore.toml`
-  do branch padrão.
-- **TOML inválido tira o app da loja** (campos inválidos isolados só geram
-  aviso). Sempre valide.
-- **Campo com nome errado** (`icone`, `binary`): o lint estrito acusa; a
-  indexação ignora em silêncio.
-- **Executável com nome de comando do sistema** (`ls`, `top`, `code`) ou
-  `omastore*`: a instalação é recusada para não encobrir o comando existente.
-  Sugira renomear o binário.
-- **Caminhos absolutos em `exec`** ou `..`: recusados. `exec` é relativo à
-  raiz do pacote extraído (ex.: `usr/bin/app` para um `.pkg.tar.zst`,
-  `app-1.0/bin/app` para um tarball com diretório de topo).
+- **File outside the root or on another branch**: the store reads
+  `HEAD:omastore.toml` from the default branch.
+- **Invalid TOML removes the app from the store** (individual invalid fields
+  only produce warnings). Always validate.
+- **Misnamed field** (`icone`, `binary`): the strict lint flags it; indexing
+  silently ignores it.
+- **Executable named like a system command** (`ls`, `top`, `code`) or
+  `omastore*`: the installation is refused so it does not shadow the existing
+  command. Suggest renaming the binary.
+- **Absolute paths in `exec`** or `..`: refused. `exec` is relative to the
+  root of the extracted package (e.g. `usr/bin/app` for a `.pkg.tar.zst`,
+  `app-1.0/bin/app` for a tarball with a top-level directory).

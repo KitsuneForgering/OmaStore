@@ -1,73 +1,73 @@
 ---
 name: omastore-release
-description: Configura releases no GitHub que a OmaStore consegue instalar: workflow de GitHub Actions disparado por tag que compila o app para Linux (x86_64 e aarch64), empacota em <app>-<versão>-<arq>-linux.tar.gz com checksums e publica na release. Use quando o usuário quiser que o app seja instalável pela OmaStore/Omarchy, publicar binários Linux, automatizar releases, ou quando a loja mostrar o app como "sem binário para Linux" — mesmo que ele só diga "quero publicar uma versão".
+description: Sets up GitHub releases that OmaStore can install: a tag-triggered GitHub Actions workflow that builds the app for Linux (x86_64 and aarch64), packages it as <app>-<version>-<arch>-linux.tar.gz with checksums and publishes it to the release. Use it when the user wants the app to be installable through OmaStore/Omarchy, to publish Linux binaries, to automate releases, or when the store shows the app as "no Linux binary" — even if they only say "I want to publish a version".
 ---
 
-# Releases instaláveis pela OmaStore
+# Releases installable by OmaStore
 
-A OmaStore instala o binário da **última release estável** (não pre-release,
-não draft) do repositório. Para isso a release precisa ter um arquivo para
-Linux por arquitetura, com nome e conteúdo previsíveis. O manifesto
-`omastore.toml` (skill `omastore-manifest`) aponta para esses arquivos; esta
-skill faz os arquivos existirem.
+OmaStore installs the binary from the repository's **latest stable release**
+(not a pre-release, not a draft). For that the release needs one Linux file
+per architecture, with a predictable name and content. The `omastore.toml`
+manifest (skill `omastore-manifest`) points to those files; this skill makes
+the files exist.
 
-## O formato-alvo
+## Target format
 
 ```
 Release v1.2.0
-├── meuapp-1.2.0-x86_64-linux.tar.gz
-│     └── meuapp-1.2.0-x86_64-linux/
-│           ├── bin/meuapp          ← executável (ELF ou script com shebang)
-│           ├── share/…             ← dados, ícones (opcional)
+├── myapp-1.2.0-x86_64-linux.tar.gz
+│     └── myapp-1.2.0-x86_64-linux/
+│           ├── bin/myapp           ← executable (ELF or script with shebang)
+│           ├── share/…             ← data, icons (optional)
 │           └── LICENSE, README.md
-├── meuapp-1.2.0-aarch64-linux.tar.gz
-└── checksums.txt                   ← sha256sum de todos os tarballs
+├── myapp-1.2.0-aarch64-linux.tar.gz
+└── checksums.txt                   ← sha256sum of all tarballs
 ```
 
-Por que assim:
-- `<app>-<versão>-<arq>-linux.tar.gz` é reconhecido mesmo sem manifesto e
-  casa com `asset = "meuapp-{version}-x86_64-linux.tar.gz"`.
-- Um diretório de topo com `bin/` deixa o executável fácil de achar. Se ele
-  tiver o nome do repositório, a loja encontra sozinha; se não, declare
-  `exec = "meuapp-{version}-x86_64-linux/bin/meucomando"` no manifesto — o
-  `{version}` é trocado pela versão de cada release.
-- A loja confere o sha256 que o GitHub calcula por asset; o `checksums.txt`
-  é um reforço útil para quem baixa à mão.
-- Tudo é instalado em `~/.local/share/omastore/apps/…`, nunca em `/usr`.
-  Programas que procuram dados em caminhos absolutos (`/usr/share/meuapp`)
-  quebram; resolva caminhos relativos ao executável.
+Why this way:
+- `<app>-<version>-<arch>-linux.tar.gz` is recognized even without a manifest
+  and matches `asset = "myapp-{version}-x86_64-linux.tar.gz"`.
+- A top-level directory with `bin/` makes the executable easy to find. If it
+  is named after the repository, the store finds it on its own; if not, declare
+  `exec = "myapp-{version}-x86_64-linux/bin/mycommand"` in the manifest — the
+  `{version}` is replaced by each release's version.
+- The store checks the sha256 GitHub computes per asset; `checksums.txt`
+  is a useful extra for people who download by hand.
+- Everything is installed into `~/.local/share/omastore/apps/…`, never into `/usr`.
+  Programs that look for data at absolute paths (`/usr/share/myapp`)
+  break; resolve paths relative to the executable.
 
-## Fluxo
+## Flow
 
-1. **Identifique o ecossistema** e leia só a referência correspondente:
+1. **Identify the ecosystem** and read only the matching reference:
    - Go → `references/go.md`
    - Rust → `references/rust.md`
-   - C/C++ com CMake, incluindo Qt → `references/cmake-qt.md`
-   - qualquer outro (Zig, Nim, script empacotado, AppImage já pronto) →
-     `references/generico.md`
-2. **Descubra o nome do executável** e onde o build o coloca. Se o nome
-   colidir com um comando do sistema (`ls`, `code`, `top`), avise: a OmaStore
-   recusa instalar para não encobrir o comando.
-3. **Crie `.github/workflows/release.yml`** a partir do modelo, ajustando nome
-   do app e comandos de build. Mantenha:
-   - disparo por tag `v*`;
-   - a tag entrando por variável de ambiente (`VERSION: ${{ github.ref_name }}`),
-     nunca interpolada direto em `run:` — um nome de tag malicioso viraria
-     comando;
-   - `permissions: contents: write` só no job que publica.
-4. **Valide o workflow**, se possível:
+   - C/C++ with CMake, including Qt → `references/cmake-qt.md`
+   - anything else (Zig, Nim, packaged script, ready-made AppImage) →
+     `references/generic.md`
+2. **Find out the executable's name** and where the build puts it. If the name
+   collides with a system command (`ls`, `code`, `top`), warn: OmaStore
+   refuses to install it so it does not shadow the command.
+3. **Create `.github/workflows/release.yml`** from the template, adjusting the
+   app name and build commands. Keep:
+   - the `v*` tag trigger;
+   - the tag coming in through an environment variable (`VERSION: ${{ github.ref_name }}`),
+     never interpolated directly into `run:` — a malicious tag name would become
+     a command;
+   - `permissions: contents: write` only on the publishing job.
+4. **Validate the workflow**, if possible:
    `go run github.com/rhysd/actionlint/cmd/actionlint@latest .github/workflows/release.yml`.
-5. **Teste o empacotamento localmente** antes da primeira tag, rodando os
-   mesmos comandos do job de build e conferindo o tarball:
-   `tar tzf dist/meuapp-*-x86_64-linux.tar.gz | head`.
-6. **Atualize o `omastore.toml`** para apontar para os assets (ou confirme que
-   a heurística basta): `[linux.x86_64] asset = "meuapp-{version}-x86_64-linux.tar.gz"`.
-7. **Explique como publicar**: `git tag v1.2.0 && git push origin v1.2.0`.
-   Depois, a skill `omastore-check` confirma que a loja instala.
+5. **Test the packaging locally** before the first tag, running the same
+   commands as the build job and checking the tarball:
+   `tar tzf dist/myapp-*-x86_64-linux.tar.gz | head`.
+6. **Update `omastore.toml`** to point to the assets (or confirm that the
+   heuristics are enough): `[linux.x86_64] asset = "myapp-{version}-x86_64-linux.tar.gz"`.
+7. **Explain how to publish**: `git tag v1.2.0 && git push origin v1.2.0`.
+   Afterwards, the `omastore-check` skill confirms that the store installs it.
 
-## O que não fazer
+## What not to do
 
-- Não publique só `.deb`/`.rpm`: a OmaStore ignora esses formatos.
-- Não marque a release como pre-release se quiser que ela apareça na loja.
-- Não inclua scripts de instalação que precisem rodar: a loja nunca executa
-  nada do pacote durante a instalação.
+- Do not publish only `.deb`/`.rpm`: OmaStore ignores those formats.
+- Do not mark the release as a pre-release if you want it to show up in the store.
+- Do not include install scripts that need to run: the store never executes
+  anything from the package during installation.

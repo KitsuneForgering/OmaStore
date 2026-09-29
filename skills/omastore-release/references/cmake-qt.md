@@ -1,9 +1,9 @@
-# Release de app C/C++ (CMake, incluindo Qt)
+# Releasing a C/C++ app (CMake, including Qt)
 
-Apps Qt/GTK linkam contra as bibliotecas do sistema. Para rodar no Omarchy
-(Arch), compile **num container Arch**: assim o binário usa as mesmas versões
-de Qt que o usuário tem instaladas (o app passa a depender dos pacotes
-`qt6-base`, `qt6-declarative` etc., que o README deve listar).
+Qt/GTK apps link against the system libraries. To run on Omarchy
+(Arch), build **in an Arch container**: that way the binary uses the same Qt
+versions the user has installed (the app then depends on the packages
+`qt6-base`, `qt6-declarative` etc., which the README must list).
 
 ```yaml
 name: Release
@@ -18,12 +18,12 @@ jobs:
     container: archlinux:latest
     env:
       VERSION: ${{ github.ref_name }}
-      APP: meuapp                # nome do executável gerado pelo CMake
+      APP: myapp                 # name of the executable produced by CMake
     steps:
-      - name: Dependências
+      - name: Dependencies
         run: pacman -Syu --noconfirm --needed base-devel git cmake ninja qt6-base qt6-declarative
       - uses: actions/checkout@v4
-      - name: Compilar e empacotar
+      - name: Build and package
         run: |
           ver="${VERSION#v}"
           dir="$APP-$ver-x86_64-linux"
@@ -57,15 +57,15 @@ jobs:
             dist/checksums.txt
 ```
 
-Com `CMAKE_INSTALL_PREFIX=/` e `GNUInstallDirs`, o tarball fica com
-`<dir>/bin/meuapp`, `<dir>/share/…`. Para aarch64, repita o job em
-`ubuntu-24.04-arm` (o container `archlinux` não tem imagem ARM oficial;
-use `menci/archlinuxarm` ou compile sem container e documente as versões).
+With `CMAKE_INSTALL_PREFIX=/` and `GNUInstallDirs`, the tarball contains
+`<dir>/bin/myapp`, `<dir>/share/…`. For aarch64, repeat the job on
+`ubuntu-24.04-arm` (the `archlinux` container has no official ARM image;
+use `menci/archlinuxarm` or build without a container and document the versions).
 
-Cuidados:
-- Recursos QML embutidos com `qt_add_qml_module` não dependem de caminho.
-  Arquivos lidos do disco devem ser resolvidos a partir de
-  `QCoreApplication::applicationDirPath()` (ex.: `../share/meuapp`), nunca de
+Caveats:
+- QML resources embedded with `qt_add_qml_module` do not depend on paths.
+  Files read from disk must be resolved from
+  `QCoreApplication::applicationDirPath()` (e.g. `../share/myapp`), never from
   `/usr/share`.
-- `RPATH` absoluto apontando para o diretório de build quebra fora do CI;
-  `cmake --install` corrige por padrão.
+- An absolute `RPATH` pointing to the build directory breaks outside CI;
+  `cmake --install` fixes it by default.

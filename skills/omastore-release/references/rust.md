@@ -1,8 +1,8 @@
-# Release de app Rust
+# Releasing a Rust app
 
-Use um runner nativo por arquitetura: cross-compilar Rust com dependências C
-(GTK, OpenSSL, libraw) é frágil. Runners ARM do GitHub são gratuitos em
-repositórios públicos.
+Use one native runner per architecture: cross-compiling Rust with C dependencies
+(GTK, OpenSSL, libraw) is fragile. GitHub ARM runners are free for
+public repositories.
 
 ```yaml
 name: Release
@@ -23,14 +23,14 @@ jobs:
     runs-on: ${{ matrix.runner }}
     env:
       VERSION: ${{ github.ref_name }}
-      APP: meuapp               # nome do binário ([[bin]] ou nome do crate)
+      APP: myapp                # binary name ([[bin]] or crate name)
       ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      # Dependências de sistema do app, se houver:
+      # The app's system dependencies, if any:
       # - run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev
-      - name: Compilar e empacotar
+      - name: Build and package
         run: |
           cargo build --release --locked
           ver="${VERSION#v}"
@@ -64,8 +64,8 @@ jobs:
             dist/checksums.txt
 ```
 
-Dicas:
-- `strip = true` e `lto = true` no `[profile.release]` reduzem bastante o binário.
-- Recursos (ícones, temas) que o app carrega em runtime devem ir para
-  `share/` dentro do tarball e ser procurados relativos a
-  `std::env::current_exe()`, não em `/usr/share`.
+Tips:
+- `strip = true` and `lto = true` in `[profile.release]` shrink the binary a lot.
+- Resources (icons, themes) the app loads at runtime must go into
+  `share/` inside the tarball and be looked up relative to
+  `std::env::current_exe()`, not in `/usr/share`.

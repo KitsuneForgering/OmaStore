@@ -1,58 +1,58 @@
 ---
 name: omastore-check
-description: Audita se um repositório do GitHub é instalável pela OmaStore (loja de apps do Omarchy) rodando a própria OmaStore num HOME temporário: valida o omastore.toml, indexa, confere release, arquitetura, checksum, ícone e, opcionalmente, instala e desinstala de verdade. Use quando o usuário perguntar se o app "funciona na OmaStore", por que ele não aparece ou não instala na loja, antes de publicar uma release, ou para revisar a compatibilidade de um projeto com o Omarchy.
+description: Audits whether a GitHub repository can be installed by OmaStore (the Omarchy app store) by running OmaStore itself in a temporary HOME: validates omastore.toml, indexes, checks release, architecture, checksum, icon and, optionally, really installs and uninstalls. Use it when the user asks whether the app "works on OmaStore", why it does not show up or does not install from the store, before publishing a release, or to review a project's compatibility with Omarchy.
 ---
 
-# Auditoria de compatibilidade com a OmaStore
+# OmaStore compatibility audit
 
-A melhor forma de saber se a loja instala um app é deixar a loja tentar. O
-script desta skill faz exatamente isso, num HOME descartável: nada é gravado
-no `~/.local` do usuário e nenhum binário do app é executado.
+The best way to know whether the store installs an app is to let the store
+try. This skill's script does exactly that, in a throwaway HOME: nothing is
+written to the user's `~/.local` and no app binary is executed.
 
-## Fluxo
+## Flow
 
-1. **Descubra o `owner/repo`** (de `git remote get-url origin` se estiver no
-   repositório) e se já existe um `omastore.toml` publicado ou só local.
+1. **Find the `owner/repo`** (from `git remote get-url origin` if you are in the
+   repository) and whether an `omastore.toml` is already published or only local.
 
-2. **Rode a auditoria.** Precisa da CLI `omastore` (pacote da OmaStore ou
-   `$OMASTORE=/caminho/omastore`) e de `gh` autenticado:
+2. **Run the audit.** It needs the `omastore` CLI (the OmaStore package or
+   `$OMASTORE=/path/omastore`) and an authenticated `gh`:
    ```sh
-   # o que a loja vê hoje (manifesto publicado):
-   python3 <dir-desta-skill>/scripts/omastore_check.py owner/repo
-   # antes do push, com o manifesto local:
-   python3 <dir-desta-skill>/scripts/omastore_check.py owner/repo --manifest ./omastore.toml
-   # auditoria completa, com instalação de teste (baixa a release):
-   python3 <dir-desta-skill>/scripts/omastore_check.py owner/repo --manifest ./omastore.toml --install
+   # what the store sees today (published manifest):
+   python3 <this-skill-dir>/scripts/omastore_check.py owner/repo
+   # before pushing, with the local manifest:
+   python3 <this-skill-dir>/scripts/omastore_check.py owner/repo --manifest ./omastore.toml
+   # full audit, with a test install (downloads the release):
+   python3 <this-skill-dir>/scripts/omastore_check.py owner/repo --manifest ./omastore.toml --install
    ```
-   `--json` dá a saída estruturada, útil para CI. Código de saída 1 = há
-   falhas.
+   `--json` gives structured output, useful for CI. Exit code 1 = there are
+   failures.
 
-3. **Interprete o relatório** para o usuário. Cada linha é ✅, ⚠️ ou ❌:
-   - ❌ impede o app de entrar ou de instalar: resolva antes de publicar.
-   - ⚠️ não impede, mas piora a experiência (sem ícone, sem screenshots, sem
-     build ARM, binário com caminhos absolutos em `/usr`).
-   Explique a causa provável de cada ❌ em termos do projeto dele, não só a
-   mensagem do script.
+3. **Interpret the report** for the user. Each line is ✅, ⚠️ or ❌:
+   - ❌ keeps the app out of the store or from installing: fix it before publishing.
+   - ⚠️ does not block, but makes the experience worse (no icon, no screenshots, no
+     ARM build, binary with absolute paths in `/usr`).
+   Explain the likely cause of each ❌ in terms of their project, not just the
+   script's message.
 
-4. **Encaminhe a correção** para a skill certa:
-   - manifesto ausente, inválido, ícone ou executável errado →
+4. **Route the fix** to the right skill:
+   - missing or invalid manifest, wrong icon or executable →
      `omastore-manifest`;
-   - sem release, sem asset Linux, sem ARM, sem checksum →
+   - no release, no Linux asset, no ARM, no checksum →
      `omastore-release`;
-   - "Caminhos absolutos": o app procura dados em `/usr/share/<app>`, mas a
-     loja instala em `~/.local/share/omastore/apps/…`. A correção é no código
-     do app: resolver arquivos relativos ao executável.
-   - conflito de nome de comando: o executável tem o nome de um comando do
-     sistema (`ls`, `top`…) ou `omastore*`; renomeie o binário.
+   - "Absolute paths": the app looks for data in `/usr/share/<app>`, but the
+     store installs into `~/.local/share/omastore/apps/…`. The fix is in the
+     app's code: resolve files relative to the executable.
+   - command name conflict: the executable is named like a system command
+     (`ls`, `top`…) or `omastore*`; rename the binary.
 
-5. **Rode de novo** depois das correções até o resultado ser "compatível com
-   a OmaStore". Com o manifesto local aprovado, lembre o usuário de fazer
-   commit e push do `omastore.toml`: a loja só lê o arquivo do branch padrão.
+5. **Run it again** after the fixes until the result is "compatible with
+   OmaStore". Once the local manifest passes, remind the user to commit and
+   push `omastore.toml`: the store only reads the file from the default branch.
 
-## Sem a CLI `omastore`
+## Without the `omastore` CLI
 
-Se a OmaStore não estiver instalada e o usuário não quiser instalá-la, faça
-uma checagem parcial: valide o manifesto com o validador da skill
-`omastore-manifest` (incluindo `--tag/--asset` com os nomes de
-`gh release view --json assets`) e confira manualmente o formato descrito em
-`omastore-release`. Deixe claro que a instalação não foi testada.
+If OmaStore is not installed and the user does not want to install it, do a
+partial check: validate the manifest with the `omastore-manifest` skill's
+validator (including `--tag/--asset` with the names from
+`gh release view --json assets`) and manually check the format described in
+`omastore-release`. Make it clear that installation was not tested.

@@ -1,10 +1,10 @@
-# Release de app Go
+# Releasing a Go app
 
-Go compila para as duas arquiteturas num único runner quando o app não usa
-CGO. Com CGO (ex.: SQLite via `mattn/go-sqlite3`, GTK), use um runner por
-arquitetura (segundo job abaixo).
+Go builds for both architectures on a single runner when the app does not use
+CGO. With CGO (e.g. SQLite via `mattn/go-sqlite3`, GTK), use one runner per
+architecture (second job below).
 
-## Sem CGO
+## Without CGO
 
 ```yaml
 name: Release
@@ -18,13 +18,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ github.ref_name }}
-      APP: meuapp               # nome do executável
+      APP: myapp                # executable name
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Compilar e empacotar
+      - name: Build and package
         run: |
           ver="${VERSION#v}"
           mkdir -p dist
@@ -63,10 +63,10 @@ jobs:
             dist/checksums.txt
 ```
 
-## Com CGO
+## With CGO
 
-Troque o job `build` por uma matriz de runners nativos (runners ARM do
-GitHub são gratuitos em repositórios públicos):
+Replace the `build` job with a matrix of native runners (GitHub ARM
+runners are free for public repositories):
 
 ```yaml
   build:
@@ -80,14 +80,14 @@ GitHub são gratuitos em repositórios públicos):
     runs-on: ${{ matrix.runner }}
     env:
       VERSION: ${{ github.ref_name }}
-      APP: meuapp
+      APP: myapp
       ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Compilar e empacotar
+      - name: Build and package
         run: |
           ver="${VERSION#v}"
           dir="$APP-$ver-$ARCH-linux"
@@ -100,9 +100,9 @@ GitHub são gratuitos em repositórios públicos):
           path: dist/*.tar.gz
 ```
 
-No `publish`, baixe com `pattern: dist-*` e `merge-multiple: true`, e gere o
-`checksums.txt` ali (`cd dist && sha256sum ./*.tar.gz > checksums.txt`).
+In `publish`, download with `pattern: dist-*` and `merge-multiple: true`, and generate
+`checksums.txt` there (`cd dist && sha256sum ./*.tar.gz > checksums.txt`).
 
-Observação: binários com CGO linkam contra a glibc do runner. Compilar num
-Ubuntu recente e rodar num Arch funciona (Arch tem glibc mais nova); o
-contrário não.
+Note: CGO binaries link against the runner's glibc. Building on a recent
+Ubuntu and running on Arch works (Arch has a newer glibc); the
+opposite does not.
