@@ -5,8 +5,8 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write      # publicar a release
-  id-token: write      # attestation de proveniência
+  contents: write      # publish the release
+  id-token: write      # provenance attestation
   attestations: write
 
 jobs:
@@ -14,17 +14,17 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     env:
-      # A tag entra por variável de ambiente, nunca interpolada no script.
+      # The tag comes in through an environment variable, never interpolated into the script.
       VERSION: ${{ github.ref_name }}
     steps:
-      - name: Validar a tag
+      - name: Validate the tag
         run: |
           if ! printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
-            echo "tag inválida: $VERSION" >&2
+            echo "invalid tag: $VERSION" >&2
             exit 1
           fi
 
-      - name: Dependências
+      - name: Dependencies
         run: pacman -Syu --noconfirm --needed base-devel git go cmake ninja qt6-base qt6-declarative qt6-svg
 
       - uses: actions/checkout@v4
@@ -33,27 +33,27 @@ jobs:
 
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Testes do backend
+      - name: Backend tests
         run: make check
 
-      - name: Tarball reprodutível
+      - name: Reproducible tarball
         run: make dist VERSION="$VERSION"
 
-      - name: Testes do frontend (build de release)
+      - name: Frontend tests (release build)
         run: QT_QPA_PLATFORM=offscreen ctest --test-dir frontend/build-release --output-on-failure
 
-      - name: Proveniência (SLSA)
+      - name: Provenance (SLSA)
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: dist/*.tar.gz
 
-      - name: PKGBUILD do omastore-bin
+      - name: omastore-bin PKGBUILD
         run: |
           useradd -m builder
           chown -R builder "$GITHUB_WORKSPACE"
           su builder -c "make pkgbuild-bin VERSION=$VERSION"
 
-      - name: Publicar
+      - name: Publish
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
@@ -61,3 +61,4 @@ jobs:
             dist/*.tar.gz
             dist/*.tar.gz.sha256
             packaging/arch-bin/PKGBUILD
+            packaging/install.sh
