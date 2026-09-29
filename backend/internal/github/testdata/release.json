@@ -1,0 +1,13 @@
+{
+  "tag_name": "v1.2.0",
+  "name": "OmaPhoto 1.2.0",
+  "published_at": "2026-09-19T08:00:00Z",
+  "prerelease": false,
+  "assets": [
+    {"name": "omaphoto-1.2.0-x86_64-linux.tar.gz", "size": 1024, "content_type": "application/gzip",
+     "browser_download_url": "https://github.com/acme/omaphoto/releases/download/v1.2.0/omaphoto-1.2.0-x86_64-linux.tar.gz",
+     "digest": "sha256:7330aaae408c05ddf6bc2a0b5e14bfe17395f6f7582862ec223221614c4d3b98"},
+    {"name": "checksums.txt", "size": 100, "content_type": "text/plain",
+     "browser_download_url": "https://github.com/acme/omaphoto/releases/download/v1.2.0/checksums.txt"}
+  ]
+}

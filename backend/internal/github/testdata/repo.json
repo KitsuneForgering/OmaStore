@@ -1,0 +1,14 @@
+{
+  "full_name": "acme/omaphoto",
+  "name": "omaphoto",
+  "owner": {"login": "acme"},
+  "description": "Editor de fotos para o Omarchy",
+  "stargazers_count": 42,
+  "topics": ["omarchy", "photo"],
+  "html_url": "https://github.com/acme/omaphoto",
+  "default_branch": "main",
+  "pushed_at": "2026-09-20T10:00:00Z",
+  "archived": false,
+  "fork": false,
+  "license": {"key": "mit", "name": "MIT License", "spdx_id": "MIT"}
+}
