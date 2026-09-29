@@ -1,5 +1,5 @@
 [Unit]
-Description=Atualiza o catálogo do OmaStore e avisa sobre atualizações
+Description=Refresh the OmaStore catalog and notify about updates
 Documentation=https://github.com/KitsuneSemCalda/OmaStore
 After=network-online.target
 Wants=network-online.target
@@ -7,7 +7,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/omastore index
-# Só notifica quando o conjunto de atualizações muda; nada é instalado.
+# Only notifies when the set of updates changes; nothing is installed.
 ExecStartPost=/usr/bin/omastore update --check --notify
 NoNewPrivileges=yes
 Nice=10

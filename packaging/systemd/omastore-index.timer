@@ -1,5 +1,5 @@
 [Unit]
-Description=Atualização diária do catálogo do OmaStore
+Description=Daily OmaStore catalog refresh
 Documentation=https://github.com/KitsuneSemCalda/OmaStore
 
 [Timer]

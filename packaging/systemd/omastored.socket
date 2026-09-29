@@ -1,5 +1,5 @@
 [Unit]
-Description=Socket do daemon do OmaStore
+Description=OmaStore daemon socket
 Documentation=https://github.com/KitsuneSemCalda/OmaStore
 
 [Socket]

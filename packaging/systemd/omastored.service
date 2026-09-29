@@ -1,5 +1,5 @@
 [Unit]
-Description=Daemon do OmaStore (indexador e instalador de apps do Omarchy)
+Description=OmaStore daemon (Omarchy app indexer and installer)
 Documentation=https://github.com/KitsuneSemCalda/OmaStore
 Requires=omastored.socket
 After=omastored.socket network-online.target
@@ -8,7 +8,7 @@ After=omastored.socket network-online.target
 Type=simple
 ExecStart=/usr/bin/omastored
 Restart=on-failure
-# O daemon nunca precisa de privilégios: tudo é instalado no $HOME.
+# The daemon never needs privileges: everything is installed into $HOME.
 NoNewPrivileges=yes
 
 [Install]

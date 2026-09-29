@@ -3,15 +3,15 @@ pkgname=omastore-git
 _pkgname=omastore
 pkgver=r0.0000000
 pkgrel=1
-pkgdesc='Loja de aplicativos para o Omarchy: indexa apps do GitHub e instala binários de releases no $HOME'
+pkgdesc='App store for Omarchy: indexes GitHub apps and installs release binaries into $HOME'
 arch=('x86_64' 'aarch64')
 url='https://github.com/KitsuneSemCalda/OmaStore'
 license=('MIT')
 depends=('glibc' 'gcc-libs' 'qt6-base' 'qt6-declarative' 'qt6-svg')
 optdepends=(
-  'github-cli: autenticação para evitar o rate limit do GitHub (gh auth login)'
-  'desktop-file-utils: atualizar o cache de .desktop após instalar apps'
-  'gtk-update-icon-cache: atualizar o cache de ícones após instalar apps'
+  'github-cli: authentication to avoid the GitHub rate limit (gh auth login)'
+  'desktop-file-utils: refresh the .desktop cache after installing apps'
+  'gtk-update-icon-cache: refresh the icon cache after installing apps'
 )
 makedepends=('git' 'go' 'cmake' 'ninja')
 provides=("$_pkgname")
@@ -46,7 +46,7 @@ check() {
   cd "$_pkgname"
   export GOPATH="$srcdir/gopath"
   export GOFLAGS='-mod=readonly -modcacherw'
-  # Sem -race (exige toolchain extra) e sem rede: os testes usam fixtures.
+  # No -race (needs an extra toolchain) and no network: the tests use fixtures.
   make test-backend TESTFLAGS='./...'
   QT_QPA_PLATFORM=offscreen ctest --test-dir frontend/build-release --output-on-failure
 }

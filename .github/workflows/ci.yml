@@ -14,7 +14,7 @@ jobs:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
       - run: make check
-      # Sem -race o timing muda e já revelou bugs que o -race escondia.
+      # Without -race the timing changes, and it has already exposed bugs that -race hid.
       - run: make test-backend TESTFLAGS='-count=1 ./...'
       - run: make backend
       - run: make test-skills
