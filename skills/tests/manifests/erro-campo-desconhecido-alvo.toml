@@ -1,0 +1,3 @@
+[linux.x86_64]
+asset = "a.tar.gz"
+binary = "x"

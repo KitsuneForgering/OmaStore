@@ -1,0 +1,15 @@
+kind = "app"
+name = "RAWmakase"
+summary = "Alternativa livre ao Lightroom"
+categories = ["Graphics", "Photography"]
+icon = "packaging/rawmakase.svg"
+screenshots = ["docs/tela.png", "https://example.com/extra.png"]
+terminal = false
+
+[linux.x86_64]
+asset = "rawmakase-{version}-x86_64-linux.tar.gz"
+exec = "usr/bin/rawmakase"
+
+[linux.aarch64]
+asset = "rawmakase-{version}-aarch64-linux.tar.gz"
+exec = "usr/bin/rawmakase"
