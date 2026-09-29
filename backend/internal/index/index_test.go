@@ -701,3 +701,26 @@ func TestManifestOverride(t *testing.T) {
 		}
 	}
 }
+
+// A seed for a renamed/transferred repo is stored under the new name; prune
+// must keep it, since it was discovered (through the old name) in this run.
+func TestPruneKeepsRenamedRepo(t *testing.T) {
+	for _, batched := range []bool{false, true} {
+		ix, gh, st := setup(t)
+		if batched {
+			ix.GH = &fakeBatchGH{fakeGH: gh}
+		}
+		ctx := context.Background()
+		gh.repos["old/omaphoto"] = gh.repos["acme/omaphoto"] // API redirects to acme/omaphoto
+		gh.search = nil
+		ix.Seeds = []string{"old/omaphoto"}
+		ix.Prune = true
+		if _, err := ix.Run(ctx, Options{}); err != nil {
+			t.Fatal(err)
+		}
+		names, _ := st.RepoNames(ctx)
+		if len(names) != 1 || names[0] != "acme/omaphoto" {
+			t.Errorf("batched=%v: catalog = %v, want [acme/omaphoto]", batched, names)
+		}
+	}
+}

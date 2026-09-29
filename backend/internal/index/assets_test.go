@@ -37,6 +37,17 @@ func TestClassifyAsset(t *testing.T) {
 		{"winq-emu-alpha10-portable.zip", AssetInfo{}},
 		{"app-x86_64.zip", AssetInfo{Format: FormatZip, Arch: ArchAMD64}},
 		{"archlinux-x86_64.iso", AssetInfo{}},
+		// Signatures, bare tarballs and single-file compression are not binaries.
+		{"app-linux-amd64.minisig", AssetInfo{}},
+		{"app-linux-amd64.sigstore", AssetInfo{}},
+		{"app-linux-amd64.tar", AssetInfo{}},
+		{"app-linux-amd64.gz", AssetInfo{}},
+		{"app-linux-amd64.xz", AssetInfo{}},
+		{"app-linux-amd64.zst", AssetInfo{}},
+		{"app-linux-amd64.bz2", AssetInfo{}},
+		{"install-linux-amd64.sh", AssetInfo{}},
+		{"app-v1.2-linux-amd64", AssetInfo{Format: FormatBinary, Arch: ArchAMD64}},
+		{"app-x86_64.bin", AssetInfo{Format: FormatBinary, Arch: ArchAMD64}},
 	}
 	for _, c := range cases {
 		if got := ClassifyAsset(c.name); got != c.want {

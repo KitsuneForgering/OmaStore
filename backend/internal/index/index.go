@@ -25,7 +25,7 @@ import (
 // when changing rules that affect what is stored (assets, categories, README...):
 // repositories stored with a lower version are reprocessed even without changes
 // on GitHub.
-const Version = 5
+const Version = 6
 
 // GitHub is the subset of the client used by the indexer.
 type GitHub interface {
@@ -258,7 +258,7 @@ func (ix *Indexer) Run(ctx context.Context, opts Options) (Stats, error) {
 		var err error
 		names, err = ix.Discover(ctx)
 		if err != nil {
-			return Stats{}, fmt.Errorf("descoberta: %w", err)
+			return Stats{}, fmt.Errorf("discovery: %w", err)
 		}
 		discovered = true
 	}
@@ -293,11 +293,14 @@ func (ix *Indexer) Run(ctx context.Context, opts Options) (Stats, error) {
 	defer cancel(nil)
 
 	var (
-		mu    sync.Mutex
-		prog  = Progress{Total: len(names)}
-		fatal error
-		jobs  = make(chan string)
-		wg    sync.WaitGroup
+		mu   sync.Mutex
+		prog = Progress{Total: len(names)}
+		// resolved are the canonical names the API answered for renamed or
+		// transferred repositories; prune must keep them too.
+		resolved []string
+		fatal    error
+		jobs     = make(chan string)
+		wg       sync.WaitGroup
 	)
 	for range workers {
 		wg.Add(1)
@@ -306,8 +309,12 @@ func (ix *Indexer) Run(ctx context.Context, opts Options) (Stats, error) {
 			for name := range jobs {
 				snap, batched := snaps[name]
 				// With a local manifest, reprocess: the published one did not change, but the one that counts did.
-				out, err := ix.process(ctx, name, opts.Force || len(opts.ManifestOverride) > 0, snap, batched, opts.ManifestOverride)
+				canonical := name
+				out, err := ix.process(ctx, name, opts.Force || len(opts.ManifestOverride) > 0, snap, batched, opts.ManifestOverride, &canonical)
 				mu.Lock()
+				if canonical != name {
+					resolved = append(resolved, canonical)
+				}
 				prog.Done++
 				prog.Current = name
 				switch {
@@ -361,7 +368,7 @@ feed:
 		return prog.Stats, err
 	}
 	if ix.Prune && discovered {
-		n, err := ix.prune(ctx, names)
+		n, err := ix.prune(ctx, append(names, resolved...))
 		prog.Removed += n
 		if err != nil {
 			return prog.Stats, err
@@ -396,8 +403,9 @@ func (ix *Indexer) prune(ctx context.Context, found []string) (int, error) {
 // process applies the pipeline to a repository. snap, when batched, is the
 // state fetched in batch through GraphQL (nil = repository does not exist);
 // without a batch, the state comes from the REST API with conditional requests.
+// canonical receives the name the API answered (renamed/transferred repo).
 func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *github.Snapshot, batched bool,
-	overrides map[string]string) (outcome, error) {
+	overrides map[string]string, canonical *string) (outcome, error) {
 	prev, err := ix.Store.RepoState(ctx, name)
 	known := err == nil
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
@@ -466,6 +474,7 @@ func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *g
 			}
 		}
 		name = repo.FullName
+		*canonical = name
 		prev, err = ix.Store.RepoState(ctx, name)
 		known = err == nil
 		if err != nil && !errors.Is(err, store.ErrNotFound) {

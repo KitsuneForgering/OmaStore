@@ -53,7 +53,14 @@ var skipExt = []string{
 	".sig", ".asc", ".pem", ".crt", ".sbom", ".spdx", ".json", ".yml", ".yaml", ".txt", ".md",
 	".sha1", ".blockmap", ".vsix", ".whl", ".jar", ".nupkg", ".7z", ".rar", ".dll", ".so", ".dylib",
 	".intoto.jsonl", ".bundle", ".zsync", ".iso", ".img", ".qcow2", ".vhd", ".vhdx", ".vmdk", ".efi",
+	".minisig", ".sigstore", ".cert", ".pub",
+	// Bare tar and single-file compression: the installer cannot unpack them.
+	".tar", ".gz", ".xz", ".bz2", ".zst", ".lz", ".lz4", ".lzma", ".z",
 }
+
+// scriptExt are extensions that, without a manifest declaring the asset, are
+// install/helper scripts rather than the app itself.
+var scriptExt = []string{".sh", ".bash", ".ps1", ".bat", ".cmd", ".py"}
 
 // ClassifyAsset identifies an asset's format and architecture from its name.
 func ClassifyAsset(name string) AssetInfo {
@@ -93,7 +100,7 @@ func ClassifyAsset(name string) AssetInfo {
 	case strings.HasSuffix(lower, ".appimage"):
 		info.Format = FormatAppImage
 	default:
-		for _, e := range skipExt {
+		for _, e := range append(skipExt, scriptExt...) {
 			if strings.HasSuffix(lower, e) {
 				return AssetInfo{}
 			}
