@@ -1,229 +1,229 @@
 # TODO — OmaStore
 
-Roteiro de implementação, na ordem em que as peças dependem umas das outras.
-Cada fase deve terminar com `go test ./...` (ou `ctest`) passando.
+Implementation roadmap, in the order in which the pieces depend on each other.
+Each phase must end with `go test ./...` (or `ctest`) passing.
 
-## Fase 0 — Fundação
+## Phase 0 — Foundation
 
-- [x] `backend/go.mod` (módulo, versão do Go) com `go-github`, `go-git/v5`, `go-sqlite3`
-- [x] Estrutura de diretórios do backend conforme o CLAUDE.md
-- [x] Pacote `internal/xdg`: resolver `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_RUNTIME_DIR` com defaults da especificação
-- [x] Logging estruturado (`log/slog`) com nível configurável
-- [x] `frontend/CMakeLists.txt` mínimo (Qt 6 Quick, C++20, janela vazia abrindo) — *build local pendente: cmake/ninja não instalados*
-- [x] `Makefile` na raiz (build, testes, vet, fmt, run, clean)
-- [x] CI (GitHub Actions) chamando os alvos do `Makefile`
-- [x] Atualizar `.gitignore` (`frontend/build/`, binários do Go)
+- [x] `backend/go.mod` (module, Go version) with `go-github`, `go-git/v5`, `go-sqlite3`
+- [x] Backend directory structure as in CLAUDE.md
+- [x] `internal/xdg` package: resolve `XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_RUNTIME_DIR` with the specification defaults
+- [x] Structured logging (`log/slog`) with configurable level
+- [x] Minimal `frontend/CMakeLists.txt` (Qt 6 Quick, C++20, empty window opening) — *local build pending: cmake/ninja not installed*
+- [x] Root `Makefile` (build, tests, vet, fmt, run, clean)
+- [x] CI (GitHub Actions) calling the `Makefile` targets
+- [x] Update `.gitignore` (`frontend/build/`, Go binaries)
 
-## Fase 1 — Armazenamento (`internal/store`)
+## Phase 1 — Storage (`internal/store`)
 
-- [x] Abrir SQLite com WAL, `foreign_keys=ON`, `busy_timeout`
-- [x] Runner de migrações numeradas (tabela `schema_migrations`, migrações embutidas via `embed`)
-- [x] `0001_init.sql`: tabelas `repos`, `apps`, `assets`, `installs` (+ índices)
-- [x] Repositório de dados: upsert de repo/app/assets numa única transação
-- [x] Consultas: listar catálogo (filtro por categoria, busca por texto, ordenação por score), obter app, listar instalados
-- [x] Testes com banco em arquivo temporário
+- [x] Open SQLite with WAL, `foreign_keys=ON`, `busy_timeout`
+- [x] Numbered migration runner (`schema_migrations` table, migrations embedded via `embed`)
+- [x] `0001_init.sql`: tables `repos`, `apps`, `assets`, `installs` (+ indexes)
+- [x] Data repository: upsert of repo/app/assets in a single transaction
+- [x] Queries: list catalog (filter by category, text search, order by score), get app, list installed
+- [x] Tests with a database in a temporary file
 
-## Fase 2 — GitHub (`internal/github`)
+## Phase 2 — GitHub (`internal/github`)
 
-- [x] Cliente autenticado por `GITHUB_TOKEN`, com fallback para `gh auth token`, e anônimo se nenhum existir
-- [x] Busca por topic (`topic:omarchy`) com paginação
-- [x] Lista curada de repositórios semente (arquivo embutido, `internal/index/seeds.txt`)
-- [x] Metadados do repo: stars, topics, `pushed_at`, licença, HEAD SHA
-- [x] Última release + assets (inclui `digest` sha256 que a API já fornece por asset)
-- [x] README via API (conteúdo bruto)
-- [x] Requisições condicionais com ETag / `If-None-Match` (guardar ETag em `repos.etag`)
-- [x] Tratamento de rate limit (ler headers, esperar/abortar com erro claro)
-- [x] Testes com `httptest` + fixtures JSON em `testdata/`
+- [x] Client authenticated by `GITHUB_TOKEN`, falling back to `gh auth token`, and anonymous if neither exists
+- [x] Search by topic (`topic:omarchy`) with pagination
+- [x] Curated list of seed repositories (embedded file, `internal/index/seeds.txt`)
+- [x] Repo metadata: stars, topics, `pushed_at`, license, HEAD SHA
+- [x] Latest release + assets (includes the sha256 `digest` the API already provides per asset)
+- [x] README through the API (raw content)
+- [x] Conditional requests with ETag / `If-None-Match` (store the ETag in `repos.etag`)
+- [x] Rate limit handling (read headers, wait/abort with a clear error)
+- [x] Tests with `httptest` + JSON fixtures in `testdata/`
 
-## Fase 3 — Clone raso (`internal/gitrepo`)
+## Phase 3 — Shallow clone (`internal/gitrepo`)
 
-- [x] Clone `Depth: 1` em `$XDG_CACHE_HOME/omastore/repos/<owner>__<repo>`
-- [x] Atualizar clone existente (fetch raso) em vez de re-clonar
-- [x] Localizar ícone (convenções: `icon.png`, `assets/icon.*`, `*.svg` na raiz, etc.)
-- [x] Localizar screenshots (`screenshots/`, `preview`, `demo`; imagens do README ficam no indexador)
-- [x] Busca de ícone/screenshots como função pura sobre lista de caminhos; o indexador usa a Trees API e só clona se a árvore vier truncada
-- [x] Testes com repositório git local criado no próprio teste
+- [x] `Depth: 1` clone into `$XDG_CACHE_HOME/omastore/repos/<owner>__<repo>`
+- [x] Update an existing clone (shallow fetch) instead of re-cloning
+- [x] Locate the icon (conventions: `icon.png`, `assets/icon.*`, `*.svg` at the root, etc.)
+- [x] Locate screenshots (`screenshots/`, `preview`, `demo`; README images are handled by the indexer)
+- [x] Icon/screenshot lookup as a pure function over a list of paths; the indexer uses the Trees API and only clones if the tree comes back truncated
+- [x] Tests with a local git repository created in the test itself
 
-## Fase 4 — Indexador (`internal/index`)
+## Phase 4 — Indexer (`internal/index`)
 
-- [x] Descoberta: união de busca por topic + sementes, sem duplicatas
-- [x] **Checagem de cache**: comparar `pushed_at`, `head_sha` e `latest_tag` com o SQLite; pular se nada mudou
-- [x] Filtrar repos sem release com binário Linux (não instaláveis)
-- [x] Extração do README: resumo curto (primeiro parágrafo) + descrição longa
-- [x] Resolver URLs relativas de imagens do README para URLs absolutas (raw.githubusercontent)
-- [x] Classificação: mapa topic → categoria (ex.: `photo` → Graphics, `vm` → System)
-- [x] Score: stars com recência (`pushed_at`) como desempate
-- [x] Detecção de arch/formato dos assets (`x86_64`/`amd64`, `aarch64`/`arm64`; binário, `.tar.gz`/`.xz`/`.bz2`/`.zst`, `.zip`, AppImage, `.pkg.tar.zst`; descarta `.deb`/`.rpm`, fontes e outros SOs)
-- [x] Detectar asset de checksum (`*.sha256`, `checksums.txt`)
-- [x] Persistência transacional + registro de SHA/tag processados
-- [x] `index.Version` (migração 0002): mudar regras do indexador reprocessa repos antigos
-- [x] Concorrência limitada (worker pool) e cancelamento via `context`
-- [x] Atualização leve quando só stars/descrição mudam (sem README/árvore)
-- [x] Repos arquivados, removidos (404) ou renomeados saem do catálogo; `Prune` opcional
-- [x] Testes: repo inalterado não é reprocessado; repo novo é indexado; repo sem binário é excluído
+- [x] Discovery: union of topic search + seeds, without duplicates
+- [x] **Cache check**: compare `pushed_at`, `head_sha` and `latest_tag` with SQLite; skip if nothing changed
+- [x] Filter out repos without a release with a Linux binary (not installable)
+- [x] README extraction: short summary (first paragraph) + long description
+- [x] Resolve relative README image URLs into absolute URLs (raw.githubusercontent)
+- [x] Classification: topic → category map (e.g. `photo` → Graphics, `vm` → System)
+- [x] Score: stars with recency (`pushed_at`) as tiebreaker
+- [x] Asset arch/format detection (`x86_64`/`amd64`, `aarch64`/`arm64`; binary, `.tar.gz`/`.xz`/`.bz2`/`.zst`, `.zip`, AppImage, `.pkg.tar.zst`; discards `.deb`/`.rpm`, sources and other OSes)
+- [x] Detect checksum asset (`*.sha256`, `checksums.txt`)
+- [x] Transactional persistence + recording of processed SHA/tag
+- [x] `index.Version` (migration 0002): changing indexer rules reprocesses old repos
+- [x] Bounded concurrency (worker pool) and cancellation via `context`
+- [x] Light update when only stars/description change (no README/tree)
+- [x] Archived, removed (404) or renamed repos leave the catalog; optional `Prune`
+- [x] Tests: unchanged repo is not reprocessed; new repo is indexed; repo without a binary is excluded
 
-## Fase 5 — Instalador (`internal/install`)
+## Phase 5 — Installer (`internal/install`)
 
-- [x] Seleção do asset pela arquitetura da máquina (`runtime.GOARCH`)
-- [x] Download para diretório temporário com progresso (callback de bytes)
-- [x] Verificação de checksum: `digest` da API, senão `*.sha256`/`checksums.txt` (formatos GNU e BSD, sha256/sha512); falhar se não bater
-- [x] Extração `.tar.gz`/`.xz`/`.bz2`/`.zst`, `.zip` e `.pkg.tar.zst` (só `usr/`, sem scripts de instalação) com proteção contra zip slip e symlinks para fora do destino
-- [x] Instalar em `$XDG_DATA_HOME/omastore/apps/<owner>__<repo>/<versão>/`
-- [x] Identificar o executável principal (nome do repo, bit executável, único binário)
-- [x] `chmod +x` e link em `~/.local/bin/`
-- [x] Ícone em `~/.local/share/icons/hicolor/<tam>/apps/` (redimensionar ou usar `scalable/` para SVG)
-- [x] Gerar `omastore-<owner>-<repo>.desktop` com escaping correto de todos os campos
-- [x] Rodar `update-desktop-database` / `gtk-update-icon-cache` se disponíveis (sem falhar se ausentes)
-- [x] Registrar instalação em `installs` com lista de arquivos criados
-- [x] Rollback se qualquer etapa falhar no meio
-- [x] Desinstalação: remover apenas caminhos registrados
-- [x] Update: instalar nova versão, trocar link, remover versão antiga
-- [x] Garantir: nunca executar o binário, nada fora de `$HOME`, sem `sudo` (hooks do sistema por caminho absoluto, nunca pelo `PATH`)
-- [x] Nunca sobrescrever arquivos de terceiros em `~/.local/bin` ou `applications/` (`ErrConflict`)
-- [x] Recusar lançadores que encobririam comandos do sistema (`/usr/bin/<cmd>` existe) ou do OmaStore
-- [x] `.desktop` validado com `desktop-file-validate` nos testes (quando disponível)
-- [x] Testes: zip slip, symlink malicioso, escaping do `.desktop`, checksum inválido, rollback
-- [x] Lançador em `~/.local/bin` é um script `exec` (não symlink): apps que usam `dirname "$0"` quebravam via link
+- [x] Asset selection by the machine architecture (`runtime.GOARCH`)
+- [x] Download to a temporary directory with progress (bytes callback)
+- [x] Checksum verification: the API `digest`, otherwise `*.sha256`/`checksums.txt` (GNU and BSD formats, sha256/sha512); fail on mismatch
+- [x] Extraction of `.tar.gz`/`.xz`/`.bz2`/`.zst`, `.zip` and `.pkg.tar.zst` (only `usr/`, no install scripts) with protection against zip slip and symlinks leaving the destination
+- [x] Install into `$XDG_DATA_HOME/omastore/apps/<owner>__<repo>/<version>/`
+- [x] Identify the main executable (repo name, executable bit, single binary)
+- [x] `chmod +x` and link in `~/.local/bin/`
+- [x] Icon in `~/.local/share/icons/hicolor/<size>/apps/` (resize, or use `scalable/` for SVG)
+- [x] Generate `omastore-<owner>-<repo>.desktop` with correct escaping of all fields
+- [x] Run `update-desktop-database` / `gtk-update-icon-cache` if available (without failing if missing)
+- [x] Record the installation in `installs` with the list of created files
+- [x] Rollback if any step fails midway
+- [x] Uninstallation: remove only registered paths
+- [x] Update: install the new version, switch the link, remove the old version
+- [x] Guarantee: never execute the binary, nothing outside `$HOME`, no `sudo` (system hooks by absolute path, never through `PATH`)
+- [x] Never overwrite third-party files in `~/.local/bin` or `applications/` (`ErrConflict`)
+- [x] Refuse launchers that would shadow system commands (`/usr/bin/<cmd>` exists) or OmaStore's own
+- [x] `.desktop` validated with `desktop-file-validate` in the tests (when available)
+- [x] Tests: zip slip, malicious symlink, `.desktop` escaping, invalid checksum, rollback
+- [x] The launcher in `~/.local/bin` is an `exec` script (not a symlink): apps that use `dirname "$0"` broke through a link
 
-## Fase 6 — CLI de depuração (`cmd/omastore`)
+## Phase 6 — Debug CLI (`cmd/omastore`)
 
 - [x] `omastore index [--force] [--prune] [--max N] [owner/repo...]`
-- [x] `omastore list [--category X] [--query Q] [--installed] [--all] [--json]` e `omastore categories`
+- [x] `omastore list [--category X] [--query Q] [--installed] [--all] [--json]` and `omastore categories`
 - [x] `omastore show [--json] <owner/repo>`
 - [x] `omastore install <owner/repo>`
 - [x] `omastore uninstall <owner/repo>`
 - [x] `omastore update [<owner/repo>]`
-- [x] Serviços montados em `internal/app` (compartilhado com o daemon)
-- [x] Testado contra o GitHub real (HOME isolado): 34 repos indexados, 2ª execução sem reprocessar; omadesign e rawmakase instalados e removidos
+- [x] Services wired in `internal/app` (shared with the daemon)
+- [x] Tested against the real GitHub (isolated HOME): 34 repos indexed, 2nd run without reprocessing; omadesign and rawmakase installed and removed
 
-## Fase 7 — Daemon e IPC (`internal/rpc`, `cmd/omastored`)
+## Phase 7 — Daemon and IPC (`internal/rpc`, `cmd/omastored`)
 
-- [x] Servidor JSON-RPC 2.0 (NDJSON) em `$XDG_RUNTIME_DIR/omastore.sock` (permissão `0600`, remove socket órfão, recusa 2º daemon, erro claro para caminho > 107 bytes)
-- [x] Métodos documentados em `docs/ipc.md`: `daemon.hello`, `catalog.list/get/categories`, `installs.list`, `index.start`, `install.start`, `update.start`, `install.uninstall`, `jobs.list/cancel`, `image.get`
-- [x] Gerenciador de jobs (id, estado, progresso, cancelamento)
-- [x] Notificações (`job.started/progress/done/failed`, `catalog.changed` sempre depois do fim do job); progresso limitado a ~10/s
-- [x] Um job de indexação por vez; instalações do mesmo app serializadas
-- [x] Encerramento limpo (SIGTERM, cancelar jobs, fechar DB)
-- [x] Unidades systemd `--user` com socket activation (`packaging/systemd/`)
-- [x] Testes do servidor com cliente em memória
-- [x] DTOs camelCase estáveis, separados das structs internas; erros do backend mapeados para códigos fixos
-- [x] Cache de imagens (`internal/imagecache`, método `image.get`): só https, conteúdo validado, downloads simultâneos compartilhados
-- [x] Testado com o daemon real (cliente Python pelo socket): hello, catálogo, imagem, job de índice, SIGTERM remove o socket
+- [x] JSON-RPC 2.0 server (NDJSON) on `$XDG_RUNTIME_DIR/omastore.sock` (mode `0600`, removes orphaned socket, refuses a 2nd daemon, clear error for paths > 107 bytes)
+- [x] Methods documented in `docs/ipc.md`: `daemon.hello`, `catalog.list/get/categories`, `installs.list`, `index.start`, `install.start`, `update.start`, `install.uninstall`, `jobs.list/cancel`, `image.get`
+- [x] Job manager (id, state, progress, cancellation)
+- [x] Notifications (`job.started/progress/done/failed`, `catalog.changed` always after the job ends); progress limited to ~10/s
+- [x] One indexing job at a time; installations of the same app serialized
+- [x] Clean shutdown (SIGTERM, cancel jobs, close DB)
+- [x] `--user` systemd units with socket activation (`packaging/systemd/`)
+- [x] Server tests with an in-memory client
+- [x] Stable camelCase DTOs, separate from the internal structs; backend errors mapped to fixed codes
+- [x] Image cache (`internal/imagecache`, `image.get` method): https only, content validated, concurrent downloads shared
+- [x] Tested with the real daemon (Python client over the socket): hello, catalog, image, index job, SIGTERM removes the socket
 
-## Fase 8 — Frontend (`frontend/`)
+## Phase 8 — Frontend (`frontend/`)
 
-- [x] Cliente IPC em C++ (`QLocalSocket`, framing JSON-RPC, reconexão)
-- [x] Iniciar `omastored` se o socket não existir (nunca pelo `PATH`: `$OMASTORED`, diretório do app, `/usr/bin`)
-- [x] Modelos `QAbstractListModel`: catálogo, instalados, jobs
-- [x] Tela de catálogo: grid com ícone, nome, resumo, stars; busca e filtro por categoria
-- [x] Tela de detalhes: descrição longa, screenshots, licença, versão, botão Instalar/Remover/Atualizar
-- [x] Barra de progresso ligada às notificações de job
-- [x] Tela de instalados
-- [x] Cache de imagens remotas (via backend: `image.get`, feito na Fase 7)
-- [x] Cores do tema ativo (`~/.local/state/omarchy/current/theme/colors.toml`, com fallback) e recarga ao trocar de tema
-- [x] Testes com `ctest` (modelos + cliente IPC contra servidor falso)
-- [x] Frontend sem rede: `QNetworkAccessManager` do QML bloqueia URLs remotas; README exibido sem imagens; imagens via `image://omastore/`
-- [x] Primeira execução com catálogo vazio dispara `index.start`; confirmação antes de instalar release sem checksum
-- [x] Atalhos: `/` busca, `Esc` volta, `Ctrl+R` atualiza catálogo; `--open owner/repo` na linha de comando
-- [x] Verificado contra o daemon real (`--screenshot` em modo offscreen)
+- [x] C++ IPC client (`QLocalSocket`, JSON-RPC framing, reconnection)
+- [x] Start `omastored` if the socket does not exist (never through `PATH`: `$OMASTORED`, app directory, `/usr/bin`)
+- [x] `QAbstractListModel` models: catalog, installed, jobs
+- [x] Catalog screen: grid with icon, name, summary, stars; search and category filter
+- [x] Detail screen: long description, screenshots, license, version, Install/Remove/Update button
+- [x] Progress bar bound to job notifications
+- [x] Installed screen
+- [x] Remote image cache (through the backend: `image.get`, done in Phase 7)
+- [x] Active theme colors (`~/.local/state/omarchy/current/theme/colors.toml`, with fallback) and reload on theme change
+- [x] Tests with `ctest` (models + IPC client against a fake server)
+- [x] Frontend without network: the QML `QNetworkAccessManager` blocks remote URLs; README shown without images; images through `image://omastore/`
+- [x] First run with an empty catalog triggers `index.start`; confirmation before installing a release without checksum
+- [x] Shortcuts: `/` search, `Esc` back, `Ctrl+R` refresh catalog; `--open owner/repo` on the command line
+- [x] Verified against the real daemon (`--screenshot` in offscreen mode)
 
-## Fase 9 — Empacotamento e lançamento
+## Phase 9 — Packaging and launch
 
-- [x] `PKGBUILD` (`packaging/arch/`, pacote `omastore-git`) com build PIE/trimpath, `check()` e `make install DESTDIR`
-- [x] Entrada `.desktop` da própria OmaStore
-- [x] README com screenshots, instalação e como publicar um app compatível
-- [x] Guia para autores de apps (`docs/autores.md`): topic `omarchy`, nomes de assets, ícone, checksums
-- [x] `make release`/`install`/`uninstall`; frontend reconfigura quando `BUILD_TYPE` muda
-- [ ] Publicar no AUR (depende do primeiro commit/push; ver `docs/ideas/distribuicao.md`)
+- [x] `PKGBUILD` (`packaging/arch/`, package `omastore-git`) with PIE/trimpath build, `check()` and `make install DESTDIR`
+- [x] OmaStore's own `.desktop` entry
+- [x] README with screenshots, installation and how to publish a compatible app
+- [x] Guide for app authors (`docs/autores.md`): `omarchy` topic, asset names, icon, checksums
+- [x] `make release`/`install`/`uninstall`; the frontend reconfigures when `BUILD_TYPE` changes
+- [ ] Publish on the AUR (depends on the first commit/push; see `docs/ideas/distribuicao.md`)
 
-## Fase 10 — Busca e recomendação (`internal/search`)
+## Phase 10 — Search and recommendation (`internal/search`)
 
-Busca e "apps parecidos" locais e determinísticos (mesma entrada, mesmo
-resultado), sem serviço externo nem LLM.
+Local, deterministic search and "similar apps" (same input, same
+result), with no external service or LLM.
 
-- [x] Tokenização: minúsculas, sem acentos, stopwords pt/en, plural simples e -ing/-ed (passo 1b de Porter)
-- [x] Ranking BM25 com pesos por campo (nome > topics > resumo > README) e estrelas como desempate
-- [x] Tolerância a erro: prefixo e distância de edição 1 (só para termos fora do vocabulário; idf das variantes limitado ao do termo exato); E lógico com fallback para OU
-- [x] "Apps parecidos": TF-IDF (topics, categoria, resumo, README) + cosseno; empate resolvido pelo nome
-- [x] Índice em memória no daemon, reconstruído quando o catálogo muda
-- [x] `catalog.list` com `query` usa o ranking; novo método `catalog.similar`; CLI `omastore similar`
-- [x] Frontend: seção "Apps parecidos" no detalhe
-- [x] Testes: ranking esperado, erro de digitação, acentos, determinismo, parecidos
-- [x] Consultas em português: dicionário pt→en de termos de apps ("editor de fotos", "voz para texto", "calendário")
-- [x] Calibrado no catálogo real (34 repos): limiar de similaridade 0,12 (pares reais > 0,2; ruído 0,09–0,16)
+- [x] Tokenization: lowercase, no accents, pt/en stopwords, simple plural and -ing/-ed (Porter step 1b)
+- [x] BM25 ranking with per-field weights (name > topics > summary > README) and stars as tiebreaker
+- [x] Typo tolerance: prefix and edit distance 1 (only for out-of-vocabulary terms; variants' idf capped at the exact term's); logical AND with fallback to OR
+- [x] "Similar apps": TF-IDF (topics, category, summary, README) + cosine; ties broken by name
+- [x] In-memory index in the daemon, rebuilt when the catalog changes
+- [x] `catalog.list` with `query` uses the ranking; new `catalog.similar` method; `omastore similar` CLI
+- [x] Frontend: "Similar apps" section in the detail page
+- [x] Tests: expected ranking, typo, accents, determinism, similar apps
+- [x] Portuguese queries: pt→en dictionary of app terms ("editor de fotos", "voz para texto", "calendário")
+- [x] Calibrated on the real catalog (34 repos): similarity threshold 0.12 (real pairs > 0.2; noise 0.09–0.16)
 
-## Fase 11 — Manifesto `omastore.toml` (ver `docs/ideas/manifesto.md`)
+## Phase 11 — `omastore.toml` manifest (see `docs/ideas/manifesto.md`)
 
-- [x] Parser e validação (campos opcionais; caminhos passam pelas mesmas travas)
-- [x] Indexador lê o manifesto pela árvore e sobrepõe as heurísticas (nome, resumo, categorias, ícone, screenshots, terminal)
-- [x] Asset por arquitetura com padrão `{version}` e executável declarado; fallback para heurística se não casar
-- [x] `omastore lint-manifest <dir>`; documentar em `docs/autores.md`; incrementar `index.Version`
-- [x] Migração 0003 (`apps.manifest`); instalador usa asset/exec/terminal/categorias declarados; `exec` por symlink para fora é recusado
-- [x] Manifesto inválido nunca derruba a indexação; só é buscado quando aparece na árvore
+- [x] Parser and validation (optional fields; paths go through the same locks)
+- [x] The indexer reads the manifest from the tree and overrides the heuristics (name, summary, categories, icon, screenshots, terminal)
+- [x] Per-architecture asset with a `{version}` pattern and declared executable; fall back to heuristics if it does not match
+- [x] `omastore lint-manifest <dir>`; document in `docs/autores.md`; bump `index.Version`
+- [x] Migration 0003 (`apps.manifest`); the installer uses the declared asset/exec/terminal/categories; an `exec` that is a symlink pointing outside is refused
+- [x] An invalid manifest never breaks indexing; it is only fetched when it shows up in the tree
 
-## Fase 12 — Descoberta em lote (ver `docs/ideas/descoberta-graphql.md`)
+## Phase 12 — Batch discovery (see `docs/ideas/descoberta-graphql.md`)
 
-- [x] Consulta GraphQL em lote dos campos da checagem de cache (com token); REST continua sem token
-- [x] Repos sem release pulam README/árvore
-- [x] Sementes a partir de listas curadas (links `github.com/owner/repo` num README)
-- [x] Medido com ~230 repos reais: 1ª indexação 863 → 173 requisições (76 s → 45 s); reindexação 497 → 12 requisições (44 s → 15 s, lotes de 25 com 3 em paralelo)
-- [x] `omastore index` mostra o número de requisições; `--no-batch` força REST; repos inexistentes fora do catálogo contam como "ignorados"
-- [x] Lista `aorumbayev/awesome-omarchy` nas sementes: catálogo instalável de 15 → 25 apps
+- [x] Batched GraphQL query of the cache-check fields (with token); REST still used without a token
+- [x] Repos without a release skip README/tree
+- [x] Seeds from curated lists (`github.com/owner/repo` links in a README)
+- [x] Measured with ~230 real repos: 1st indexing 863 → 173 requests (76 s → 45 s); reindexing 497 → 12 requests (44 s → 15 s, batches of 25 with 3 in parallel)
+- [x] `omastore index` shows the number of requests; `--no-batch` forces REST; nonexistent repos outside the catalog count as "skipped"
+- [x] `aorumbayev/awesome-omarchy` list in the seeds: installable catalog from 15 → 25 apps
 
-## Fase 13 — Daemon sob demanda (ver `docs/ideas/daemon-sob-demanda.md`)
+## Phase 13 — On-demand daemon (see `docs/ideas/daemon-sob-demanda.md`)
 
-- [x] Encerrar ocioso (sem conexões e sem jobs) quando ativado por socket
-- [x] `omastore update --check` e notificação desktop via D-Bus
-- [x] Timer systemd diário (`omastore-index.timer`)
-- [x] Fim de um job conta como atividade (sem isso, o daemon se achava ocioso "há horas" logo após um índice longo)
-- [x] Notificação só quando o conjunto repo@versão muda; falha ao notificar não grava o estado (tenta de novo)
-- [x] Testado: daemon com `-idle-timeout 1s` encerra ~1 s depois do último cliente e remove o socket; D-Bus sem servidor de notificação dá erro claro
+- [x] Exit when idle (no connections and no jobs) when socket-activated
+- [x] `omastore update --check` and desktop notification via D-Bus
+- [x] Daily systemd timer (`omastore-index.timer`)
+- [x] A job finishing counts as activity (without it, the daemon thought it had been idle "for hours" right after a long index)
+- [x] Notify only when the set of repo@version changes; a failure to notify does not save the state (retries)
+- [x] Tested: daemon with `-idle-timeout 1s` exits ~1 s after the last client and removes the socket; D-Bus without a notification server gives a clear error
 
-## Fase 14 — Distribuição (ver `docs/ideas/distribuicao.md`)
+## Phase 14 — Distribution (see `docs/ideas/distribuicao.md`)
 
-- [x] Workflow de release por tag (`.github/workflows/release.yml`, validado com actionlint): testes, tarball, attestation SLSA, PKGBUILD `-bin` e upload
-- [x] `PKGBUILD` `omastore-bin` gerado de `packaging/arch-bin/PKGBUILD.in` com o sha256 real (`make pkgbuild-bin`); testado com `makepkg`
-- [x] `make dist`: tarball reprodutível (mesmos bytes em dois builds; `--sort=name`, dono 0, `SOURCE_DATE_EPOCH`, `gzip -n`, `-trimpath`, binários sem símbolos: 21 → 14 MB)
-- [x] Tag validada antes de virar nome de arquivo (entra por variável de ambiente, nunca interpolada)
+- [x] Tag-triggered release workflow (`.github/workflows/release.yml`, validated with actionlint): tests, tarball, SLSA attestation, `-bin` PKGBUILD and upload
+- [x] `omastore-bin` `PKGBUILD` generated from `packaging/arch-bin/PKGBUILD.in` with the real sha256 (`make pkgbuild-bin`); tested with `makepkg`
+- [x] `make dist`: reproducible tarball (same bytes in two builds; `--sort=name`, owner 0, `SOURCE_DATE_EPOCH`, `gzip -n`, `-trimpath`, stripped binaries: 21 → 14 MB)
+- [x] Tag validated before becoming a file name (passed through an environment variable, never interpolated)
 
-## Fase 15 — Admissão por manifesto e proveniência
+## Phase 15 — Admission by manifest and provenance
 
-- [ ] Exigir `omastore.toml` válido para aparecer em **Descobrir**, com `asset` e `exec` declarados para uma arquitetura suportada; o asset deve existir na última release estável. Campos de apresentação continuam opcionais.
-- [ ] Concentrar a decisão de elegibilidade do app e do asset numa regra compartilhada pela indexação e pela instalação; o banco guarda o resultado para consulta, mas instalar/atualizar deve conferir a regra novamente com os dados atuais. Testar que catálogo, CLI e daemon tomam a mesma decisão.
-- [ ] Exigir que o asset tenha sido compilado e publicado por um workflow GitHub Actions do próprio repositório, com atestação de proveniência verificável vinculada ao digest, repositório e commit/tag da release.
-- [ ] Na instalação e atualização, verificar o digest dos bytes baixados e a proveniência do asset selecionado; recusar asset ausente, divergente ou sem atestação válida. Não aceitar URL arbitrária declarada no manifesto.
-- [ ] Revalidar os assets da release ao reindexar mesmo quando a tag não mudou: um arquivo pode ser substituído sob a mesma tag, e o cache atual compara apenas a tag, o HEAD e `pushed_at`.
-- [ ] Manter apps já instalados visíveis em **Instalados** e permitir sua desinstalação mesmo que deixem de atender à nova regra; bloquear atualizações sem proveniência válida.
-- [ ] Gerar, a partir dos dados do repositório, release e arquivos, um diagnóstico e um prompt copiável para adaptar o projeto: manifesto, workflow de build/release, atestação e comandos de validação. Não inventar caminhos de executável ou etapas de build que não possam ser confirmados.
-- [ ] Atualizar `omastore lint-manifest`, o guia de autores e o índice em cache para a nova política; testar admissão, rejeição, instalação e o caso de apps legados já instalados.
+- [ ] Require a valid `omastore.toml` to appear in **Discover**, with `asset` and `exec` declared for a supported architecture; the asset must exist in the latest stable release. Presentation fields stay optional.
+- [ ] Concentrate the app and asset eligibility decision in a rule shared by indexing and installation; the database stores the result for queries, but install/update must check the rule again with current data. Test that catalog, CLI and daemon reach the same decision.
+- [ ] Require the asset to have been built and published by a GitHub Actions workflow of the repository itself, with a verifiable provenance attestation bound to the digest, repository and commit/tag of the release.
+- [ ] On install and update, verify the digest of the downloaded bytes and the provenance of the selected asset; refuse a missing, mismatched or unattested asset. Do not accept an arbitrary URL declared in the manifest.
+- [ ] Revalidate the release assets on reindex even when the tag did not change: a file can be replaced under the same tag, and the current cache only compares the tag, HEAD and `pushed_at`.
+- [ ] Keep already installed apps visible in **Installed** and allow uninstalling them even if they no longer meet the new rule; block updates without valid provenance.
+- [ ] Generate, from the repository, release and file data, a diagnosis and a copyable prompt to adapt the project: manifest, build/release workflow, attestation and validation commands. Do not invent executable paths or build steps that cannot be confirmed.
+- [ ] Update `omastore lint-manifest`, the authors guide and the cached index for the new policy; test admission, rejection, installation and the case of legacy apps already installed.
 
-## Correções de manutenção — triagem do código fonte
+## Maintenance fixes — source code triage
 
-- [ ] **Alta — desinstalação confiável:** `install.removeRegistered` só registra falhas no log, mas `Uninstall` apaga o registro do banco mesmo quando um arquivo não foi removido (`backend/internal/install/install.go`). Diferenciar arquivo ausente, arquivo alterado por terceiros e falha de I/O; preservar no banco os caminhos pendentes para permitir nova tentativa. Na atualização, tratar também falhas ao limpar arquivos da versão anterior.
-- [ ] **Média — respostas antigas na interface:** `Backend::reloadDetail` e `loadSimilar` descartam respostas de outro repositório, mas aceitam respostas antigas para o mesmo repositório (`frontend/src/backend.cpp`). Usar um identificador de geração por pedido e testar respostas fora de ordem, como `CatalogModel` já faz.
-- [ ] **Média — nome do estado de checksum:** `AssetInfo.verified` significa apenas que há um digest ou arquivo de checksum disponível antes do download (`backend/internal/rpc/methods.go`, `frontend/qml/DetailPage.qml`). Renomear o campo e o texto exibido para não sugerir verificação já concluída; manter proveniência como estado distinto na Fase 15 e atualizar `docs/ipc.md`.
-- [ ] **Média — identidade de repositório:** `github.SplitFullName`, `rpc.repoParams.validate` e `install.splitName` aceitam conjuntos diferentes de nomes `owner/repo`. Usar uma validação única antes de chamadas à API e de operações em caminhos locais; cobrir nomes inválidos e válidos em testes compartilhados.
-- [ ] **Média — fronteira de formatos:** `install` importa `index` apenas para constantes, classificação de arquitetura e preferência de formatos (`backend/internal/install/{install,extract}.go`). Colocar esses conceitos de asset em um módulo neutro usado por ambos, sem fazer o instalador depender do pipeline de indexação.
-- [ ] **Média — entrada única dos casos de uso:** a CLI chama `Indexer` e `Installer` diretamente e altera opções do indexador, enquanto o daemon usa métodos de `app.App` (`backend/cmd/omastore/main.go`, `backend/internal/app/backend.go`). Passar opções por chamada e encaminhar as duas interfaces pelos mesmos métodos de aplicação, especialmente antes de adicionar a política da Fase 15.
-- [ ] **Baixa — primeira indexação:** `Backend::maybeIndexOnFirstRun` marca a consulta como feita antes da resposta (`frontend/src/backend.cpp`). Permitir nova tentativa após erro transitório para não deixar uma instalação nova com catálogo vazio até o usuário agir.
-- [ ] **Baixa — erros nos testes do indexador:** substituir as chamadas `stats, _ = ix.Run(...)` em `backend/internal/index/index_test.go` por verificações explícitas do erro; uma falha de indexação não deve aparecer apenas como estatística inesperada.
+- [ ] **High — reliable uninstallation:** `install.removeRegistered` only logs failures, but `Uninstall` deletes the database record even when a file was not removed (`backend/internal/install/install.go`). Distinguish a missing file, a file changed by third parties and an I/O failure; keep the pending paths in the database to allow a retry. On update, also handle failures when cleaning up files from the previous version.
+- [ ] **Medium — stale responses in the interface:** `Backend::reloadDetail` and `loadSimilar` discard responses for another repository, but accept stale responses for the same repository (`frontend/src/backend.cpp`). Use a per-request generation id and test out-of-order responses, as `CatalogModel` already does.
+- [ ] **Medium — checksum state name:** `AssetInfo.verified` only means a digest or checksum file is available before the download (`backend/internal/rpc/methods.go`, `frontend/qml/DetailPage.qml`). Rename the field and the displayed text so they do not suggest a completed verification; keep provenance as a separate state in Phase 15 and update `docs/ipc.md`.
+- [ ] **Medium — repository identity:** `github.SplitFullName`, `rpc.repoParams.validate` and `install.splitName` accept different sets of `owner/repo` names. Use a single validation before API calls and local path operations; cover invalid and valid names in shared tests.
+- [ ] **Medium — format boundary:** `install` imports `index` only for constants, architecture classification and format preference (`backend/internal/install/{install,extract}.go`). Move these asset concepts into a neutral module used by both, without making the installer depend on the indexing pipeline.
+- [ ] **Medium — single entry point for use cases:** the CLI calls `Indexer` and `Installer` directly and changes indexer options, while the daemon uses `app.App` methods (`backend/cmd/omastore/main.go`, `backend/internal/app/backend.go`). Pass options per call and route both interfaces through the same application methods, especially before adding the Phase 15 policy.
+- [ ] **Low — first indexing:** `Backend::maybeIndexOnFirstRun` marks the query as done before the response (`frontend/src/backend.cpp`). Allow a retry after a transient error so a fresh installation is not left with an empty catalog until the user acts.
+- [ ] **Low — errors in the indexer tests:** replace the `stats, _ = ix.Run(...)` calls in `backend/internal/index/index_test.go` with explicit error checks; an indexing failure should not show up only as an unexpected statistic.
 
-## Fase 15 — Só apps com manifesto + skills para autores
+## Phase 15 — Apps with a manifest only + author skills
 
-- [x] `omastore.toml` obrigatório: sem ele o repo não entra (e sai, se estava); arquivo vazio vale como opt-in
-- [x] Campo `kind` (`app` padrão); `plugin`/`theme`/outros não são indexados; `lint-manifest` avisa
-- [x] Manifesto vem no lote GraphQL (`object(expression: "HEAD:omastore.toml")`), sem requisição extra; REST distingue arquivo vazio de ausente
-- [x] Descoberta pela busca de código `filename:omastore.toml` (raiz), independente de topic
-- [x] Bug: `index.Version` não forçava reprocessamento quando o nome descoberto diferia do gravado (capitalização/renomeação) — o forçar é recalculado após resolver o nome; teste de regressão
-- [x] Catálogo real: 0 apps até os autores adotarem o manifesto (mensagem explicativa na interface)
-- [x] Skills em `skills/`: `omastore-manifest`, `omastore-release`, `omastore-check`
+- [x] `omastore.toml` mandatory: without it the repo is not added (and is removed, if it was there); an empty file counts as opt-in
+- [x] `kind` field (`app` default); `plugin`/`theme`/others are not indexed; `lint-manifest` warns
+- [x] The manifest comes in the GraphQL batch (`object(expression: "HEAD:omastore.toml")`), with no extra request; REST distinguishes an empty file from a missing one
+- [x] Discovery through the code search `filename:omastore.toml` (root), independent of topic
+- [x] Bug: `index.Version` did not force reprocessing when the discovered name differed from the stored one (capitalization/rename) — the force flag is recomputed after resolving the name; regression test
+- [x] Real catalog: 0 apps until authors adopt the manifest (explanatory message in the interface)
+- [x] Skills in `skills/`: `omastore-manifest`, `omastore-release`, `omastore-check`
 
-## Ideias futuras
+## Future ideas
 
-Propostas detalhadas, com evidências e custo, ficam em [`docs/ideas/`](docs/ideas/README.md).
+Detailed proposals, with evidence and cost, live in [`docs/ideas/`](docs/ideas/README.md).
 
 
-- [ ] Verificação de assinatura (minisign/cosign) além de checksum
-- [ ] Atualização automática em segundo plano (a notificação de atualizações já existe: Fase 13; falta instalar sozinho, opt-in)
-- [ ] Suporte a Flatpak/AppImage com integração de sandbox
-- [ ] Avaliações/sinalização de apps problemáticos
+- [ ] Signature verification (minisign/cosign) in addition to checksums
+- [ ] Automatic background updates (update notifications already exist: Phase 13; installing on its own is still missing, opt-in)
+- [ ] Flatpak/AppImage support with sandbox integration
+- [ ] Ratings/flagging of problematic apps

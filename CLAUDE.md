@@ -1,160 +1,165 @@
 # CLAUDE.md
 
-Este arquivo orienta o Claude Code (claude.ai/code) ao trabalhar neste repositório.
+This file guides Claude Code (claude.ai/code) when working in this repository.
 
-## Visão geral
+## Overview
 
-OmaStore é uma loja de aplicativos para o [Omarchy](https://omarchy.org) (Arch Linux + Hyprland).
-Ela indexa aplicativos publicados no GitHub (ex.: OmaVM, OmaDesign, OmaPhoto, Rawmakase), mostra cada
-um com descrição, ícone e screenshots tirados do próprio repositório, e instala o binário da última
-release com um clique, gerando o `.desktop` correspondente.
+OmaStore is an app store for [Omarchy](https://omarchy.org) (Arch Linux + Hyprland).
+It indexes apps published on GitHub (e.g. OmaVM, OmaDesign, OmaPhoto, Rawmakase), shows each
+one with a description, icon and screenshots taken from its own repository, and installs the binary of the latest
+release with one click, generating the matching `.desktop`.
 
-Os itens do catálogo são **aplicativos standalone**, não plugins nem temas do Omarchy. **Só entram no
-catálogo repositórios com `omastore.toml` na raiz** declarando um app (`kind = "app"`, o padrão; `plugin` e
-`theme` ficam de fora). A presença do arquivo é o opt-in do autor; o conteúdo pode estar vazio e o resto é
-deduzido por heurísticas. Formato em `docs/autores.md`; skills para autores em `skills/`.
+Catalog items are **standalone apps**, not Omarchy plugins or themes. **Only repositories with an
+`omastore.toml` at the root** declaring an app get into the catalog (`kind = "app"`, the default; `plugin` and
+`theme` are left out). The file's presence is the author's opt-in; its content may be empty and the rest is
+inferred by heuristics. Format in `docs/autores.md`; skills for authors in `skills/`.
 
-## Arquitetura
+## Architecture
 
-Dois processos com responsabilidades separadas:
+Two processes with separate responsibilities:
 
 ```
-┌──────────────────────────┐   JSON-RPC sobre Unix socket   ┌─────────────────────────────┐
+┌──────────────────────────┐   JSON-RPC over Unix socket    ┌─────────────────────────────┐
 │ frontend (C++ / Qt Quick)│ ─────────────────────────────▶ │ backend (Go, omastored)     │
-│ QML + modelos QObject    │ ◀───────────────────────────── │ indexador, cache, instalador│
-└──────────────────────────┘   eventos de progresso         └──────────────┬──────────────┘
+│ QML + QObject models     │ ◀───────────────────────────── │ indexer, cache, installer   │
+└──────────────────────────┘   progress events              └──────────────┬──────────────┘
                                                                            │
-                                               go-github (API) · go-git (clone raso) · SQLite
+                                            go-github (API) · go-git (shallow clone) · SQLite
 ```
 
-- **Backend (Go)** contém toda a lógica: descoberta, indexação, cache, download, instalação e
-  desinstalação. Deve funcionar sozinho (há uma CLI para testes sem a GUI).
-- **Frontend (C++/QML)** é só apresentação. Não acessa a rede, o GitHub nem o banco diretamente;
-  tudo passa pelo backend.
-- **IPC**: JSON-RPC 2.0 (uma mensagem JSON por linha) em `$XDG_RUNTIME_DIR/omastore.sock`.
-  Operações longas (indexação, instalação) retornam um id de job e emitem notificações de progresso
-  pelo mesmo socket. O protocolo está em `docs/ipc.md`; mantenha-o atualizado ao mudar métodos ou DTOs.
-- **Ideias** ainda não aceitas ficam em `docs/ideas/` (uma por arquivo, com evidência e custo);
-  ao aceitar uma, transforme-a em itens no `TODO.md`.
+- **Backend (Go)** holds all the logic: discovery, indexing, cache, download, installation and
+  uninstallation. It must work on its own (there is a CLI for testing without the GUI).
+- **Frontend (C++/QML)** is presentation only. It does not access the network, GitHub or the database directly;
+  everything goes through the backend.
+- **IPC**: JSON-RPC 2.0 (one JSON message per line) on `$XDG_RUNTIME_DIR/omastore.sock`.
+  Long operations (indexing, installation) return a job id and emit progress notifications
+  over the same socket. The protocol is in `docs/ipc.md`; keep it up to date when changing methods or DTOs.
+- **Ideas** not yet accepted live in `docs/ideas/` (one per file, with evidence and cost);
+  when one is accepted, turn it into items in `TODO.md`.
 
 ### Backend
 
-- `github.com/google/go-github` — busca de repositórios, metadados (stars, topics, `pushed_at`),
-  releases e assets. Autenticação opcional por `GITHUB_TOKEN` (ou `gh auth token`) para evitar rate limit.
-  Usar requisições condicionais (ETag / `If-None-Match`) sempre que possível.
-- `github.com/go-git/go-git/v5` — clone raso (`Depth: 1`) quando a API não basta: extrair ícones,
-  screenshots e arquivos de metadados do repositório. Clones ficam em `$XDG_CACHE_HOME/omastore/repos/`.
-- `github.com/mattn/go-sqlite3` — cache/índice em `$XDG_DATA_HOME/omastore/omastore.db`.
-  Exige CGO (`CGO_ENABLED=1`).
+- `github.com/google/go-github` — repository search, metadata (stars, topics, `pushed_at`),
+  releases and assets. Optional authentication through `GITHUB_TOKEN` (or `gh auth token`) to avoid the rate limit.
+  Use conditional requests (ETag / `If-None-Match`) whenever possible.
+- `github.com/go-git/go-git/v5` — shallow clone (`Depth: 1`) when the API is not enough: extract icons,
+  screenshots and metadata files from the repository. Clones live in `$XDG_CACHE_HOME/omastore/repos/`.
+- `github.com/mattn/go-sqlite3` — cache/index in `$XDG_DATA_HOME/omastore/omastore.db`.
+  Requires CGO (`CGO_ENABLED=1`).
 
 ### Frontend
 
-- Qt 6, Qt Quick + QML, build com CMake.
-- A camada C++ expõe ao QML: um cliente IPC (`QLocalSocket`) e modelos `QAbstractListModel`
-  (catálogo, instalados, jobs). Nada de lógica de negócio em QML além de apresentação e filtros simples.
-- Visual segue o tema ativo do Omarchy: `colors.toml` em `~/.local/state/omarchy/current/theme/` (instalações
-  antigas: `~/.config/omarchy/current/theme/`), recarregado ao trocar de tema.
-- O frontend nunca acessa a rede: imagens vêm do daemon (`image.get`, provider `image://omastore/`), o
-  QML engine usa um `QNetworkAccessManager` que bloqueia URLs remotas e o README é exibido sem imagens.
-- O frontend nunca procura o `omastored` no `PATH` (que inclui `~/.local/bin`, onde ficam apps baixados):
-  usa `$OMASTORED`, o diretório do executável ou `/usr/bin`.
+- Qt 6, Qt Quick + QML, built with CMake.
+- The C++ layer exposes to QML: an IPC client (`QLocalSocket`) and `QAbstractListModel` models
+  (catalog, installed, jobs). No business logic in QML beyond presentation and simple filters.
+- The look follows the active Omarchy theme: `colors.toml` in `~/.local/state/omarchy/current/theme/` (older
+  installations: `~/.config/omarchy/current/theme/`), reloaded when the theme changes.
+- The frontend never accesses the network: images come from the daemon (`image.get`, provider `image://omastore/`), the
+  QML engine uses a `QNetworkAccessManager` that blocks remote URLs and the README is shown without images.
+- The frontend never looks for `omastored` in `PATH` (which includes `~/.local/bin`, where downloaded apps live):
+  it uses `$OMASTORED`, the executable's directory or `/usr/bin`.
 
-## Pipeline de indexação
+## Indexing pipeline
 
-1. **Descoberta** — busca de código por `filename:omastore.toml`, busca por topic (`topic:omarchy`),
-   sementes e listas curadas (`list:owner/repo` em `seeds.txt`). Sem `omastore.toml` de app, o repositório
-   não entra (e sai, se estava). Sem release com binário Linux, entra mas não é instalável.
-2. **Verificação de cache** — para cada repositório, comparar `pushed_at`, SHA do commit HEAD e tag
-   da última release com o que está no SQLite. **Se nada mudou, não reprocessar.** Esse é o motivo de
-   existir o banco; nunca remova essa checagem por conveniência. Como consequência, **ao mudar regras
-   de extração/classificação (assets, categorias, README), incremente `index.Version`**; senão os repos
-   já gravados nunca são reclassificados.
-3. **Extração** — README (renderizado como descrição curta + longa), ícone, screenshots, licença,
-   topics e stars. Preferir a API; clonar só se precisar de arquivos que a API não entrega bem.
-4. **Classificação** — categoria a partir dos topics; ordenação usando stars (e recência como desempate).
-5. **Persistência** — gravar tudo numa transação e registrar o SHA/tag processados.
+1. **Discovery** — code search for `filename:omastore.toml`, topic search (`topic:omarchy`),
+   seeds and curated lists (`list:owner/repo` in `seeds.txt`). Without an app `omastore.toml`, the repository
+   does not get in (and is removed, if it was there). Without a release with a Linux binary, it gets in but is not installable.
+2. **Cache check** — for each repository, compare `pushed_at`, the HEAD commit SHA and the latest
+   release tag with what is in SQLite. **If nothing changed, do not reprocess.** That is why the
+   database exists; never remove this check for convenience. As a consequence, **when changing
+   extraction/classification rules (assets, categories, README), bump `index.Version`**; otherwise repos
+   already stored are never reclassified.
+3. **Extraction** — README (rendered as short + long description), icon, screenshots, license,
+   topics and stars. Prefer the API; clone only if you need files the API does not deliver well.
+4. **Classification** — category from the topics; ordering by stars (with recency as tiebreaker).
+5. **Persistence** — write everything in one transaction and record the processed SHA/tag.
 
-## Instalação de um app
+## Installing an app
 
-1. Escolher o asset da release pela arquitetura (`x86_64`/`amd64`, `aarch64`/`arm64`) e formato
-   (binário puro, `.tar.gz`, `.zip`, AppImage).
-2. Baixar para diretório temporário e validar checksum quando a release publicar um (`*.sha256`, `checksums.txt`).
-3. Extrair em `$XDG_DATA_HOME/omastore/apps/<owner>__<repo>/<versão>/` e criar link em `~/.local/bin/`.
-4. Salvar o ícone em `~/.local/share/icons/hicolor/<tam>/apps/` e gerar
-   `~/.local/share/applications/omastore-<owner>-<repo>.desktop` (Name, Comment, Exec absoluto,
-   Icon, Categories derivadas dos topics).
-5. Registrar a instalação no SQLite (versão, caminhos criados) para permitir update e desinstalação limpa.
+1. Pick the release asset by architecture (`x86_64`/`amd64`, `aarch64`/`arm64`) and format
+   (plain binary, `.tar.gz`, `.zip`, AppImage).
+2. Download to a temporary directory and validate the checksum when the release publishes one (`*.sha256`, `checksums.txt`).
+3. Extract into `$XDG_DATA_HOME/omastore/apps/<owner>__<repo>/<version>/` and create a link in `~/.local/bin/`.
+4. Save the icon in `~/.local/share/icons/hicolor/<size>/apps/` and generate
+   `~/.local/share/applications/omastore-<owner>-<repo>.desktop` (Name, Comment, absolute Exec,
+   Icon, Categories derived from the topics).
+5. Record the installation in SQLite (version, created paths) to allow updates and clean uninstallation.
 
-Regras:
-- Nunca executar o binário baixado durante a instalação.
-- Proteger contra path traversal ao extrair arquivos (zip slip) e contra symlinks que saiam do diretório de destino.
-- Escapar todos os campos vindos do repositório antes de escrever no `.desktop`.
-- Nada é instalado fora do `$HOME` do usuário; sem `sudo`.
-- Desinstalar remove apenas os caminhos registrados no banco.
+Rules:
+- Never execute the downloaded binary during installation.
+- Guard against path traversal when extracting files (zip slip) and against symlinks leaving the destination directory.
+- Escape every field coming from the repository before writing it into the `.desktop`.
+- Nothing is installed outside the user's `$HOME`; no `sudo`.
+- Uninstalling removes only the paths registered in the database.
 
-## Esquema do banco (resumo)
+## Database schema (summary)
 
-- `repos` — `full_name` (PK), descrição, stars, topics, `pushed_at`, `head_sha`, `latest_tag`, `etag`, `indexed_at`.
-- `apps` — dados de exibição derivados do repo: nome, resumo, README, ícone, categoria, score.
-- `assets` — assets de release por repo/tag (nome, url, arch, formato, checksum).
-- `installs` — app instalado, versão, data, lista de arquivos criados.
+- `repos` — `full_name` (PK), description, stars, topics, `pushed_at`, `head_sha`, `latest_tag`, `etag`, `indexed_at`.
+- `apps` — display data derived from the repo: name, summary, README, icon, category, score.
+- `assets` — release assets per repo/tag (name, url, arch, format, checksum).
+- `installs` — installed app, version, date, list of created files.
 
-Mudanças de esquema via migrações numeradas em `backend/internal/store/migrations/`; nunca editar uma migração já publicada.
+Schema changes go through numbered migrations in `backend/internal/store/migrations/`; never edit a migration that has already been published.
 
-## Estrutura de diretórios
+## Directory layout
 
 ```
 backend/
-  cmd/omastored/        # daemon (servidor IPC)
-  cmd/omastore/         # CLI de depuração: index, list, show, install, uninstall, update
-  internal/app/         # monta os serviços (usado pela CLI e pelo daemon)
-  internal/github/      # wrapper do go-github
-  internal/gitrepo/     # clones rasos via go-git + busca de ícone/screenshots
-  internal/index/       # descoberta, extração, classificação (index.Version)
-  internal/manifest/    # omastore.toml opcional do app (validação estrita no lint)
-  internal/store/       # SQLite + migrações
-  internal/install/     # download, verificação, extração, lançador, .desktop
-  internal/imagecache/  # imagens remotas para o frontend
-  internal/notify/      # notificações desktop via D-Bus (sem executar notify-send)
-  internal/search/      # busca BM25 e "apps parecidos" (TF-IDF), determinísticos
-  internal/rpc/         # servidor JSON-RPC, jobs, socket activation
+  cmd/omastored/        # daemon (IPC server)
+  cmd/omastore/         # debug CLI: index, list, show, install, uninstall, update
+  internal/app/         # wires the services (used by the CLI and the daemon)
+  internal/github/      # go-github wrapper
+  internal/gitrepo/     # shallow clones via go-git + icon/screenshot lookup
+  internal/index/       # discovery, extraction, classification (index.Version)
+  internal/manifest/    # the app's omastore.toml (strict validation in lint)
+  internal/store/       # SQLite + migrations
+  internal/install/     # download, verification, extraction, launcher, .desktop
+  internal/imagecache/  # remote images for the frontend
+  internal/notify/      # desktop notifications via D-Bus (without running notify-send)
+  internal/search/      # BM25 search and "similar apps" (TF-IDF), deterministic
+  internal/rpc/         # JSON-RPC server, jobs, socket activation
 frontend/
-  CMakeLists.txt        # lib omastore-core + app + testes (ctest)
-  src/                  # main.cpp, cliente IPC, modelos, tema, image provider
-  qml/                  # telas e componentes
-  tests/                # Qt Test com daemon falso (QLocalServer)
-packaging/              # PKGBUILD, unidades systemd, .desktop e ícone da loja
+  CMakeLists.txt        # omastore-core lib + app + tests (ctest)
+  src/                  # main.cpp, IPC client, models, theme, image provider
+  qml/                  # screens and components
+  tests/                # Qt Test with a fake daemon (QLocalServer)
+packaging/              # PKGBUILD, systemd units, the store's .desktop and icon
 docs/                   # ipc.md, autores.md, ideas/, screenshots/
+skills/                 # Claude Code skills for app authors
 ```
 
-## Comandos
+## Commands
 
-Tudo pelo `Makefile` na raiz (`make help` lista os alvos):
+Everything goes through the root `Makefile` (`make help` lists the targets):
 
 ```sh
-make                 # compila backend (bin/omastore, bin/omastored) e frontend
-make backend         # só os binários Go
-make frontend        # só o frontend (cmake + ninja em frontend/build)
-make test            # todos os testes
+make                 # builds the backend (bin/omastore, bin/omastored) and the frontend
+make backend         # Go binaries only
+make frontend        # frontend only (cmake + ninja in frontend/build)
+make test            # all tests
 make test-backend    # go test -race ./...
-make test-backend TESTFLAGS='-run TestNome ./internal/index'   # um teste
+make test-backend TESTFLAGS='-run TestName ./internal/index'   # a single test
 make test-frontend   # ctest (QT_QPA_PLATFORM=offscreen)
-make check           # gofmt + vet + testes do backend (o que a CI roda)
+make test-skills     # Go lint vs. the skills' Python validator over skills/tests/manifests
+make check           # gofmt + vet + backend tests (what CI runs)
 make fmt             # gofmt -w
-make run ARGS=index  # indexar sem GUI
-make run-gui         # compila e abre a interface Qt
+make run ARGS=index  # index without the GUI
+make run-gui         # builds and opens the Qt interface
 make clean
-make release && make install DESTDIR=... PREFIX=/usr   # o que o PKGBUILD faz
-make dist VERSION=v1.2.3   # tarball reprodutível + .sha256 em dist/ (usado pelo workflow de release)
-make pkgbuild-bin VERSION=v1.2.3   # PKGBUILD do omastore-bin com o sha256 do tarball
+make release && make install DESTDIR=... PREFIX=/usr   # what the PKGBUILD does
+make dist VERSION=v1.2.3   # reproducible tarball + .sha256 in dist/ (used by the release workflow)
+make pkgbuild-bin VERSION=v1.2.3   # omastore-bin PKGBUILD with the tarball's sha256
 ```
 
-Variáveis úteis: `BUILD_TYPE` (default `Debug`), `GENERATOR` (default `Ninja`), `TESTFLAGS`, `ARGS`.
-O Makefile exporta `CGO_ENABLED=1` (exigido pelo go-sqlite3). A CI chama os mesmos alvos.
+Useful variables: `BUILD_TYPE` (default `Debug`), `GENERATOR` (default `Ninja`), `TESTFLAGS`, `ARGS`.
+The Makefile exports `CGO_ENABLED=1` (required by go-sqlite3). CI calls the same targets.
 
-## Convenções
+## Conventions
 
-- Go: `gofmt`, erros com contexto (`fmt.Errorf("...: %w", err)`), `context.Context` em toda operação de rede/IO longa.
-- Testes do backend não acessam a rede: usar fixtures e `httptest` para simular a API do GitHub.
-- C++: C++20, sem lógica de rede no frontend, sinais/slots Qt para atualizar modelos.
-- Respeitar as variáveis XDG (`XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_RUNTIME_DIR`) com os defaults da especificação.
+- All project text is in English: code, comments, log/error/CLI messages, UI strings, docs and commit
+  messages. The exception is the Portuguese search data in `internal/search` (stopwords, pt→en synonyms),
+  which exists to understand Portuguese queries.
+- Go: `gofmt`, errors with context (`fmt.Errorf("...: %w", err)`), `context.Context` on every long network/IO operation.
+- Backend tests do not access the network: use fixtures and `httptest` to simulate the GitHub API.
+- C++: C++20, no network logic in the frontend, Qt signals/slots to update models.
+- Honor the XDG variables (`XDG_DATA_HOME`, `XDG_CACHE_HOME`, `XDG_RUNTIME_DIR`) with the specification defaults.
