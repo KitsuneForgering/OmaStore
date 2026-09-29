@@ -9,7 +9,7 @@ import (
 
 var urls = repoURLs{FullName: "acme/omaphoto", Ref: "abc123"}
 
-const sampleReadme = `<!-- comentário -->
+const sampleReadme = `<!-- comment -->
 <p align="center"><img src="assets/logo.png" width="128"></p>
 
 # OmaPhoto
@@ -44,8 +44,8 @@ func TestRewriteReadme(t *testing.T) {
 			t.Errorf("faltou %q", want)
 		}
 	}
-	if strings.Contains(out, "comentário") {
-		t.Error("comentário HTML deveria sair")
+	if strings.Contains(out, "comment -->") {
+		t.Error("HTML comment should be removed")
 	}
 }
 
@@ -88,7 +88,7 @@ func TestTitleAndSummary(t *testing.T) {
 		t.Errorf("truncado = %q", got)
 	}
 	if got := Summary("# X\n\n- item\n- item\n", 100); got != "" {
-		t.Errorf("sem parágrafo: %q", got)
+		t.Errorf("no paragraph: %q", got)
 	}
 	if got := Title(`<h1 align="center">Rawmakase</h1>`); got != "Rawmakase" {
 		t.Errorf("h1 html: %q", got)
@@ -124,6 +124,6 @@ func TestScore(t *testing.T) {
 		t.Errorf("fresh=%v old=%v more=%v", fresh, old, more)
 	}
 	if Score(0, time.Time{}, now) != 0 {
-		t.Error("sem pushed_at deveria ser 0")
+		t.Error("without pushed_at it should be 0")
 	}
 }

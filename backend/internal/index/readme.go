@@ -8,19 +8,19 @@ import (
 	"unicode/utf8"
 )
 
-// repoURLs monta URLs absolutas para arquivos de um repositório num commit.
+// repoURLs builds absolute URLs for a repository's files at a commit.
 type repoURLs struct {
 	FullName string
-	Ref      string // SHA do commit (ou branch)
-	BaseDir  string // diretório do README dentro do repo ("" = raiz)
+	Ref      string // commit SHA (or branch)
+	BaseDir  string // README directory inside the repo ("" = root)
 }
 
-// Raw retorna a URL do conteúdo bruto de p (relativo à raiz do repo).
+// Raw returns the raw content URL of p (relative to the repo root).
 func (u repoURLs) Raw(p string) string {
 	return "https://raw.githubusercontent.com/" + u.FullName + "/" + u.Ref + "/" + escapePath(p)
 }
 
-// Blob retorna a URL da página do arquivo p no GitHub.
+// Blob returns the GitHub page URL of file p.
 func (u repoURLs) Blob(p string) string {
 	return "https://github.com/" + u.FullName + "/blob/" + u.Ref + "/" + escapePath(p)
 }
@@ -33,9 +33,9 @@ func escapePath(p string) string {
 	return strings.Join(parts, "/")
 }
 
-// resolve converte uma referência do README em URL absoluta. Referências
-// absolutas (http, https, mailto, âncoras) são mantidas; data: e javascript:
-// são descartadas.
+// resolve converts a README reference into an absolute URL. Absolute
+// references (http, https, mailto, anchors) are kept; data: and javascript:
+// are dropped.
 func (u repoURLs) resolve(ref string, image bool) string {
 	ref = strings.TrimSpace(ref)
 	if ref == "" || strings.HasPrefix(ref, "#") {
@@ -78,8 +78,8 @@ func (u repoURLs) resolve(ref string, image bool) string {
 
 var reBlobURL = regexp.MustCompile(`^https://github\.com/([^/]+/[^/]+)/blob/(.+)$`)
 
-// rawifyGitHub troca links github.com/.../blob/... de imagens pela URL bruta,
-// que é a que de fato serve a imagem.
+// rawifyGitHub replaces github.com/.../blob/... image links with the raw URL,
+// which is the one that actually serves the image.
 func rawifyGitHub(ref string, image bool) string {
 	if !image {
 		return ref
@@ -100,8 +100,8 @@ var (
 	reCodeFence = regexp.MustCompile("(?ms)^\\s*(```|~~~).*?^\\s*(```|~~~)\\s*$")
 )
 
-// RewriteReadme torna absolutas as URLs relativas de imagens e links do
-// README, para que ele possa ser exibido fora do GitHub.
+// RewriteReadme makes the README's relative image and link URLs absolute,
+// so it can be displayed outside GitHub.
 func RewriteReadme(md string, u repoURLs) string {
 	md = reComment.ReplaceAllString(md, "")
 	md = reMdImage.ReplaceAllStringFunc(md, func(s string) string {
@@ -127,7 +127,7 @@ func RewriteReadme(md string, u repoURLs) string {
 	return md
 }
 
-// IsImageURL diz se a URL aponta para uma imagem pela extensão.
+// IsImageURL reports whether the URL points to an image, by extension.
 func IsImageURL(s string) bool {
 	s, _, _ = strings.Cut(s, "?")
 	s, _, _ = strings.Cut(s, "#")
@@ -145,7 +145,7 @@ var badgeHosts = []string{
 	"forthebadge.com", "repology.org", "awesome.re", "contrib.rocks",
 }
 
-// isBadge detecta badges e outras imagens decorativas que não são screenshots.
+// isBadge detects badges and other decorative images that are not screenshots.
 func isBadge(u string) bool {
 	l := strings.ToLower(u)
 	for _, h := range badgeHosts {
@@ -157,8 +157,8 @@ func isBadge(u string) bool {
 		strings.Contains(l, "/workflows/") || strings.HasSuffix(l, ".svg")
 }
 
-// ReadmeImages lista as imagens (já absolutas) do README que podem ser
-// screenshots, na ordem em que aparecem e sem duplicatas.
+// ReadmeImages lists the README images (already absolute) that may be
+// screenshots, in the order they appear and without duplicates.
 func ReadmeImages(rewritten string) []string {
 	var out []string
 	seen := map[string]bool{}
@@ -181,7 +181,7 @@ func ReadmeImages(rewritten string) []string {
 	for _, m := range reHTMLImg.FindAllStringSubmatchIndex(md, -1) {
 		hits = append(hits, hit{m[0], md[m[6]:m[7]]})
 	}
-	// Ordena pela posição no texto.
+	// Sort by position in the text.
 	for i := 1; i < len(hits); i++ {
 		for j := i; j > 0 && hits[j].pos < hits[j-1].pos; j-- {
 			hits[j], hits[j-1] = hits[j-1], hits[j]
@@ -201,7 +201,7 @@ var (
 	reSpaces   = regexp.MustCompile(`\s+`)
 )
 
-// Title retorna o texto do primeiro título (H1/H2) do README, ou "".
+// Title returns the text of the README's first heading (H1/H2), or "".
 func Title(md string) string {
 	md = reCodeFence.ReplaceAllString(reComment.ReplaceAllString(md, ""), "")
 	for _, line := range strings.Split(md, "\n") {
@@ -219,7 +219,7 @@ func Title(md string) string {
 
 var reHTMLHeading = regexp.MustCompile(`(?i)<h[12][^>]*>(.*?)</h[12]>`)
 
-// plain remove marcação markdown/HTML de uma linha.
+// plain removes markdown/HTML markup from a line.
 func plain(s string) string {
 	s = reMdImage.ReplaceAllString(s, "")
 	s = reMdLink.ReplaceAllString(s, "$1$2")
@@ -229,8 +229,8 @@ func plain(s string) string {
 	return strings.TrimSpace(reSpaces.ReplaceAllString(s, " "))
 }
 
-// Summary extrai o primeiro parágrafo de texto do README, ignorando títulos,
-// badges, imagens, listas, tabelas, citações e blocos de código.
+// Summary extracts the README's first text paragraph, skipping headings,
+// badges, images, lists, tables, quotes and code blocks.
 func Summary(md string, max int) string {
 	md = reCodeFence.ReplaceAllString(reComment.ReplaceAllString(md, ""), "")
 	var para []string
@@ -265,7 +265,7 @@ func truncate(s string, max int) string {
 	}
 	r := []rune(s)
 	cut := string(r[:max])
-	// Corta na última palavra inteira, a menos que o corte já caia num espaço.
+	// Cut at the last whole word, unless the cut already falls on a space.
 	if i := strings.LastIndexAny(cut, " \t"); r[max] != ' ' && i > max/2 {
 		cut = cut[:i]
 	}

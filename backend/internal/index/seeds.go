@@ -8,7 +8,7 @@ import (
 //go:embed seeds.txt
 var seedsTxt string
 
-// Seeds retorna a lista curada de repositórios semente.
+// Seeds returns the curated list of seed repositories.
 func Seeds() []string { return parseSeeds(seedsTxt) }
 
 func parseSeeds(s string) []string {

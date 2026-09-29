@@ -47,12 +47,12 @@ func TestClassifyAsset(t *testing.T) {
 
 func TestInstallable(t *testing.T) {
 	if !(AssetInfo{Format: FormatZip}).Installable("arm64") {
-		t.Error("asset genérico deveria servir")
+		t.Error("a generic asset should do")
 	}
 	if (AssetInfo{Format: FormatZip, Arch: ArchAMD64}).Installable("arm64") {
-		t.Error("amd64 não serve em arm64")
+		t.Error("amd64 does not work on arm64")
 	}
 	if (AssetInfo{Checksum: true}).Installable("amd64") {
-		t.Error("checksum não é instalável")
+		t.Error("a checksum is not installable")
 	}
 }

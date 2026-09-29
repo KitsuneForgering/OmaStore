@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// Categorias principais da freedesktop Desktop Menu Specification, usadas
-// tanto no catálogo quanto no campo Categories do .desktop.
+// Main categories of the freedesktop Desktop Menu Specification, used both
+// in the catalog and in the .desktop Categories field.
 const (
 	CatAudioVideo  = "AudioVideo"
 	CatDevelopment = "Development"
@@ -22,8 +22,8 @@ const (
 	CatUtility     = "Utility"
 )
 
-// topicCategories mapeia palavras de topics para categorias. A ordem importa:
-// a primeira categoria com correspondência vence.
+// topicCategories maps topic words to categories. The order matters:
+// the first category that matches wins.
 var topicCategories = []struct {
 	cat   string
 	words []string
@@ -47,8 +47,8 @@ var topicCategories = []struct {
 	{CatSettings, []string{"settings", "config", "configuration", "theme", "themes", "dotfiles"}},
 }
 
-// Category deriva a categoria a partir dos topics (e, na falta, do nome e da
-// descrição). O default é Utility.
+// Category derives the category from the topics (and, failing that, from the
+// name and description). The default is Utility.
 func Category(topics []string, name, description string) string {
 	set := map[string]bool{}
 	for _, t := range topics {
@@ -73,11 +73,11 @@ func Category(topics []string, name, description string) string {
 	return CatUtility
 }
 
-// recencyHalfLife controla quão rápido a recência perde peso.
+// recencyHalfLife controls how fast recency loses weight.
 const recencyHalfLife = 180 * 24 * time.Hour
 
-// Score ordena o catálogo: stars primeiro, recência como desempate. A parte
-// fracionária (0..1) vem da recência, então nunca supera uma star a mais.
+// Score orders the catalog: stars first, recency as a tiebreaker. The
+// fractional part (0..1) comes from recency, so it never beats one more star.
 func Score(stars int, pushedAt, now time.Time) float64 {
 	rec := 0.0
 	if !pushedAt.IsZero() {

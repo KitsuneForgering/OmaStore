@@ -1,5 +1,5 @@
-// Package index descobre repositórios de apps do Omarchy no GitHub, extrai
-// seus dados de exibição e os grava no store, sem reprocessar o que não mudou.
+// Package index discovers Omarchy app repositories on GitHub, extracts their
+// display data and writes it to the store, without reprocessing what did not change.
 package index
 
 import (
@@ -21,13 +21,13 @@ import (
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
 )
 
-// Version é a versão da lógica de extração e classificação. Incremente-a ao
-// mudar regras que afetam o que é gravado (assets, categorias, README...):
-// repositórios gravados com versão menor são reprocessados mesmo sem mudança
-// no GitHub.
+// Version is the version of the extraction and classification logic. Bump it
+// when changing rules that affect what is stored (assets, categories, README...):
+// repositories stored with a lower version are reprocessed even without changes
+// on GitHub.
 const Version = 5
 
-// GitHub é o subconjunto do cliente usado pelo indexador.
+// GitHub is the subset of the client used by the indexer.
 type GitHub interface {
 	SearchByTopic(ctx context.Context, topic string, max int) ([]string, error)
 	GetRepo(ctx context.Context, fullName, etag string) (*github.Repo, string, bool, error)
@@ -38,55 +38,55 @@ type GitHub interface {
 	File(ctx context.Context, fullName, path, ref string, maxBytes int) (string, bool, error)
 }
 
-// ManifestSearcher é implementado por clientes que encontram repositórios
-// pelo arquivo omastore.toml (busca de código; exige token).
+// ManifestSearcher is implemented by clients that find repositories by their
+// omastore.toml file (code search; requires a token).
 type ManifestSearcher interface {
 	SearchManifests(ctx context.Context, max int) ([]string, error)
 }
 
-// Batcher é implementado por clientes que buscam o estado de vários
-// repositórios de uma vez (GraphQL). Se Snapshots retornar
-// github.ErrNoToken, o indexador usa a API REST.
+// Batcher is implemented by clients that fetch the state of many
+// repositories at once (GraphQL). If Snapshots returns
+// github.ErrNoToken, the indexer uses the REST API.
 type Batcher interface {
 	Snapshots(ctx context.Context, names []string) (map[string]*github.Snapshot, error)
 }
 
-// Indexer executa o pipeline de indexação.
+// Indexer runs the indexing pipeline.
 type Indexer struct {
 	GH     GitHub
 	Store  *store.Store
-	Repos  *gitrepo.Cache // opcional: usado quando a Trees API trunca
+	Repos  *gitrepo.Cache // optional: used when the Trees API truncates
 	Topics []string       // default: ["omarchy"]
 	Seeds  []string       // default: Seeds()
-	// MaxSearch limita os resultados por topic (default 300).
+	// MaxSearch limits the results per topic (default 300).
 	MaxSearch int
 	Workers   int // default 4
-	// Prune remove do catálogo repositórios que não foram mais descobertos.
+	// Prune removes repositories that are no longer discovered from the catalog.
 	Prune bool
-	// NoBatch desliga a consulta em lote (GraphQL) e usa só a API REST.
+	// NoBatch turns off the batch query (GraphQL) and uses only the REST API.
 	NoBatch bool
 	Log     *slog.Logger
 	Now     func() time.Time
-	// GOARCH decide o que conta como instalável (default runtime.GOARCH).
+	// GOARCH decides what counts as installable (default runtime.GOARCH).
 	GOARCH string
 }
 
-// Options controla uma execução.
+// Options controls a run.
 type Options struct {
-	// Force reprocessa todos os repositórios, ignorando o cache.
+	// Force reprocesses every repository, ignoring the cache.
 	Force bool
-	// Only restringe a execução a estes repositórios (sem descoberta).
+	// Only restricts the run to these repositories (no discovery).
 	Only []string
-	// ManifestOverride usa este conteúdo como omastore.toml de um repositório
-	// (owner/repo → conteúdo), no lugar do arquivo publicado. Serve para o
-	// autor ver o resultado antes de publicar o manifesto.
+	// ManifestOverride uses this content as a repository's omastore.toml
+	// (owner/repo → content) instead of the published file. It lets the
+	// author see the result before publishing the manifest.
 	ManifestOverride map[string]string
-	// Progress, se definido, recebe o andamento após cada repositório. As
-	// chamadas são serializadas; o callback não deve bloquear.
+	// Progress, if set, receives the progress after each repository. The
+	// calls are serialized; the callback must not block.
 	Progress func(Progress)
 }
 
-// Progress é o andamento de uma indexação.
+// Progress is an indexing run's progress.
 type Progress struct {
 	Total   int
 	Done    int
@@ -94,20 +94,20 @@ type Progress struct {
 	Stats
 }
 
-// Stats resume o resultado.
+// Stats summarizes the result.
 type Stats struct {
-	Updated   int // reprocessados por completo
-	Refreshed int // só stars/score atualizados
-	Unchanged int // nada mudou
-	Removed   int // saíram do catálogo
-	Skipped   int // não existem ou estão arquivados, e não estavam no catálogo
-	// NotApps não têm omastore.toml válido ou não declaram kind = "app"
-	// (plugins, temas), e não estavam no catálogo.
+	Updated   int // fully reprocessed
+	Refreshed int // only stars/score updated
+	Unchanged int // nothing changed
+	Removed   int // left the catalog
+	Skipped   int // do not exist or are archived, and were not in the catalog
+	// NotApps have no valid omastore.toml or do not declare kind = "app"
+	// (plugins, themes), and were not in the catalog.
 	NotApps int
 	Failed  int
 }
 
-// Resultado do processamento de um repositório.
+// Result of processing a repository.
 type outcome int
 
 const (
@@ -140,7 +140,7 @@ func (ix *Indexer) goarch() string {
 	return runtime.GOARCH
 }
 
-// Discover retorna a união, sem duplicatas, das buscas por topic e das sementes.
+// Discover returns the duplicate-free union of the topic searches and the seeds.
 func (ix *Indexer) Discover(ctx context.Context) ([]string, error) {
 	topics := ix.Topics
 	if len(topics) == 0 {
@@ -171,7 +171,7 @@ func (ix *Indexer) Discover(ctx context.Context) ([]string, error) {
 				if errors.As(err, &rl) {
 					return nil, err
 				}
-				ix.log().Warn("lista curada ilegível", "lista", list, "err", err)
+				ix.log().Warn("unreadable curated list", "list", list, "err", err)
 			}
 			for _, r := range repos {
 				add(r)
@@ -180,7 +180,7 @@ func (ix *Indexer) Discover(ctx context.Context) ([]string, error) {
 		}
 		add(s)
 	}
-	// Repositórios com omastore.toml na raiz, mesmo sem o topic.
+	// Repositories with omastore.toml at the root, even without the topic.
 	if ms, ok := ix.GH.(ManifestSearcher); ok {
 		names, err := ms.SearchManifests(ctx, max)
 		var rl *github.RateLimitError
@@ -189,7 +189,7 @@ func (ix *Indexer) Discover(ctx context.Context) ([]string, error) {
 			return nil, err
 		case errors.Is(err, github.ErrNoToken):
 		case err != nil:
-			ix.log().Warn("busca por manifestos falhou", "err", err)
+			ix.log().Warn("manifest search failed", "err", err)
 		}
 		for _, n := range names {
 			add(n)
@@ -207,19 +207,19 @@ func (ix *Indexer) Discover(ctx context.Context) ([]string, error) {
 	return out, nil
 }
 
-// maxFromList limita quantos repositórios uma lista curada pode trazer.
+// maxFromList limits how many repositories a curated list can bring in.
 const maxFromList = 300
 
 var reRepoLink = regexp.MustCompile(`(?i)https?://github\.com/([A-Za-z0-9][A-Za-z0-9-]{0,38})/([A-Za-z0-9._-]{1,100})`)
 
-// reservedOwners são caminhos do github.com que não são usuários.
+// reservedOwners are github.com paths that are not users.
 var reservedOwners = map[string]bool{
 	"topics": true, "orgs": true, "sponsors": true, "marketplace": true, "features": true,
 	"settings": true, "apps": true, "collections": true, "about": true, "login": true,
 }
 
-// fromList extrai os repositórios citados no README de uma lista curada
-// (ex.: uma lista "awesome"), na ordem em que aparecem.
+// fromList extracts the repositories mentioned in a curated list's README
+// (e.g. an "awesome" list), in the order they appear.
 func (ix *Indexer) fromList(ctx context.Context, list string) ([]string, error) {
 	readme, _, err := ix.GH.Readme(ctx, list)
 	if err != nil {
@@ -228,8 +228,8 @@ func (ix *Indexer) fromList(ctx context.Context, list string) ([]string, error) 
 	return RepoLinks(readme, list, maxFromList), nil
 }
 
-// RepoLinks extrai links github.com/owner/repo de um texto, sem duplicatas
-// e sem o próprio repositório da lista.
+// RepoLinks extracts github.com/owner/repo links from a text, without
+// duplicates and without the list's own repository.
 func RepoLinks(text, self string, max int) []string {
 	seen := map[string]bool{strings.ToLower(self): true}
 	var out []string
@@ -250,7 +250,7 @@ func RepoLinks(text, self string, max int) []string {
 	return out
 }
 
-// Run executa a indexação completa.
+// Run runs a full indexing.
 func (ix *Indexer) Run(ctx context.Context, opts Options) (Stats, error) {
 	names := opts.Only
 	discovered := false
@@ -263,15 +263,15 @@ func (ix *Indexer) Run(ctx context.Context, opts Options) (Stats, error) {
 		discovered = true
 	}
 
-	ix.log().Debug("descoberta concluída", "repos", len(names))
+	ix.log().Debug("discovery done", "repos", len(names))
 
-	// Estado em lote: uma requisição GraphQL a cada 50 repositórios, em vez
-	// de 3–4 requisições REST por repositório.
+	// Batch state: one GraphQL request per 50 repositories, instead of 3–4
+	// REST requests per repository.
 	var snaps map[string]*github.Snapshot
 	if b, ok := ix.GH.(Batcher); ok && !ix.NoBatch {
 		var err error
 		snaps, err = b.Snapshots(ctx, names)
-		ix.log().Debug("estado em lote obtido", "repos", len(snaps), "err", err)
+		ix.log().Debug("batch state fetched", "repos", len(snaps), "err", err)
 		switch {
 		case errors.Is(err, github.ErrNoToken):
 			snaps = nil
@@ -280,7 +280,7 @@ func (ix *Indexer) Run(ctx context.Context, opts Options) (Stats, error) {
 			if errors.As(err, &rl) {
 				return Stats{}, err
 			}
-			ix.log().Warn("consulta em lote falhou; usando a API REST", "err", err)
+			ix.log().Warn("batch query failed; using the REST API", "err", err)
 			snaps = nil
 		}
 	}
@@ -305,7 +305,7 @@ func (ix *Indexer) Run(ctx context.Context, opts Options) (Stats, error) {
 			defer wg.Done()
 			for name := range jobs {
 				snap, batched := snaps[name]
-				// Com manifesto local, reprocessa: o publicado não mudou, mas o que vale mudou.
+				// With a local manifest, reprocess: the published one did not change, but the one that counts did.
 				out, err := ix.process(ctx, name, opts.Force || len(opts.ManifestOverride) > 0, snap, batched, opts.ManifestOverride)
 				mu.Lock()
 				prog.Done++
@@ -320,7 +320,7 @@ func (ix *Indexer) Run(ctx context.Context, opts Options) (Stats, error) {
 							cancel(err)
 						}
 					} else {
-						ix.log().Warn("falha ao indexar", "repo", name, "err", err)
+						ix.log().Warn("indexing failed", "repo", name, "err", err)
 					}
 				case out == outUpdated:
 					prog.Updated++
@@ -335,7 +335,7 @@ func (ix *Indexer) Run(ctx context.Context, opts Options) (Stats, error) {
 				default:
 					prog.Unchanged++
 				}
-				// Chamado sob o lock: callbacks em série e em ordem crescente de Done.
+				// Called under the lock: callbacks run serially, in increasing Done order.
 				if opts.Progress != nil {
 					opts.Progress(prog)
 				}
@@ -370,7 +370,7 @@ feed:
 	return prog.Stats, nil
 }
 
-// prune remove do catálogo o que não foi descoberto nesta execução.
+// prune removes from the catalog what was not discovered in this run.
 func (ix *Indexer) prune(ctx context.Context, found []string) (int, error) {
 	keep := map[string]bool{}
 	for _, n := range found {
@@ -393,9 +393,9 @@ func (ix *Indexer) prune(ctx context.Context, found []string) (int, error) {
 	return n, nil
 }
 
-// process aplica o pipeline a um repositório. snap, quando batched, é o
-// estado obtido em lote pelo GraphQL (nil = repositório não existe); sem
-// lote, o estado vem da API REST com requisições condicionais.
+// process applies the pipeline to a repository. snap, when batched, is the
+// state fetched in batch through GraphQL (nil = repository does not exist);
+// without a batch, the state comes from the REST API with conditional requests.
 func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *github.Snapshot, batched bool,
 	overrides map[string]string) (outcome, error) {
 	prev, err := ix.Store.RepoState(ctx, name)
@@ -411,7 +411,7 @@ func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *g
 		return outSkipped, nil
 	}
 
-	// Regras do indexador mudaram desde a última vez: reprocessar tudo.
+	// The indexer rules changed since last time: reprocess everything.
 	if known && prev.IndexVersion < Version {
 		force = true
 	}
@@ -439,8 +439,8 @@ func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *g
 			return 0, err
 		}
 		if notModified {
-			// Metadados iguais (logo pushed_at e HEAD também); uma release pode
-			// ser publicada sobre uma tag existente, então conferimos a tag.
+			// Same metadata (so pushed_at and HEAD too); a release can be
+			// published on an existing tag, so we check the tag.
 			rel, err := ix.GH.LatestRelease(ctx, name)
 			if err != nil {
 				return 0, err
@@ -458,7 +458,7 @@ func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *g
 	if repo.Archived {
 		return removed()
 	}
-	// A API pode devolver outro nome (repo renomeado/transferido).
+	// The API may return another name (renamed/transferred repo).
 	if repo.FullName != "" && repo.FullName != name {
 		if known {
 			if err := ix.Store.RemoveRepo(ctx, name); err != nil {
@@ -471,8 +471,8 @@ func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *g
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			return 0, err
 		}
-		// O estado recarregado pode ser de uma versão antiga do indexador
-		// (ex.: nome descoberto com outra capitalização).
+		// The reloaded state may be from an older indexer version
+		// (e.g. a name discovered with different capitalization).
 		if known && prev.IndexVersion < Version {
 			force = true
 		}
@@ -498,8 +498,8 @@ func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *g
 	}
 	score := Score(repo.Stars, repo.PushedAt, now)
 
-	// Verificação de cache: se pushed_at, HEAD e tag não mudaram, não
-	// reprocessar. Só os dados voláteis (stars etc.) são atualizados.
+	// Cache check: if pushed_at, HEAD and tag did not change, do not
+	// reprocess. Only the volatile data (stars etc.) is updated.
 	if known && !force && prev.PushedAt.Equal(repo.PushedAt) && prev.HeadSHA == sha && prev.LatestTag == tagOf(rel) {
 		if batched && prev.Stars == repo.Stars && prev.Description == repo.Description {
 			return outUnchanged, ix.Store.TouchRepo(ctx, name, now)
@@ -507,14 +507,14 @@ func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *g
 		return outRefreshed, ix.Store.UpdateStats(ctx, name, repo.Stars, repo.Description, repo.Topics, newETag, score, now)
 	}
 
-	// Só entram no catálogo repositórios com omastore.toml que declaram um
-	// app (nada de plugins e temas). A presença do arquivo é o opt-in do autor.
+	// Only repositories with an omastore.toml declaring an app (no plugins or
+	// themes) enter the catalog. The presence of the file is the author's opt-in.
 	m, why, err := ix.manifestFor(ctx, name, sha, snap, batched, overrides)
 	if err != nil {
 		return 0, err
 	}
 	if m == nil {
-		ix.log().Debug("fora do catálogo", "repo", name, "motivo", why)
+		ix.log().Debug("out of the catalog", "repo", name, "reason", why)
 		if known {
 			return outRemoved, ix.Store.RemoveRepo(ctx, name)
 		}
@@ -544,7 +544,7 @@ func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *g
 	if err := ix.Store.SaveIndexed(ctx, r, app, assets); err != nil {
 		return 0, err
 	}
-	ix.log().Debug("indexado", "repo", name, "tag", r.LatestTag, "installable", app.Installable)
+	ix.log().Debug("indexed", "repo", name, "tag", r.LatestTag, "installable", app.Installable)
 	return outUpdated, nil
 }
 
@@ -555,13 +555,13 @@ func tagOf(rel *github.Release) string {
 	return rel.Tag
 }
 
-// maxScreenshots limita as screenshots por app.
+// maxScreenshots limits the screenshots per app.
 const maxScreenshots = 8
 
-// extract monta os dados de exibição e os assets de um repositório.
+// extract builds a repository's display data and assets.
 func (ix *Indexer) extract(ctx context.Context, repo *github.Repo, sha string, rel *github.Release, m *manifest.Manifest) (store.App, []store.Asset, error) {
 	name := repo.FullName
-	// Descrições do GitHub às vezes têm espaços/quebras nas pontas.
+	// GitHub descriptions sometimes have spaces/line breaks at the ends.
 	app := store.App{FullName: name, Name: repo.Name, Summary: strings.Join(strings.Fields(repo.Description), " ")}
 	app.Category = Category(repo.Topics, repo.Name, repo.Description)
 	app.Manifest = m.Encode()
@@ -575,9 +575,9 @@ func (ix *Indexer) extract(ctx context.Context, repo *github.Repo, sha string, r
 		app.Category = c
 	}
 
-	// Sem release não há o que instalar: grava só o básico, sem gastar
-	// requisições com README e árvore. Quando surgir uma release, a tag muda
-	// e o repositório é reprocessado por completo.
+	// Without a release there is nothing to install: store only the basics,
+	// without spending requests on README and tree. When a release shows up,
+	// the tag changes and the repository is fully reprocessed.
 	if rel == nil {
 		return app, nil, nil
 	}
@@ -595,7 +595,7 @@ func (ix *Indexer) extract(ctx context.Context, repo *github.Repo, sha string, r
 		app.Readme = RewriteReadme(readme, urls)
 		readmeImages = ReadmeImages(app.Readme)
 		if t := Title(readme); m.Name == "" && t != "" && normalize(t) == normalize(repo.Name) {
-			app.Name = t // preserva a grafia do autor, ex.: "OmaPhoto"
+			app.Name = t // keeps the author's spelling, e.g. "OmaPhoto"
 		}
 		if app.Summary == "" {
 			app.Summary = Summary(readme, 200)
@@ -605,8 +605,8 @@ func (ix *Indexer) extract(ctx context.Context, repo *github.Repo, sha string, r
 	files, err := ix.listFiles(ctx, name, sha)
 	filesKnown := err == nil
 	if err != nil {
-		// Sem a lista de arquivos ainda dá para indexar com o README.
-		ix.log().Warn("sem lista de arquivos", "repo", name, "err", err)
+		// Without the file list we can still index with the README.
+		ix.log().Warn("no file list", "repo", name, "err", err)
 	}
 	if m.Icon != "" && (!filesKnown || contains(files, m.Icon)) {
 		app.IconURL = urls.Raw(m.Icon)
@@ -662,9 +662,9 @@ func (ix *Indexer) extract(ctx context.Context, repo *github.Repo, sha string, r
 	return app, assets, nil
 }
 
-// manifestFor obtém e valida o omastore.toml da raiz no commit sha: do lote
-// GraphQL quando disponível, senão pela API REST. Retorna nil (com o
-// motivo) se não houver manifesto utilizável ou se ele não declarar um app.
+// manifestFor fetches and validates the root omastore.toml at commit sha: from
+// the GraphQL batch when available, otherwise through the REST API. Returns nil
+// (with the reason) if there is no usable manifest or it does not declare an app.
 func (ix *Indexer) manifestFor(ctx context.Context, name, sha string, snap *github.Snapshot, batched bool,
 	overrides map[string]string) (*manifest.Manifest, string, error) {
 	var data string
@@ -672,7 +672,7 @@ func (ix *Indexer) manifestFor(ctx context.Context, name, sha string, snap *gith
 		data = content
 	} else if batched {
 		if snap.Manifest == nil {
-			return nil, "sem " + manifest.FileName, nil
+			return nil, "no " + manifest.FileName, nil
 		}
 		data = *snap.Manifest
 	} else {
@@ -682,22 +682,22 @@ func (ix *Indexer) manifestFor(ctx context.Context, name, sha string, snap *gith
 			if errors.As(err, &rl) {
 				return nil, "", err
 			}
-			return nil, "manifesto ilegível: " + err.Error(), nil
+			return nil, "unreadable manifest: " + err.Error(), nil
 		}
 		if !found {
-			return nil, "sem " + manifest.FileName, nil
+			return nil, "no " + manifest.FileName, nil
 		}
 		data = content
 	}
 	m, problems, err := manifest.Parse([]byte(data), false)
 	if err != nil {
-		return nil, "manifesto inválido: " + err.Error(), nil
+		return nil, "invalid manifest: " + err.Error(), nil
 	}
 	for _, p := range problems {
-		ix.log().Info("problema no manifesto", "repo", name, "problema", p.String())
+		ix.log().Info("manifest problem", "repo", name, "problem", p.String())
 	}
 	if !m.IsApp() {
-		return nil, "kind = " + m.Kind + " (só apps são indexados)", nil
+		return nil, "kind = " + m.Kind + " (only apps are indexed)", nil
 	}
 	return m, "", nil
 }
@@ -720,8 +720,8 @@ func contains(list []string, s string) bool {
 	return false
 }
 
-// listFiles lista os arquivos do repo pela Trees API; se a listagem vier
-// truncada e houver cache de clones, clona e lista localmente.
+// listFiles lists the repo files through the Trees API; if the listing is
+// truncated and there is a clone cache, it clones and lists locally.
 func (ix *Indexer) listFiles(ctx context.Context, name, sha string) ([]string, error) {
 	files, truncated, err := ix.GH.Tree(ctx, name, sha)
 	if err == nil && !truncated {
@@ -733,22 +733,22 @@ func (ix *Indexer) listFiles(ctx context.Context, name, sha string) ([]string, e
 	dir, _, cerr := ix.Repos.Sync(ctx, name)
 	if cerr != nil {
 		if err == nil {
-			return files, nil // truncada, mas melhor que nada
+			return files, nil // truncated, but better than nothing
 		}
 		return nil, errors.Join(err, cerr)
 	}
 	return gitrepo.ListFiles(dir)
 }
 
-// releaseAssets classifica os assets da release e guarda os instaláveis
-// (de qualquer arquitetura suportada), ligados ao checksum correspondente.
-// Assets que casam com o padrão do manifesto entram com a arquitetura
-// declarada, mesmo que o nome não permitisse deduzi-la.
+// releaseAssets classifies the release assets and keeps the installable ones
+// (of any supported architecture), linked to the matching checksum.
+// Assets matching the manifest pattern come in with the declared
+// architecture, even if the name would not allow inferring it.
 func releaseAssets(rel *github.Release, m *manifest.Manifest) []store.Asset {
 	if rel == nil {
 		return nil
 	}
-	declared := map[string]string{} // nome do asset → arquitetura do manifesto
+	declared := map[string]string{} // asset name → manifest architecture
 	if m != nil {
 		for arch, t := range m.Linux {
 			if t.Asset == "" {
@@ -761,7 +761,7 @@ func releaseAssets(rel *github.Release, m *manifest.Manifest) []store.Asset {
 			}
 		}
 	}
-	sums := map[string]string{} // nome do asset → URL do seu .sha256
+	sums := map[string]string{} // asset name → URL of its .sha256
 	general := ""               // checksums.txt / SHA256SUMS
 	for _, a := range rel.Assets {
 		if !ClassifyAsset(a.Name).Checksum {

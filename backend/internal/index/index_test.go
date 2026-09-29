@@ -20,17 +20,17 @@ type fakeRepo struct {
 	release *github.Release
 	readme  string
 	files   []string
-	toml    string // conteúdo do omastore.toml (vazio = arquivo vazio, que vale)
-	noToml  bool   // repositório sem omastore.toml
+	toml    string // omastore.toml content (empty = empty file, which counts)
+	noToml  bool   // repository without omastore.toml
 }
 
-// fakeGH simula a API do GitHub em memória e conta as chamadas.
+// fakeGH simulates the GitHub API in memory and counts the calls.
 type fakeGH struct {
 	mu     sync.Mutex
 	repos  map[string]*fakeRepo
 	search []string
 	calls  map[string]int
-	rate   bool // simula rate limit em GetRepo
+	rate   bool // simulates a rate limit in GetRepo
 }
 
 func (f *fakeGH) count(k string) {
@@ -145,7 +145,7 @@ func photoRepo() *fakeRepo {
 			{Name: "checksums.txt", URL: "https://dl/checksums.txt"},
 			{Name: "omaphoto-source.tar.gz", URL: "https://dl/src.tgz"},
 		}},
-		readme: "# OmaPhoto\n\nEditor de fotos rápido para o Omarchy.\n\n![shot](docs/shot.png)\n",
+		readme: "# OmaPhoto\n\nFast photo editor for Omarchy.\n\n![shot](docs/shot.png)\n",
 		files:  []string{"README.md", "assets/icon.svg", "screenshots/main.png"},
 	}
 }
@@ -153,7 +153,7 @@ func photoRepo() *fakeRepo {
 func libRepo() *fakeRepo {
 	return &fakeRepo{
 		repo: github.Repo{FullName: "acme/omalib", Name: "omalib", Stars: 5, PushedAt: t0, DefaultBranch: "main"},
-		sha:  "l1", readme: "# omalib\n\nBiblioteca sem binário nenhum aqui.\n",
+		sha:  "l1", readme: "# omalib\n\nA library with no binary at all here.\n",
 		release: &github.Release{Tag: "v0.1", Assets: []github.ReleaseAsset{{Name: "omalib-0.1.deb", URL: "u"}}},
 	}
 }
@@ -192,7 +192,7 @@ func TestIndexNewRepo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Name != "OmaPhoto" || d.Summary != "Editor de fotos rápido para o Omarchy." || d.Category != CatGraphics || !d.Installable {
+	if d.Name != "OmaPhoto" || d.Summary != "Fast photo editor for Omarchy." || d.Category != CatGraphics || !d.Installable {
 		t.Errorf("app = %+v", d.App)
 	}
 	if d.IconURL != "https://raw.githubusercontent.com/acme/omaphoto/sha1/assets/icon.svg" {
@@ -229,11 +229,11 @@ func TestRepoWithoutBinaryIsExcluded(t *testing.T) {
 	}
 	list, _ := st.ListApps(ctx, store.Filter{})
 	if len(list) != 1 || list[0].FullName != "acme/omaphoto" {
-		t.Errorf("catálogo instalável = %+v", list)
+		t.Errorf("installable catalog = %+v", list)
 	}
 	all, _ := st.ListApps(ctx, store.Filter{All: true})
 	if len(all) != 2 {
-		t.Errorf("com não instaláveis = %d", len(all))
+		t.Errorf("with non-installable = %d", len(all))
 	}
 }
 
@@ -256,14 +256,14 @@ func TestUnchangedRepoIsNotReprocessed(t *testing.T) {
 		t.Errorf("reprocessou: calls = %v", gh.calls)
 	}
 
-	// Só stars mudaram: atualização leve, sem README/árvore.
+	// Only stars changed: light update, without README/tree.
 	gh.repos["acme/omaphoto"].repo.Stars = 43
 	stats, _ = ix.Run(ctx, Options{})
 	if stats.Refreshed != 1 || gh.n("readme") != readmes {
 		t.Errorf("stars: stats=%+v calls=%v", stats, gh.calls)
 	}
 
-	// Force reprocessa tudo.
+	// Force reprocesses everything.
 	stats, _ = ix.Run(ctx, Options{Force: true})
 	if stats.Updated != 2 || gh.n("readme") != readmes+2 {
 		t.Errorf("force: stats=%+v", stats)
@@ -280,14 +280,14 @@ func TestNewCommitOrReleaseReprocesses(t *testing.T) {
 	r.sha = "sha2"
 	stats, _ := ix.Run(ctx, Options{})
 	if stats.Updated != 1 || stats.Unchanged != 1 {
-		t.Errorf("novo commit: %+v", stats)
+		t.Errorf("new commit: %+v", stats)
 	}
 
-	// Release nova sem push (304 no repo): a tag denuncia a mudança.
+	// New release without a push (304 on the repo): the tag reveals the change.
 	r.release = &github.Release{Tag: "v2.0.0", Assets: r.release.Assets}
 	stats, _ = ix.Run(ctx, Options{})
 	if stats.Updated != 1 {
-		t.Errorf("nova release: %+v", stats)
+		t.Errorf("new release: %+v", stats)
 	}
 	d, _ := st.GetApp(ctx, "acme/omaphoto")
 	if d.Repo.LatestTag != "v2.0.0" || d.Repo.HeadSHA != "sha2" {
@@ -317,7 +317,7 @@ func TestRemovedAndPrune(t *testing.T) {
 	}
 	names, _ := st.RepoNames(ctx)
 	if len(names) != 0 {
-		t.Errorf("sobrou %v", names)
+		t.Errorf("left over %v", names)
 	}
 }
 
@@ -345,18 +345,18 @@ func TestDiscoverDedup(t *testing.T) {
 
 func TestSummaryFromDescriptionIsTrimmed(t *testing.T) {
 	ix, gh, st := setup(t)
-	gh.repos["acme/omaphoto"].repo.Description = "  Editor\n de   fotos  "
+	gh.repos["acme/omaphoto"].repo.Description = "  Photo\n  editor   for   Omarchy  "
 	if _, err := ix.Run(context.Background(), Options{}); err != nil {
 		t.Fatal(err)
 	}
 	d, _ := st.GetApp(context.Background(), "acme/omaphoto")
-	if d.Summary != "Editor de fotos" {
+	if d.Summary != "Photo editor for Omarchy" {
 		t.Errorf("summary = %q", d.Summary)
 	}
 }
 
 func TestParseSeeds(t *testing.T) {
-	got := parseSeeds("# c\n a/b \n\nc/d # comentário\n")
+	got := parseSeeds("# c\n a/b \n\nc/d # comment\n")
 	if len(got) != 2 || got[0] != "a/b" || got[1] != "c/d" {
 		t.Errorf("got %v", got)
 	}
@@ -370,7 +370,7 @@ func TestIndexVersionBumpReprocesses(t *testing.T) {
 	ctx := context.Background()
 	ix.Run(ctx, Options{})
 	d, _ := st.GetApp(ctx, "acme/omaphoto")
-	// Simula um repo gravado por uma versão antiga do indexador.
+	// Simulates a repo stored by an older indexer version.
 	d.Repo.IndexVersion = Version - 1
 	st.SaveIndexed(ctx, d.Repo, d.App, d.Assets)
 	readmes := gh.n("readme")
@@ -384,7 +384,7 @@ func TestIndexVersionBumpReprocesses(t *testing.T) {
 	}
 	state, _ := st.RepoState(ctx, "acme/omaphoto")
 	if state.IndexVersion != Version {
-		t.Errorf("versão gravada = %d", state.IndexVersion)
+		t.Errorf("stored version = %d", state.IndexVersion)
 	}
 }
 
@@ -395,16 +395,16 @@ func TestManifestOverridesHeuristics(t *testing.T) {
 	r.files = append(r.files, "omastore.toml", "packaging/real-icon.svg")
 	r.toml = `
 name = "Oma Photo Pro"
-summary = "Editor declarado no manifesto"
+summary = "Editor declared in the manifest"
 categories = ["Office", "Graphics"]
 icon = "packaging/real-icon.svg"
-screenshots = ["docs/tela.png", "https://example.com/extra.png"]
+screenshots = ["docs/screen.png", "https://example.com/extra.png"]
 terminal = true
 [linux.x86_64]
 asset = "omaphoto-portable-{version}"
 exec = "bin/omaphoto"
 `
-	// Um asset com nome que a heurística rejeitaria (sem arch nem "linux").
+	// An asset with a name the heuristic would reject (no arch nor "linux").
 	r.release.Assets = append(r.release.Assets, github.ReleaseAsset{Name: "omaphoto-portable-1.0.0", URL: "https://dl/port"})
 	if _, err := ix.Run(ctx, Options{}); err != nil {
 		t.Fatal(err)
@@ -413,7 +413,7 @@ exec = "bin/omaphoto"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Name != "Oma Photo Pro" || d.Summary != "Editor declarado no manifesto" || d.Category != "Office" {
+	if d.Name != "Oma Photo Pro" || d.Summary != "Editor declared in the manifest" || d.Category != "Office" {
 		t.Errorf("app = %+v", d.App)
 	}
 	if d.IconURL != "https://raw.githubusercontent.com/acme/omaphoto/sha1/packaging/real-icon.svg" {
@@ -429,10 +429,10 @@ exec = "bin/omaphoto"
 		}
 	}
 	if !found {
-		t.Errorf("asset do manifesto ausente ou sem arch: %+v", d.Assets)
+		t.Errorf("manifest asset missing or without arch: %+v", d.Assets)
 	}
 	if d.Manifest == "" {
-		t.Error("manifesto não gravado")
+		t.Error("manifest not stored")
 	}
 }
 
@@ -448,7 +448,7 @@ func TestOnlyAppsWithManifestAreIndexed(t *testing.T) {
 		gh.repos["acme/plugin"] = &fakeRepo{repo: github.Repo{FullName: "acme/plugin", Name: "plugin", PushedAt: t0},
 			sha: "p1", toml: `kind = "plugin"`, release: libRepo().release}
 		gh.repos["acme/broken"] = &fakeRepo{repo: github.Repo{FullName: "acme/broken", Name: "broken", PushedAt: t0},
-			sha: "b1", toml: "name = \"sem aspas\n"}
+			sha: "b1", toml: "name = \"missing quote\n"}
 		gh.repos["acme/nothing"] = &fakeRepo{repo: github.Repo{FullName: "acme/nothing", Name: "nothing", PushedAt: t0},
 			sha: "n1", noToml: true}
 		gh.search = append(gh.search, "acme/theme", "acme/plugin", "acme/broken", "acme/nothing")
@@ -462,20 +462,20 @@ func TestOnlyAppsWithManifestAreIndexed(t *testing.T) {
 		}
 		names, _ := st.RepoNames(ctx)
 		if len(names) != 2 {
-			t.Errorf("batched=%v: catálogo = %v", batched, names)
+			t.Errorf("batched=%v: catalog = %v", batched, names)
 		}
 
-		// Um app que remove o manifesto sai do catálogo.
+		// An app that removes its manifest leaves the catalog.
 		r := gh.repos["acme/omaphoto"]
 		r.noToml = true
-		r.sha = "sha-sem-manifesto"
+		r.sha = "sha-without-manifest"
 		r.repo.PushedAt = t0.Add(time.Hour)
 		stats, _ = ix.Run(ctx, Options{})
 		if stats.Removed != 1 {
-			t.Errorf("batched=%v: remoção: %+v", batched, stats)
+			t.Errorf("batched=%v: removal: %+v", batched, stats)
 		}
 		if _, err := st.GetApp(ctx, "acme/omaphoto"); err == nil {
-			t.Errorf("batched=%v: app sem manifesto continua no catálogo", batched)
+			t.Errorf("batched=%v: app without manifest still in the catalog", batched)
 		}
 	}
 }
@@ -488,11 +488,11 @@ func TestEmptyManifestIsEnough(t *testing.T) {
 	}
 	d, err := st.GetApp(context.Background(), "acme/omaphoto")
 	if err != nil || !d.Installable || d.Name != "OmaPhoto" {
-		t.Errorf("manifesto vazio deveria indexar com heurísticas: %+v %v", d, err)
+		t.Errorf("an empty manifest should index with heuristics: %+v %v", d, err)
 	}
 }
 
-// fakeBatchGH acrescenta a consulta em lote ao fakeGH.
+// fakeBatchGH adds the batch query to fakeGH.
 type fakeBatchGH struct {
 	*fakeGH
 	noToken bool
@@ -545,29 +545,29 @@ func TestBatchedIndexingSkipsRESTMetadata(t *testing.T) {
 		t.Errorf("app = %+v", d)
 	}
 
-	// Nada mudou: nenhuma requisição além do lote.
+	// Nothing changed: no request besides the batch.
 	before := map[string]int{"readme": gh.n("readme"), "tree": gh.n("tree")}
 	stats, _ = ix.Run(ctx, Options{})
 	if stats.Unchanged != 2 || gh.n("readme") != before["readme"] || gh.n("tree") != before["tree"] {
 		t.Errorf("inalterado: stats=%+v calls=%v", stats, gh.calls)
 	}
 
-	// Só estrelas mudaram: atualização leve.
+	// Only stars changed: light update.
 	gh.repos["acme/omaphoto"].repo.Stars = 99
 	stats, _ = ix.Run(ctx, Options{})
 	if stats.Refreshed != 1 || stats.Unchanged != 1 {
 		t.Errorf("estrelas: %+v", stats)
 	}
 
-	// Repositório sumiu: removido; na execução seguinte, só ignorado.
+	// The repository disappeared: removed; on the next run, only skipped.
 	delete(gh.repos, "acme/omalib")
 	stats, _ = ix.Run(ctx, Options{})
 	if stats.Removed != 1 || stats.Skipped != 0 {
-		t.Errorf("removido: %+v", stats)
+		t.Errorf("removed: %+v", stats)
 	}
 	stats, _ = ix.Run(ctx, Options{})
 	if stats.Removed != 0 || stats.Skipped != 1 {
-		t.Errorf("ignorado: %+v", stats)
+		t.Errorf("skipped: %+v", stats)
 	}
 }
 
@@ -590,7 +590,7 @@ func TestNoReleaseSkipsReadmeAndTree(t *testing.T) {
 		t.Fatal(err)
 	}
 	if gh.n("readme") != 0 || gh.n("tree") != 0 {
-		t.Errorf("sem release não deveria buscar README/árvore: %v", gh.calls)
+		t.Errorf("without a release it should not fetch README/tree: %v", gh.calls)
 	}
 	d, err := st.GetApp(context.Background(), "acme/omalib")
 	if err != nil || d.Installable {
@@ -624,7 +624,7 @@ func TestRepoLinksAndListSeeds(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(names) != 2 || names[0] != "acme/omaphoto" || names[1] != "x/y" {
-		t.Errorf("sementes da lista = %v", names)
+		t.Errorf("seeds from the list = %v", names)
 	}
 }
 
@@ -639,19 +639,19 @@ func (f *fakeManifestGH) SearchManifests(ctx context.Context, max int) ([]string
 
 func TestDiscoverByManifest(t *testing.T) {
 	ix, gh, _ := setup(t)
-	ix.GH = &fakeManifestGH{fakeGH: gh, found: []string{"z/sem-topic", "acme/omaphoto"}}
+	ix.GH = &fakeManifestGH{fakeGH: gh, found: []string{"z/no-topic", "acme/omaphoto"}}
 	got, err := ix.Discover(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 3 || got[0] != "z/sem-topic" {
+	if len(got) != 3 || got[0] != "z/no-topic" {
 		t.Errorf("descoberta = %v", got)
 	}
 }
 
-// Um repo descoberto com outra capitalização (ou renomeado) resolve para o
-// nome gravado; se o registro for de uma versão antiga, precisa ser
-// reprocessado mesmo assim.
+// A repo discovered with different capitalization (or renamed) resolves to the
+// stored name; if the record is from an older version, it must be
+// reprocessed anyway.
 func TestIndexVersionAppliesAfterNameResolution(t *testing.T) {
 	for _, batched := range []bool{false, true} {
 		ix, gh, st := setup(t)
@@ -664,7 +664,7 @@ func TestIndexVersionAppliesAfterNameResolution(t *testing.T) {
 		d.Repo.IndexVersion = Version - 1
 		st.SaveIndexed(ctx, d.Repo, d.App, d.Assets)
 
-		// A descoberta devolve o nome com outra grafia; a API responde o canônico.
+		// Discovery returns the name spelled differently; the API answers the canonical one.
 		gh.repos["ACME/OmaPhoto"] = gh.repos["acme/omaphoto"]
 		gh.search = []string{"ACME/OmaPhoto"}
 		stats, err := ix.Run(ctx, Options{})
@@ -676,7 +676,7 @@ func TestIndexVersionAppliesAfterNameResolution(t *testing.T) {
 		}
 		state, _ := st.RepoState(ctx, "acme/omaphoto")
 		if state.IndexVersion != Version {
-			t.Errorf("batched=%v: versão = %d", batched, state.IndexVersion)
+			t.Errorf("batched=%v: version = %d", batched, state.IndexVersion)
 		}
 	}
 }
@@ -687,16 +687,16 @@ func TestManifestOverride(t *testing.T) {
 		if batched {
 			ix.GH = &fakeBatchGH{fakeGH: gh}
 		}
-		gh.repos["acme/omaphoto"].noToml = true // ainda não publicado
+		gh.repos["acme/omaphoto"].noToml = true // not published yet
 		_, err := ix.Run(context.Background(), Options{
 			Only:             []string{"acme/omaphoto"},
-			ManifestOverride: map[string]string{"ACME/omaphoto": `name = "Prévia"`},
+			ManifestOverride: map[string]string{"ACME/omaphoto": `name = "Preview"`},
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 		d, err := st.GetApp(context.Background(), "acme/omaphoto")
-		if err != nil || d.Name != "Prévia" {
+		if err != nil || d.Name != "Preview" {
 			t.Errorf("batched=%v: %+v %v", batched, d, err)
 		}
 	}

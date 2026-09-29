@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Formatos de asset suportados pelo instalador.
+// Asset formats supported by the installer.
 const (
 	FormatBinary   = "binary"
 	FormatTarGz    = "tar.gz"
@@ -15,39 +15,39 @@ const (
 	FormatTarZst   = "tar.zst"
 	FormatZip      = "zip"
 	FormatAppImage = "appimage"
-	FormatPkg      = "pkg.tar.zst" // pacote do Arch: extraímos só o conteúdo de usr/
+	FormatPkg      = "pkg.tar.zst" // Arch package: only the usr/ content is extracted
 )
 
-// Arquiteturas normalizadas (nomes do GOARCH).
+// Normalized architectures (GOARCH names).
 const (
 	ArchAMD64 = "amd64"
 	ArchARM64 = "arm64"
 )
 
-// AssetInfo é a classificação de um asset de release.
+// AssetInfo is the classification of a release asset.
 type AssetInfo struct {
-	Format string // "" = não instalável
-	Arch   string // "" = não informado no nome
-	// Checksum é true para arquivos de checksum (.sha256, checksums.txt...).
+	Format string // "" = not installable
+	Arch   string // "" = not stated in the name
+	// Checksum is true for checksum files (.sha256, checksums.txt...).
 	Checksum bool
 }
 
 var (
 	reAMD64 = regexp.MustCompile(`(?i)(^|[^a-z0-9])(x86[_-]64|amd64|x64|linux64)([^a-z0-9]|$)`)
 	reARM64 = regexp.MustCompile(`(?i)(^|[^a-z0-9])(aarch64|arm64|armv8)([^a-z0-9]|$)`)
-	// Arquiteturas que não suportamos.
+	// Architectures we do not support.
 	reOtherArch = regexp.MustCompile(`(?i)(^|[^a-z0-9])(i[3-6]86|x86[_-]32|386|armv[5-7]l?|armhf|armel|arm32|riscv64|ppc64(le)?|s390x|mips[a-z0-9]*|loong(arch)?64)([^a-z0-9]|$)`)
-	// Sistemas que não são Linux.
+	// Operating systems other than Linux.
 	reOtherOS = regexp.MustCompile(`(?i)(^|[^a-z0-9])(darwin|macos|osx|apple|windows|win32|win64|freebsd|openbsd|netbsd|android|ios)([^a-z0-9]|$)`)
-	// Imagens de boot/VM e firmware: não são apps.
+	// Boot/VM images and firmware: not apps.
 	reBootImage = regexp.MustCompile(`(?i)(^|[^a-z0-9])(vmlinu[xz]|initrd|initramfs|bzimage|firmware|ovmf)([^a-z0-9]|$)`)
-	// Tarballs de código-fonte e afins.
+	// Source tarballs and the like.
 	reSource = regexp.MustCompile(`(?i)(^|[^a-z0-9])(source|sources|src|recipe|vendor|debug|dbgsym|headers|devel)([^a-z0-9]|$)`)
-	// Checksums publicados junto com a release.
+	// Checksums published with the release.
 	reChecksum = regexp.MustCompile(`(?i)(\.(sha256|sha512|sha256sum|sha512sum|md5)$|^(sha256sums|sha512sums|checksums?)(\.txt)?$|checksums?\.txt$)`)
 )
 
-// Extensões de arquivos que nunca são instaláveis.
+// File extensions that are never installable.
 var skipExt = []string{
 	".deb", ".rpm", ".dmg", ".pkg", ".exe", ".msi", ".apk", ".snap", ".flatpak", ".flatpakref",
 	".sig", ".asc", ".pem", ".crt", ".sbom", ".spdx", ".json", ".yml", ".yaml", ".txt", ".md",
@@ -55,7 +55,7 @@ var skipExt = []string{
 	".intoto.jsonl", ".bundle", ".zsync", ".iso", ".img", ".qcow2", ".vhd", ".vhdx", ".vmdk", ".efi",
 }
 
-// ClassifyAsset identifica formato e arquitetura de um asset pelo nome.
+// ClassifyAsset identifies an asset's format and architecture from its name.
 func ClassifyAsset(name string) AssetInfo {
 	lower := strings.ToLower(name)
 	if reChecksum.MatchString(lower) {
@@ -85,7 +85,7 @@ func ClassifyAsset(name string) AssetInfo {
 	case strings.HasSuffix(lower, ".tar.zst"):
 		info.Format = FormatTarZst
 	case strings.HasSuffix(lower, ".zip"):
-		// Zips sem arquitetura nem "linux" no nome costumam ser de Windows.
+		// Zips without an architecture or "linux" in the name are usually for Windows.
 		if info.Arch == "" && !strings.Contains(lower, "linux") {
 			return AssetInfo{}
 		}
@@ -98,8 +98,8 @@ func ClassifyAsset(name string) AssetInfo {
 				return AssetInfo{}
 			}
 		}
-		// Binário puro: sem extensão reconhecida. Exigimos um indício de que é
-		// para Linux (arquitetura ou "linux" no nome) para não pegar lixo.
+		// Plain binary: no recognized extension. We require a hint that it is
+		// for Linux (architecture or "linux" in the name) to avoid picking up junk.
 		ext := path.Ext(lower)
 		if ext != "" && !isVersionLike(ext) && !strings.Contains(ext, "linux") && info.Arch == "" {
 			return AssetInfo{}
@@ -112,9 +112,9 @@ func ClassifyAsset(name string) AssetInfo {
 	return info
 }
 
-// FormatOf identifica o formato só pela extensão, sem as regras de sistema
-// e arquitetura de ClassifyAsset (usado para assets declarados no
-// manifesto). Retorna "" para formatos que o instalador não suporta.
+// FormatOf identifies the format from the extension only, without ClassifyAsset's
+// OS and architecture rules (used for assets declared in the manifest).
+// Returns "" for formats the installer does not support.
 func FormatOf(name string) string {
 	lower := strings.ToLower(name)
 	switch {
@@ -143,22 +143,22 @@ func FormatOf(name string) string {
 
 var reVersionExt = regexp.MustCompile(`^\.[0-9]+(-.*)?$`)
 
-// isVersionLike diz se ext é na verdade parte de uma versão ("app-1.2.3").
+// isVersionLike reports whether ext is actually part of a version ("app-1.2.3").
 func isVersionLike(ext string) bool { return reVersionExt.MatchString(ext) }
 
-// Installable diz se o asset pode ser instalado nesta arquitetura.
-// Um asset sem arquitetura no nome é aceito como candidato genérico.
+// Installable reports whether the asset can be installed on this architecture.
+// An asset without an architecture in its name is accepted as a generic candidate.
 func (a AssetInfo) Installable(goarch string) bool {
 	return a.Format != "" && (a.Arch == "" || a.Arch == goarch)
 }
 
-// formatRank ordena os formatos por preferência na escolha do asset.
+// formatRank orders the formats by preference when choosing the asset.
 var formatRank = map[string]int{
 	FormatTarGz: 0, FormatTarXz: 0, FormatTarZst: 0, FormatTarBz2: 0, FormatZip: 1,
 	FormatBinary: 2, FormatAppImage: 3, FormatPkg: 4,
 }
 
-// FormatRank retorna a preferência do formato (menor é melhor).
+// FormatRank returns the format's preference (lower is better).
 func FormatRank(format string) int {
 	if r, ok := formatRank[format]; ok {
 		return r
