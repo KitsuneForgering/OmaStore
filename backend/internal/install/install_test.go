@@ -45,7 +45,7 @@ type env struct {
 	in    *Installer
 	st    *store.Store
 	paths xdg.Paths
-	files map[string][]byte // servidos pelo httptest
+	files map[string][]byte // served by httptest
 	url   string
 	hits  atomic.Int32
 }
@@ -92,7 +92,7 @@ func newEnv(t *testing.T) *env {
 	return e
 }
 
-// publish grava no store uma release de acme/omaphoto com o asset dado.
+// publish stores in the store a release of acme/omaphoto with the given asset.
 func (e *env) publish(t *testing.T, tag string, asset []byte, format string, digest bool) {
 	t.Helper()
 	name := "omaphoto-" + tag + "-x86_64-linux." + format
@@ -105,7 +105,7 @@ func (e *env) publish(t *testing.T, tag string, asset []byte, format string, dig
 	}
 	err := e.st.SaveIndexed(context.Background(),
 		store.Repo{FullName: "acme/omaphoto", LatestTag: tag, Topics: []string{"omarchy", "photo"}},
-		store.App{Name: "OmaPhoto", Summary: "Editor\nX-Evil=1 de fotos 100%", Category: "Graphics",
+		store.App{Name: "OmaPhoto", Summary: "Photo\nX-Evil=1 editor 100%", Category: "Graphics",
 			Installable: true, IconURL: e.url + "/icon.png"},
 		[]store.Asset{a})
 	if err != nil {
@@ -144,18 +144,18 @@ func TestInstallUpdateUninstall(t *testing.T) {
 	icon := filepath.Join(e.paths.Icons, "256x256", "apps", "omastore-acme-omaphoto.png")
 
 	if target, ok := launcherTarget(link); !ok || target != filepath.Join(versionDir, "omaphoto-1", "omaphoto") {
-		t.Errorf("lançador → %q (%v)", target, ok)
+		t.Errorf("launcher → %q (%v)", target, ok)
 	}
 	if inst.ExecPath != filepath.Join(versionDir, "omaphoto-1", "omaphoto") {
 		t.Errorf("exec = %s", inst.ExecPath)
 	}
 	if _, err := os.Stat(icon); err != nil {
-		t.Errorf("ícone: %v", err)
+		t.Errorf("icon: %v", err)
 	}
 	content, _ := os.ReadFile(desktop)
 	for _, want := range []string{
 		"Name=OmaPhoto\n",
-		"Comment=Editor X-Evil=1 de fotos 100%\n",
+		"Comment=Photo X-Evil=1 editor 100%\n",
 		"Exec=" + inst.ExecPath + "\n",
 		"Icon=omastore-acme-omaphoto\n",
 		"Categories=Graphics;\n",
@@ -163,47 +163,47 @@ func TestInstallUpdateUninstall(t *testing.T) {
 		"X-OmaStore-Version=v1.0.0\n",
 	} {
 		if !strings.Contains(string(content), want) {
-			t.Errorf(".desktop sem %q:\n%s", want, content)
+			t.Errorf(".desktop without %q:\n%s", want, content)
 		}
 	}
 	if strings.Contains(string(content), "\nX-Evil") {
-		t.Error("quebra de linha do README injetou chave no .desktop")
+		t.Error("README line break injected a key into the .desktop")
 	}
 	for _, f := range inst.Files {
 		if !within(e.paths.Home, f) {
-			t.Errorf("arquivo fora do HOME: %s", f)
+			t.Errorf("file outside HOME: %s", f)
 		}
 	}
-	// Nenhuma sobra de staging, backup ou temporário.
+	// No leftover staging, backup or temporary files.
 	leftovers, _ := filepath.Glob(filepath.Join(e.paths.AppsDir, "acme__omaphoto", ".staging-*"))
 	tmps, _ := filepath.Glob(filepath.Join(e.paths.CacheDir, "install-*"))
 	if len(leftovers)+len(tmps) != 0 {
 		t.Errorf("sobras: %v %v", leftovers, tmps)
 	}
 
-	// Update sem versão nova.
+	// Update without a new version.
 	if _, err := e.in.Update(ctx, "acme/omaphoto", nil); !errors.Is(err, ErrUpToDate) {
-		t.Errorf("update sem mudança: %v", err)
+		t.Errorf("update without changes: %v", err)
 	}
 
-	// Update para v2: troca o link e remove a versão antiga.
+	// Update to v2: swaps the launcher and removes the old version.
 	e.publish(t, "v2.0.0", appTarGz(t, "2"), index.FormatTarGz, true)
 	inst2, err := e.in.Update(ctx, "acme/omaphoto", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if inst2.Version != "v2.0.0" {
-		t.Errorf("versão = %s", inst2.Version)
+		t.Errorf("version = %s", inst2.Version)
 	}
 	if _, err := os.Stat(versionDir); !os.IsNotExist(err) {
-		t.Error("versão antiga não foi removida")
+		t.Error("old version was not removed")
 	}
 	if target, _ := launcherTarget(link); !strings.Contains(target, "/v2.0.0/") {
-		t.Errorf("lançador não aponta para a v2: %s", target)
+		t.Errorf("launcher does not point to v2: %s", target)
 	}
 
-	// Desinstalação: some tudo que foi registrado, e só isso.
-	keep := filepath.Join(e.paths.BinDir, "outro-programa")
+	// Uninstall: everything registered goes away, and only that.
+	keep := filepath.Join(e.paths.BinDir, "other-program")
 	os.WriteFile(keep, []byte("x"), 0o755)
 	if err := e.in.Uninstall(ctx, "acme/omaphoto"); err != nil {
 		t.Fatal(err)
@@ -214,13 +214,13 @@ func TestInstallUpdateUninstall(t *testing.T) {
 		}
 	}
 	if _, err := os.Stat(keep); err != nil {
-		t.Error("desinstalação removeu arquivo alheio")
+		t.Error("uninstall removed a foreign file")
 	}
 	if _, err := e.st.GetInstall(ctx, "acme/omaphoto"); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("registro continua: %v", err)
 	}
 	if err := e.in.Uninstall(ctx, "acme/omaphoto"); !errors.Is(err, ErrNotInstalled) {
-		t.Errorf("segunda desinstalação: %v", err)
+		t.Errorf("second uninstall: %v", err)
 	}
 }
 
@@ -250,7 +250,7 @@ func TestInstallChecksumFile(t *testing.T) {
 	a.ChecksumURL = e.url + "/checksums.txt"
 	e.st.SaveIndexed(ctx, d.Repo, d.App, []store.Asset{a})
 
-	e.files["/checksums.txt"] = []byte(sha([]byte("outro")) + "  outro.tar.gz\n" + sha(asset) + " *" + a.Name + "\n")
+	e.files["/checksums.txt"] = []byte(sha([]byte("other")) + "  other.tar.gz\n" + sha(asset) + " *" + a.Name + "\n")
 	if _, err := e.in.Install(ctx, "acme/omaphoto", nil); err != nil {
 		t.Fatalf("checksum certo: %v", err)
 	}
@@ -274,12 +274,12 @@ func assertClean(t *testing.T, e *env) {
 				return nil
 			})
 			if len(names) > 0 {
-				t.Errorf("sobrou em %s: %v", dir, names)
+				t.Errorf("leftover in %s: %v", dir, names)
 			}
 		}
 	}
 	if matches, _ := filepath.Glob(filepath.Join(e.paths.AppsDir, "*", "*")); len(matches) > 0 {
-		t.Errorf("sobrou em apps: %v", matches)
+		t.Errorf("leftover in apps: %v", matches)
 	}
 }
 
@@ -287,8 +287,8 @@ func TestInstallRollbackOnConflict(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	e.publish(t, "v1", appTarGz(t, "1"), index.FormatTarGz, true)
-	// Um .desktop de terceiros com o mesmo nome: a instalação precisa falhar
-	// sem deixar nada para trás e sem tocar no arquivo existente.
+	// A third-party .desktop with the same name: the installation must fail
+	// without leaving anything behind and without touching the existing file.
 	os.MkdirAll(e.paths.Applications, 0o755)
 	foreign := filepath.Join(e.paths.Applications, "omastore-acme-omaphoto.desktop")
 	os.WriteFile(foreign, []byte("alheio"), 0o644)
@@ -298,12 +298,12 @@ func TestInstallRollbackOnConflict(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 	if b, _ := os.ReadFile(foreign); string(b) != "alheio" {
-		t.Error("arquivo alheio foi alterado")
+		t.Error("foreign file was changed")
 	}
 	os.Remove(foreign)
 	assertClean(t, e)
 	if _, err := e.st.GetInstall(ctx, "acme/omaphoto"); !errors.Is(err, store.ErrNotFound) {
-		t.Error("instalação registrada apesar da falha")
+		t.Error("installation recorded despite the failure")
 	}
 }
 
@@ -317,20 +317,20 @@ func TestInstallRollbackRestoresPrevious(t *testing.T) {
 	}
 	before, _ := os.ReadFile(first.DesktopPath)
 
-	// v2 falha na última etapa: tudo deve voltar a apontar para a v1.
+	// v2 fails at the last step: everything must point to v1 again.
 	e.publish(t, "v2", appTarGz(t, "2"), index.FormatTarGz, true)
-	testHookBeforeSave = func() error { return errors.New("falha simulada") }
+	testHookBeforeSave = func() error { return errors.New("simulated failure") }
 	defer func() { testHookBeforeSave = nil }()
 	_, err = e.in.Install(ctx, "acme/omaphoto", nil)
 	if err == nil {
-		t.Fatal("esperava erro")
+		t.Fatal("expected an error")
 	}
 	after, _ := os.ReadFile(first.DesktopPath)
 	if !bytes.Equal(before, after) {
-		t.Error(".desktop não foi restaurado")
+		t.Error(".desktop was not restored")
 	}
 	if target, _ := launcherTarget(filepath.Join(e.paths.BinDir, "omaphoto")); target != first.ExecPath {
-		t.Errorf("lançador = %s", target)
+		t.Errorf("launcher = %s", target)
 	}
 	if _, err := os.Stat(first.ExecPath); err != nil {
 		t.Errorf("v1 sumiu: %v", err)
@@ -350,7 +350,7 @@ func TestInstallNotInstallable(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 	if _, err := e.in.Install(ctx, "acme/none", nil); !errors.Is(err, store.ErrNotFound) {
-		t.Errorf("inexistente: %v", err)
+		t.Errorf("missing: %v", err)
 	}
 }
 
@@ -379,13 +379,13 @@ func TestInstallBinaryAndPkg(t *testing.T) {
 	if !strings.HasSuffix(inst.ExecPath, "/v2/usr/bin/omaphoto") {
 		t.Errorf("exec = %s", inst.ExecPath)
 	}
-	// O ícone do pacote (SVG) tem precedência sobre o do repositório.
+	// The package icon (SVG) takes precedence over the repository's.
 	if _, err := os.Stat(filepath.Join(e.paths.Icons, "scalable", "apps", "omastore-acme-omaphoto.svg")); err != nil {
-		t.Errorf("ícone do pacote: %v", err)
+		t.Errorf("package icon: %v", err)
 	}
-	// O PNG da versão anterior foi limpo.
+	// The previous version's PNG was cleaned up.
 	if _, err := os.Stat(filepath.Join(e.paths.Icons, "256x256", "apps", "omastore-acme-omaphoto.png")); !os.IsNotExist(err) {
-		t.Error("ícone antigo não removido")
+		t.Error("old icon not removed")
 	}
 }
 
@@ -410,13 +410,13 @@ func TestInstallRefusesShadowingCommands(t *testing.T) {
 
 	e.publish(t, "v1", appTarGz(t, "1"), index.FormatTarGz, true)
 	_, err := e.in.Install(context.Background(), "acme/omaphoto", nil)
-	if !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "encoberto") {
+	if !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "shadowed") {
 		t.Fatalf("err = %v", err)
 	}
 	assertClean(t, e)
 
 	if err := e.in.checkCommandName("omastored"); !errors.Is(err, ErrConflict) {
-		t.Errorf("nome reservado: %v", err)
+		t.Errorf("reserved name: %v", err)
 	}
 }
 
@@ -443,10 +443,10 @@ func TestSelectAsset(t *testing.T) {
 		t.Errorf("arm64 → %s", a.Name)
 	}
 	if a, ok := SelectAsset(assets[1:2], "riscv64", nil); !ok || a.Name != "a-linux.tar.gz" {
-		t.Errorf("genérico → %s", a.Name)
+		t.Errorf("generic → %s", a.Name)
 	}
 	if _, ok := SelectAsset(nil, "amd64", nil); ok {
-		t.Error("vazio")
+		t.Error("empty")
 	}
 }
 
@@ -457,7 +457,7 @@ func TestSplitNameAndVersion(t *testing.T) {
 		}
 	}
 	if v := sanitizeVersion("../v1.0/x"); strings.Contains(v, "/") || strings.HasPrefix(v, ".") {
-		t.Errorf("versão = %q", v)
+		t.Errorf("version = %q", v)
 	}
 	if sanitizeVersion("..") != "latest" {
 		t.Error("..")
@@ -471,10 +471,10 @@ func TestSelectAssetPrefersManifest(t *testing.T) {
 	}
 	m, _, _ := manifest.Parse([]byte("[linux.x86_64]\nasset = \"A-{version}-x86_64.AppImage\"\n"), true)
 	if a, _ := SelectAsset(assets, "amd64", m); a.Name != "A-2-x86_64.AppImage" {
-		t.Errorf("manifesto ignorado: %s", a.Name)
+		t.Errorf("manifest ignored: %s", a.Name)
 	}
-	// Padrão que não casa com nada: cai na heurística.
-	m2, _, _ := manifest.Parse([]byte("[linux.x86_64]\nasset = \"nada-{version}\"\n"), true)
+	// A pattern that matches nothing falls back to the heuristic.
+	m2, _, _ := manifest.Parse([]byte("[linux.x86_64]\nasset = \"nothing-{version}\"\n"), true)
 	if a, _ := SelectAsset(assets, "amd64", m2); a.Name != "a-2-x86_64.tar.gz" {
 		t.Errorf("fallback: %s", a.Name)
 	}
@@ -483,8 +483,8 @@ func TestSelectAssetPrefersManifest(t *testing.T) {
 func TestInstallWithManifest(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	// Pacote com dois ELF; a heurística escolheria "omaphoto" pelo nome,
-	// mas o manifesto declara o outro.
+	// Package with two ELF files; the heuristic would pick "omaphoto" by name,
+	// but the manifest declares the other one.
 	pkg := tarGz(t, []entry{
 		{name: "app/omaphoto", body: string(elfBin) + "helper", mode: 0o755},
 		{name: "app/bin/real-app", body: string(elfBin) + "real", mode: 0o755},

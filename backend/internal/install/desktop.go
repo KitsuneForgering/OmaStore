@@ -5,10 +5,10 @@ import (
 	"unicode"
 )
 
-// escapeValue escapa um valor do tipo string/localestring da Desktop Entry
-// Specification: barra invertida vira "\\" e caracteres de controle (quebras
-// de linha inclusive) viram espaço, para que nenhum campo vindo do
-// repositório consiga injetar chaves novas no arquivo.
+// escapeValue escapes a Desktop Entry Specification string/localestring
+// value: a backslash becomes "\\" and control characters (including line
+// breaks) become spaces, so no field coming from the repository can inject
+// new keys into the file.
 func escapeValue(s string) string {
 	var b strings.Builder
 	for _, r := range s {
@@ -24,13 +24,13 @@ func escapeValue(s string) string {
 	return strings.TrimSpace(b.String())
 }
 
-// execReserved são os caracteres que obrigam a pôr um argumento de Exec
-// entre aspas.
+// execReserved are the characters that force quoting an Exec
+// argument.
 const execReserved = " \t\n\"'\\><~|&;$*?#()`"
 
-// quoteExecArg aplica as regras de aspas do campo Exec a um argumento. O
-// resultado ainda precisa passar por escapeValue (a especificação aplica o
-// escape de string antes das aspas na leitura).
+// quoteExecArg applies the Exec field quoting rules to an argument. The
+// result still has to go through escapeValue (the specification applies the
+// string escape before the quoting when reading).
 func quoteExecArg(arg string) string {
 	arg = strings.ReplaceAll(arg, "%", "%%")
 	if !strings.ContainsAny(arg, execReserved) {
@@ -48,19 +48,19 @@ func quoteExecArg(arg string) string {
 	return b.String()
 }
 
-// Desktop são os campos do arquivo .desktop gerado.
+// Desktop holds the fields of the generated .desktop file.
 type Desktop struct {
 	Name       string
 	Comment    string
-	Exec       string // caminho absoluto do executável
-	Icon       string // nome do ícone no tema ou caminho absoluto
+	Exec       string // absolute path of the executable
+	Icon       string // icon name in the theme or absolute path
 	Terminal   bool
 	Categories []string
 	Repo       string
 	Version    string
 }
 
-// Render gera o conteúdo do .desktop.
+// Render generates the .desktop content.
 func (d Desktop) Render() string {
 	var b strings.Builder
 	line := func(k, v string) {
@@ -104,7 +104,7 @@ func (d Desktop) Render() string {
 	return b.String()
 }
 
-// sanitizeListItem mantém só caracteres seguros num item de lista.
+// sanitizeListItem keeps only safe characters in a list item.
 func sanitizeListItem(s string) string {
 	return strings.Map(func(r rune) rune {
 		if r < 128 && (unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_') {
@@ -114,10 +114,10 @@ func sanitizeListItem(s string) string {
 	}, s)
 }
 
-// terminalTopics indicam um app de terminal (CLI/TUI).
+// terminalTopics mark a terminal app (CLI/TUI).
 var terminalTopics = map[string]bool{"cli": true, "tui": true, "terminal": true, "command-line": true, "console": true}
 
-// isTerminalApp decide o campo Terminal a partir dos topics.
+// isTerminalApp decides the Terminal field from the topics.
 func isTerminalApp(topics []string) bool {
 	for _, t := range topics {
 		if terminalTopics[strings.ToLower(t)] {

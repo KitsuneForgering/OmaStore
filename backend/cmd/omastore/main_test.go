@@ -103,7 +103,7 @@ func TestListAndShow(t *testing.T) {
 	if code, out, _ := runCLI("update"); code != 0 || !strings.Contains(out, "no apps installed") {
 		t.Errorf("update: %q", out)
 	}
-	if code, _, errOut := runCLI("uninstall", "acme/omaphoto"); code != 1 || !strings.Contains(errOut, "não está instalado") {
+	if code, _, errOut := runCLI("uninstall", "acme/omaphoto"); code != 1 || !strings.Contains(errOut, "not installed") {
 		t.Errorf("uninstall: %d %q", code, errOut)
 	}
 }
@@ -176,7 +176,7 @@ func TestUpdateCheck(t *testing.T) {
 
 	code, out, _ := runCLI("update", "--check", "--notify")
 	if code != 0 || !strings.Contains(out, "acme/omaphoto: v0 → v1") || len(sent) != 1 ||
-		!strings.Contains(sent[0], "1 atualização") {
+		!strings.Contains(sent[0], "1 update") {
 		t.Errorf("with an update: %d %q %v", code, out, sent)
 	}
 	// Same set: does not notify again.

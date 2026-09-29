@@ -32,19 +32,19 @@ func TestOnceDeduplicates(t *testing.T) {
 		}
 	}
 	if sent, _ := Once(ctx, f, state, "a@v3", "s", "b"); !sent {
-		t.Error("mudança não notificada")
+		t.Error("change not notified")
 	}
 	if len(f.sent) != 2 {
 		t.Errorf("enviados = %v", f.sent)
 	}
-	// Falha ao notificar não grava o estado: tenta de novo na próxima vez.
-	f.err = errors.New("sem servidor de notificação")
+	// A failed notification does not write the state: it tries again next time.
+	f.err = errors.New("no notification server")
 	if _, err := Once(ctx, f, state, "a@v4", "s", "b"); err == nil {
-		t.Error("esperava erro")
+		t.Error("expected an error")
 	}
 	f.err = nil
 	if sent, _ := Once(ctx, f, state, "a@v4", "s", "b"); !sent {
-		t.Error("deveria reenviar após falha")
+		t.Error("should resend after a failure")
 	}
 }
 
@@ -56,9 +56,9 @@ func TestUpdatesMessage(t *testing.T) {
 	key, summary, body := UpdatesMessage(ups)
 	key2, _, _ := UpdatesMessage([]Update{ups[1], ups[0]})
 	if key != key2 || key != "a/one@1.1\nb/two@v2" {
-		t.Errorf("chave instável: %q %q", key, key2)
+		t.Errorf("unstable key: %q %q", key, key2)
 	}
-	if summary != "OmaStore: 2 atualizações disponíveis" || !strings.HasPrefix(body, "One: 1.0 → 1.1") {
+	if summary != "OmaStore: 2 updates available" || !strings.HasPrefix(body, "One: 1.0 → 1.1") {
 		t.Errorf("%q / %q", summary, body)
 	}
 	var many []Update
@@ -67,7 +67,7 @@ func TestUpdatesMessage(t *testing.T) {
 	}
 	_, s1, b := UpdatesMessage(many[:1])
 	_, _, b8 := UpdatesMessage(many)
-	if s1 != "OmaStore: 1 atualização disponível" || strings.Count(b8, "\n") != 5 || !strings.Contains(b8, "mais 3") || b == "" {
+	if s1 != "OmaStore: 1 update available" || strings.Count(b8, "\n") != 5 || !strings.Contains(b8, "3 more") || b == "" {
 		t.Errorf("s1=%q b8=%q", s1, b8)
 	}
 }

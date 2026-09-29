@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"image"
 	"image/draw"
-	_ "image/jpeg" // ícones em JPEG vindos do README
+	_ "image/jpeg" // JPEG icons coming from the README
 	"image/png"
 	"os"
 	"path/filepath"
@@ -14,10 +14,10 @@ import (
 	xdraw "golang.org/x/image/draw"
 )
 
-// iconSizes são os tamanhos do tema hicolor.
+// iconSizes are the hicolor theme sizes.
 var iconSizes = []int{16, 22, 24, 32, 48, 64, 96, 128, 192, 256, 512}
 
-// looksLikeSVG confere, sem interpretar o arquivo, que ele é um SVG.
+// looksLikeSVG checks, without interpreting the file, that it is an SVG.
 func looksLikeSVG(b []byte) bool {
 	head := b
 	if len(head) > 1024 {
@@ -27,7 +27,7 @@ func looksLikeSVG(b []byte) bool {
 	return strings.Contains(s, "<svg") || (strings.HasPrefix(strings.TrimSpace(s), "<?xml") && bytes.Contains(bytes.ToLower(b), []byte("<svg")))
 }
 
-// iconSize escolhe o maior tamanho hicolor que não exige ampliar a imagem.
+// iconSize picks the largest hicolor size that does not require upscaling.
 func iconSize(w, h int) int {
 	m := max(w, h)
 	best := iconSizes[0]
@@ -39,27 +39,27 @@ func iconSize(w, h int) int {
 	return best
 }
 
-// prepareIcon valida os bytes de um ícone e devolve o conteúdo final, a
-// extensão e o subdiretório hicolor ("scalable" ou "NxN"). Imagens raster
-// são normalizadas para PNG quadrado num tamanho padrão.
+// prepareIcon validates an icon's bytes and returns the final content, the
+// extension and the hicolor subdirectory ("scalable" or "NxN"). Raster
+// images are normalized to a square PNG at a standard size.
 func prepareIcon(data []byte) (out []byte, ext, sizeDir string, err error) {
 	if looksLikeSVG(data) {
 		return data, ".svg", "scalable", nil
 	}
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
-		return nil, "", "", fmt.Errorf("ícone inválido: %w", err)
+		return nil, "", "", fmt.Errorf("invalid icon: %w", err)
 	}
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
 	if w < 16 || h < 16 {
-		return nil, "", "", fmt.Errorf("ícone pequeno demais (%dx%d)", w, h)
+		return nil, "", "", fmt.Errorf("icon too small (%dx%d)", w, h)
 	}
 	size := iconSize(w, h)
 	if w == size && h == size && bytes.HasPrefix(data, []byte("\x89PNG")) {
 		return data, ".png", fmt.Sprintf("%dx%d", size, size), nil
 	}
-	// Escala mantendo a proporção e centraliza numa tela quadrada transparente.
+	// Scale keeping the aspect ratio and center it on a transparent square canvas.
 	dst := image.NewNRGBA(image.Rect(0, 0, size, size))
 	sw, sh := size, size
 	if w > h {
@@ -76,7 +76,7 @@ func prepareIcon(data []byte) (out []byte, ext, sizeDir string, err error) {
 	return buf.Bytes(), ".png", fmt.Sprintf("%dx%d", size, size), nil
 }
 
-// writeIcon grava o ícone no tema hicolor do usuário e retorna o caminho.
+// writeIcon writes the icon to the user's hicolor theme and returns its path.
 func (in *Installer) writeIcon(t *tx, name string, data []byte) (string, error) {
 	out, ext, sizeDir, err := prepareIcon(data)
 	if err != nil {

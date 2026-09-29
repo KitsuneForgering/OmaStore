@@ -106,7 +106,7 @@ func TestExtractTarGz(t *testing.T) {
 	dest := filepath.Join(t.TempDir(), "out")
 	arc := writeTemp(t, tarGz(t, []entry{
 		{name: "app-1.0/", typ: tar.TypeDir, mode: 0o755},
-		{name: "app-1.0/app", body: string(elfBin), mode: 0o4755}, // setuid deve sumir
+		{name: "app-1.0/app", body: string(elfBin), mode: 0o4755}, // setuid must go away
 		{name: "app-1.0/README", body: "hi"},
 		{name: "app-1.0/lib/libx.so.1", body: string(elfBin), mode: 0o755},
 		{name: "app-1.0/lib/libx.so", typ: tar.TypeSymlink, link: "libx.so.1"},
@@ -127,10 +127,10 @@ func TestExtractTarGz(t *testing.T) {
 		t.Errorf("symlink interno = %q", target)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dest, "app-1.0/app-copy")); !bytes.Equal(b, elfBin) {
-		t.Error("hardlink não copiado")
+		t.Error("hardlink not copied")
 	}
 	if _, err := os.Lstat(filepath.Join(dest, "app-1.0/fifo")); !os.IsNotExist(err) {
-		t.Error("fifo não deveria ser criado")
+		t.Error("fifo should not be created")
 	}
 	exe, err := FindExecutable(dest, "app")
 	if err != nil || exe != filepath.Join(dest, "app-1.0/app") {
@@ -140,14 +140,14 @@ func TestExtractTarGz(t *testing.T) {
 
 func TestExtractRejectsUnsafe(t *testing.T) {
 	cases := map[string][]entry{
-		"zip slip ..":         {{name: "../evil", body: "x"}},
-		"zip slip aninhado":   {{name: "a/../../evil", body: "x"}},
-		"caminho absoluto":    {{name: "/etc/evil", body: "x"}},
-		"symlink absoluto":    {{name: "link", typ: tar.TypeSymlink, link: "/etc/passwd"}},
-		"symlink escapa":      {{name: "a/link", typ: tar.TypeSymlink, link: "../../x"}},
-		"escrita via symlink": {{name: "d", typ: tar.TypeSymlink, link: "."}, {name: "d/x", body: "x"}},
-		"hardlink para fora":  {{name: "h", typ: tar.TypeLink, link: "../../etc/passwd"}},
-		"barra invertida ..":  {{name: `..\evil`, body: "x"}},
+		"zip slip ..":       {{name: "../evil", body: "x"}},
+		"nested zip slip":   {{name: "a/../../evil", body: "x"}},
+		"absolute path":     {{name: "/etc/evil", body: "x"}},
+		"absolute symlink":  {{name: "link", typ: tar.TypeSymlink, link: "/etc/passwd"}},
+		"escaping symlink":  {{name: "a/link", typ: tar.TypeSymlink, link: "../../x"}},
+		"write via symlink": {{name: "d", typ: tar.TypeSymlink, link: "."}, {name: "d/x", body: "x"}},
+		"hardlink outside":  {{name: "h", typ: tar.TypeLink, link: "../../etc/passwd"}},
+		"backslash ..":      {{name: `..\evil`, body: "x"}},
 	}
 	for name, entries := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -158,7 +158,7 @@ func TestExtractRejectsUnsafe(t *testing.T) {
 				t.Errorf("err = %v, want ErrUnsafePath", err)
 			}
 			if _, err := os.Stat(filepath.Join(root, "evil")); err == nil {
-				t.Error("arquivo escapou do destino")
+				t.Error("file escaped the destination")
 			}
 		})
 	}
@@ -174,13 +174,13 @@ func TestExtractZip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dest, "bin/tool")); !bytes.Equal(b, elfBin) {
-		t.Error("conteúdo errado")
+		t.Error("wrong content")
 	}
 
 	for name, entries := range map[string][]entry{
 		"zip slip":         {{name: "../../evil", body: "x"}},
-		"symlink escapa":   {{name: "l", link: "../../../etc/passwd"}},
-		"symlink absoluto": {{name: "l", link: "/etc/passwd"}},
+		"escaping symlink": {{name: "l", link: "../../../etc/passwd"}},
+		"absolute symlink": {{name: "l", link: "/etc/passwd"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := Extract(writeTemp(t, zipBytes(t, entries)), index.FormatZip, t.TempDir(), "")
@@ -205,7 +205,7 @@ func TestExtractPkgOnlyUsr(t *testing.T) {
 	}
 	for _, gone := range []string{".PKGINFO", ".INSTALL", "etc"} {
 		if _, err := os.Stat(filepath.Join(dest, gone)); err == nil {
-			t.Errorf("%s não deveria ser extraído", gone)
+			t.Errorf("%s should not be extracted", gone)
 		}
 	}
 	exe, err := FindExecutable(dest, "rawmakase")
@@ -224,7 +224,7 @@ func TestExtractBinary(t *testing.T) {
 		t.Errorf("modo = %v", st.Mode())
 	}
 	if err := Extract(writeTemp(t, elfBin), index.FormatBinary, dest, "../x"); !errors.Is(err, ErrUnsafePath) {
-		t.Errorf("nome malicioso: %v", err)
+		t.Errorf("malicious name: %v", err)
 	}
 }
 
@@ -242,27 +242,27 @@ func TestFindExecutable(t *testing.T) {
 		}
 		return dir
 	}
-	t.Run("prefere nome do repo", func(t *testing.T) {
+	t.Run("prefers the repo name", func(t *testing.T) {
 		dir := mk(t, map[string][]byte{"helper": elfBin, "bin/OmaPhoto": elfBin, "lib/omaphoto.so": elfBin}, nil)
 		exe, _ := FindExecutable(dir, "omaphoto")
 		if filepath.Base(exe) != "OmaPhoto" {
 			t.Errorf("exe = %s", exe)
 		}
 	})
-	t.Run("ELF sem bit x (zip do Windows)", func(t *testing.T) {
+	t.Run("ELF without the x bit (Windows zip)", func(t *testing.T) {
 		dir := mk(t, map[string][]byte{"tool": elfBin, "README.md": []byte("x")}, map[string]fs.FileMode{"tool": 0o644})
 		exe, err := FindExecutable(dir, "other")
 		if err != nil || filepath.Base(exe) != "tool" {
 			t.Errorf("exe=%s err=%v", exe, err)
 		}
 	})
-	t.Run("script sem bit x não conta", func(t *testing.T) {
+	t.Run("script without the x bit does not count", func(t *testing.T) {
 		dir := mk(t, map[string][]byte{"run.sh": []byte("#!/bin/sh\n")}, map[string]fs.FileMode{"run.sh": 0o644})
 		if _, err := FindExecutable(dir, "x"); !errors.Is(err, ErrNoExecutable) {
 			t.Errorf("err = %v", err)
 		}
 	})
-	t.Run("nada executável", func(t *testing.T) {
+	t.Run("nothing executable", func(t *testing.T) {
 		dir := mk(t, map[string][]byte{"LICENSE": []byte("MIT")}, nil)
 		if _, err := FindExecutable(dir, "x"); !errors.Is(err, ErrNoExecutable) {
 			t.Errorf("err = %v", err)

@@ -11,10 +11,10 @@ import (
 	"strings"
 )
 
-// ErrNoExecutable indica que nada instalável como programa foi encontrado.
-var ErrNoExecutable = errors.New("nenhum executável encontrado no pacote")
+// ErrNoExecutable means nothing installable as a program was found.
+var ErrNoExecutable = errors.New("no executable found in the package")
 
-// fileKind lê só o cabeçalho do arquivo (nunca o executa).
+// fileKind reads only the file header (it never runs the file).
 func fileKind(p string) (elf, script bool) {
 	f, err := os.Open(p)
 	if err != nil {
@@ -36,14 +36,14 @@ func normalize(s string) string {
 	}, strings.ToLower(s))
 }
 
-// isLibrary descarta bibliotecas compartilhadas, que também são ELF.
+// isLibrary discards shared libraries, which are ELF too.
 func isLibrary(base string) bool {
 	return strings.HasSuffix(base, ".so") || strings.Contains(base, ".so.")
 }
 
-// FindExecutable escolhe o executável principal em dir: prefere o nome do
-// repositório, depois bin/ e usr/bin/, depois ELF sobre scripts. Retorna o
-// caminho absoluto.
+// FindExecutable picks the main executable in dir: it prefers the repository
+// name, then bin/ and usr/bin/, then ELF over scripts. Returns the absolute
+// path.
 func FindExecutable(dir, repoName string) (string, error) {
 	repo := normalize(repoName)
 	best, bestScore := "", -1
@@ -68,7 +68,7 @@ func FindExecutable(dir, repoName string) (string, error) {
 		if !elf && !script {
 			return nil
 		}
-		// Scripts só contam se forem marcados executáveis.
+		// Scripts only count if they are marked executable.
 		if script && info.Mode().Perm()&0o111 == 0 {
 			return nil
 		}

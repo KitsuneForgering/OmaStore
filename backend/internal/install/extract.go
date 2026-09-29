@@ -20,26 +20,26 @@ import (
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/index"
 )
 
-// Limites de extração, contra bombas de descompressão.
+// Extraction limits, against decompression bombs.
 var (
 	maxExtractBytes int64 = 8 << 30
 	maxExtractFiles       = 100_000
 )
 
-// ErrUnsafePath indica uma entrada de arquivo que sairia do destino.
-var ErrUnsafePath = errors.New("caminho inseguro no arquivo")
+// ErrUnsafePath means an archive entry that would leave the destination.
+var ErrUnsafePath = errors.New("unsafe path in archive")
 
-// extractor escreve entradas dentro de dest, garantindo que nada saia dele.
+// extractor writes entries inside dest, making sure nothing leaves it.
 type extractor struct {
 	dest  string
 	bytes int64
 	files int
-	// filter, se definido, decide se uma entrada entra e com qual nome.
+	// filter, if set, decides whether an entry is extracted and under which name.
 	filter func(name string) (string, bool)
 }
 
-// safeJoin resolve name dentro de dest e rejeita caminhos absolutos ou que
-// escapem com "..". Também recusa atravessar symlinks já extraídos.
+// safeJoin resolves name inside dest and rejects absolute paths or paths
+// that escape with "..". It also refuses to traverse already-extracted symlinks.
 func (x *extractor) safeJoin(name string) (string, error) {
 	name = strings.ReplaceAll(name, `\`, "/")
 	if name == "" || path.IsAbs(name) || strings.HasPrefix(name, "/") {
@@ -53,8 +53,8 @@ func (x *extractor) safeJoin(name string) (string, error) {
 		return "", fmt.Errorf("%w: %q", ErrUnsafePath, name)
 	}
 	p := filepath.Join(x.dest, filepath.FromSlash(clean))
-	// Nenhum diretório pai (dentro de dest) pode ser um symlink: senão uma
-	// entrada "link/arquivo" escreveria através dele.
+	// No parent directory (inside dest) may be a symlink: otherwise an
+	// entry "link/file" would write through it.
 	rel := filepath.Dir(filepath.FromSlash(clean))
 	cur := x.dest
 	if rel != "." {
@@ -68,8 +68,8 @@ func (x *extractor) safeJoin(name string) (string, error) {
 	return p, nil
 }
 
-// linkInside diz se um symlink em linkPath apontando para target continua
-// dentro de dest. Alvos absolutos nunca são aceitos.
+// linkInside reports whether a symlink at linkPath pointing to target stays
+// inside dest. Absolute targets are never accepted.
 func (x *extractor) linkInside(linkPath, target string) bool {
 	if target == "" || filepath.IsAbs(target) || strings.HasPrefix(target, "/") {
 		return false
@@ -83,15 +83,15 @@ func (x *extractor) account(n int64) error {
 	x.files++
 	x.bytes += n
 	if x.files > maxExtractFiles {
-		return fmt.Errorf("arquivo com entradas demais (> %d)", maxExtractFiles)
+		return fmt.Errorf("archive with too many entries (> %d)", maxExtractFiles)
 	}
 	if x.bytes > maxExtractBytes {
-		return fmt.Errorf("conteúdo extraído grande demais (> %d bytes)", maxExtractBytes)
+		return fmt.Errorf("extracted content too large (> %d bytes)", maxExtractBytes)
 	}
 	return nil
 }
 
-// writeFile copia r para p com o modo dado, sem bits setuid/setgid/sticky.
+// writeFile copies r to p with the given mode, without setuid/setgid/sticky bits.
 func (x *extractor) writeFile(p string, r io.Reader, mode fs.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
@@ -100,7 +100,7 @@ func (x *extractor) writeFile(p string, r io.Reader, mode fs.FileMode) error {
 	if perm == 0 {
 		perm = 0o644
 	}
-	// O_EXCL: uma entrada duplicada ou um symlink pré-existente não é seguido.
+	// O_EXCL: a duplicate entry or a pre-existing symlink is not followed.
 	f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm|0o200)
 	if errors.Is(err, fs.ErrExist) {
 		if rmErr := os.Remove(p); rmErr != nil {
@@ -120,7 +120,7 @@ func (x *extractor) writeFile(p string, r io.Reader, mode fs.FileMode) error {
 		return err
 	}
 	if n > limit {
-		return fmt.Errorf("conteúdo extraído grande demais (> %d bytes)", maxExtractBytes)
+		return fmt.Errorf("extracted content too large (> %d bytes)", maxExtractBytes)
 	}
 	x.bytes += n
 	return nil
@@ -133,7 +133,7 @@ func (x *extractor) name(n string) (string, bool) {
 	return x.filter(n)
 }
 
-// extractTar extrai um tar (já descomprimido).
+// extractTar extracts a (already decompressed) tar.
 func (x *extractor) extractTar(r io.Reader) error {
 	tr := tar.NewReader(r)
 	for {
@@ -142,7 +142,7 @@ func (x *extractor) extractTar(r io.Reader) error {
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("ler tar: %w", err)
+			return fmt.Errorf("read tar: %w", err)
 		}
 		name, ok := x.name(h.Name)
 		if !ok {
@@ -165,11 +165,11 @@ func (x *extractor) extractTar(r io.Reader) error {
 			}
 		case tar.TypeReg, tar.TypeRegA:
 			if err := x.writeFile(p, tr, fs.FileMode(h.Mode)); err != nil {
-				return fmt.Errorf("extrair %s: %w", h.Name, err)
+				return fmt.Errorf("extract %s: %w", h.Name, err)
 			}
 		case tar.TypeSymlink:
 			if !x.linkInside(p, h.Linkname) {
-				return fmt.Errorf("%w: symlink %q → %q sai do destino", ErrUnsafePath, h.Name, h.Linkname)
+				return fmt.Errorf("%w: symlink %q → %q leaves the destination", ErrUnsafePath, h.Name, h.Linkname)
 			}
 			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 				return err
@@ -179,7 +179,7 @@ func (x *extractor) extractTar(r io.Reader) error {
 				return err
 			}
 		case tar.TypeLink:
-			// Hardlink: copiamos o conteúdo do alvo (já extraído e dentro de dest).
+			// Hardlink: copy the target's content (already extracted and inside dest).
 			tname, ok := x.name(h.Linkname)
 			if !ok {
 				continue
@@ -190,7 +190,7 @@ func (x *extractor) extractTar(r io.Reader) error {
 			}
 			st, err := os.Lstat(target)
 			if err != nil || !st.Mode().IsRegular() {
-				return fmt.Errorf("%w: hardlink %q para alvo inválido", ErrUnsafePath, h.Name)
+				return fmt.Errorf("%w: hardlink %q to an invalid target", ErrUnsafePath, h.Name)
 			}
 			src, err := os.Open(target)
 			if err != nil {
@@ -202,16 +202,16 @@ func (x *extractor) extractTar(r io.Reader) error {
 				return err
 			}
 		default:
-			// Dispositivos, FIFOs etc. são ignorados.
+			// Devices, FIFOs etc. are ignored.
 		}
 	}
 }
 
-// extractZip extrai um zip.
+// extractZip extracts a zip.
 func (x *extractor) extractZip(zipPath string) error {
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
-		return fmt.Errorf("abrir zip: %w", err)
+		return fmt.Errorf("open zip: %w", err)
 	}
 	defer zr.Close()
 	for _, f := range zr.File {
@@ -247,7 +247,7 @@ func (x *extractor) extractZip(zipPath string) error {
 			}
 			target := string(b)
 			if !x.linkInside(p, target) {
-				return fmt.Errorf("%w: symlink %q → %q sai do destino", ErrUnsafePath, f.Name, target)
+				return fmt.Errorf("%w: symlink %q → %q leaves the destination", ErrUnsafePath, f.Name, target)
 			}
 			os.MkdirAll(filepath.Dir(p), 0o755)
 			os.Remove(p)
@@ -262,16 +262,16 @@ func (x *extractor) extractZip(zipPath string) error {
 			err = x.writeFile(p, rc, mode)
 			rc.Close()
 			if err != nil {
-				return fmt.Errorf("extrair %s: %w", f.Name, err)
+				return fmt.Errorf("extract %s: %w", f.Name, err)
 			}
 		}
 	}
 	return nil
 }
 
-// pkgFilter aceita só o conteúdo de usr/ de um pacote do Arch. Metadados e
-// scripts de instalação (.PKGINFO, .INSTALL, .MTREE...) são descartados:
-// nada do pacote é executado.
+// pkgFilter accepts only the usr/ content of an Arch package. Metadata and
+// install scripts (.PKGINFO, .INSTALL, .MTREE...) are discarded: nothing
+// from the package is ever run.
 func pkgFilter(name string) (string, bool) {
 	name = strings.TrimPrefix(name, "./")
 	if !strings.HasPrefix(name, "usr/") {
@@ -280,8 +280,8 @@ func pkgFilter(name string) (string, bool) {
 	return name, true
 }
 
-// Extract extrai archive (no formato dado) para dest. Para FormatBinary e
-// FormatAppImage, copia o arquivo como executável com o nome binName.
+// Extract extracts archive (in the given format) into dest. For FormatBinary and
+// FormatAppImage, it copies the file as an executable named binName.
 func Extract(archive, format, dest, binName string) error {
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return err
@@ -298,7 +298,7 @@ func Extract(archive, format, dest, binName string) error {
 		defer f.Close()
 		p, err := x.safeJoin(binName)
 		if err != nil || p == "" {
-			return fmt.Errorf("%w: nome de binário %q", ErrUnsafePath, binName)
+			return fmt.Errorf("%w: binary name %q", ErrUnsafePath, binName)
 		}
 		return x.writeFile(p, f, 0o755)
 	case index.FormatZip:
@@ -315,14 +315,14 @@ func Extract(archive, format, dest, binName string) error {
 	case index.FormatTarGz:
 		gz, err := gzip.NewReader(f)
 		if err != nil {
-			return fmt.Errorf("abrir gzip: %w", err)
+			return fmt.Errorf("open gzip: %w", err)
 		}
 		defer gz.Close()
 		r = gz
 	case index.FormatTarXz:
 		xr, err := xz.NewReader(f)
 		if err != nil {
-			return fmt.Errorf("abrir xz: %w", err)
+			return fmt.Errorf("open xz: %w", err)
 		}
 		r = xr
 	case index.FormatTarBz2:
@@ -330,7 +330,7 @@ func Extract(archive, format, dest, binName string) error {
 	case index.FormatTarZst, index.FormatPkg:
 		zr, err := zstd.NewReader(f)
 		if err != nil {
-			return fmt.Errorf("abrir zstd: %w", err)
+			return fmt.Errorf("open zstd: %w", err)
 		}
 		defer zr.Close()
 		r = zr
@@ -338,7 +338,7 @@ func Extract(archive, format, dest, binName string) error {
 			x.filter = pkgFilter
 		}
 	default:
-		return fmt.Errorf("formato não suportado: %q", format)
+		return fmt.Errorf("unsupported format: %q", format)
 	}
 	return x.extractTar(r)
 }

@@ -1,5 +1,5 @@
-// Package notify envia notificações desktop (org.freedesktop.Notifications)
-// e evita repetir o mesmo aviso.
+// Package notify sends desktop notifications (org.freedesktop.Notifications)
+// and avoids repeating the same notice.
 package notify
 
 import (
@@ -16,36 +16,36 @@ import (
 	"github.com/godbus/dbus/v5"
 )
 
-// Notifier mostra uma notificação ao usuário.
+// Notifier shows a notification to the user.
 type Notifier interface {
 	Notify(ctx context.Context, summary, body string) error
 }
 
-// DBus envia pela interface org.freedesktop.Notifications da sessão. Não
-// executa nenhum programa (nada de notify-send pelo PATH).
+// DBus sends through the session's org.freedesktop.Notifications interface.
+// It runs no program (no notify-send through PATH).
 type DBus struct {
 	AppName string
 	Icon    string
 }
 
-// Notify implementa Notifier.
+// Notify implements Notifier.
 func (d DBus) Notify(ctx context.Context, summary, body string) error {
 	conn, err := dbus.ConnectSessionBus(dbus.WithContext(ctx))
 	if err != nil {
-		return fmt.Errorf("conectar ao D-Bus da sessão: %w", err)
+		return fmt.Errorf("connect to the session D-Bus: %w", err)
 	}
 	defer conn.Close()
 	obj := conn.Object("org.freedesktop.Notifications", "/org/freedesktop/Notifications")
 	call := obj.CallWithContext(ctx, "org.freedesktop.Notifications.Notify", 0,
 		d.AppName, uint32(0), d.Icon, summary, body, []string{}, map[string]dbus.Variant{}, int32(-1))
 	if call.Err != nil {
-		return fmt.Errorf("enviar notificação: %w", call.Err)
+		return fmt.Errorf("send notification: %w", call.Err)
 	}
 	return nil
 }
 
-// Once envia a notificação só se key for diferente da última enviada,
-// guardada em stateFile. Retorna se enviou.
+// Once sends the notification only if key differs from the last one sent,
+// stored in stateFile. Returns whether it sent.
 func Once(ctx context.Context, n Notifier, stateFile, key, summary, body string) (bool, error) {
 	sum := sha256.Sum256([]byte(key))
 	h := hex.EncodeToString(sum[:])
@@ -63,13 +63,13 @@ func Once(ctx context.Context, n Notifier, stateFile, key, summary, body string)
 	return true, os.WriteFile(stateFile, []byte(h+"\n"), 0o644)
 }
 
-// Update é uma atualização disponível.
+// Update is an available update.
 type Update struct {
 	Repo, Name, From, To string
 }
 
-// UpdatesMessage monta a notificação e a chave de deduplicação (o conjunto
-// de repo@versão, em ordem estável).
+// UpdatesMessage builds the notification and the deduplication key (the set
+// of repo@version, in a stable order).
 func UpdatesMessage(updates []Update) (key, summary, body string) {
 	sorted := append([]Update(nil), updates...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Repo < sorted[j].Repo })
@@ -79,13 +79,13 @@ func UpdatesMessage(updates []Update) (key, summary, body string) {
 		lines = append(lines, fmt.Sprintf("%s: %s → %s", u.Name, u.From, u.To))
 	}
 	if len(sorted) == 1 {
-		summary = "OmaStore: 1 atualização disponível"
+		summary = "OmaStore: 1 update available"
 	} else {
-		summary = fmt.Sprintf("OmaStore: %d atualizações disponíveis", len(sorted))
+		summary = fmt.Sprintf("OmaStore: %d updates available", len(sorted))
 	}
 	const maxLines = 5
 	if len(lines) > maxLines {
-		lines = append(lines[:maxLines], fmt.Sprintf("… e mais %d", len(sorted)-maxLines))
+		lines = append(lines[:maxLines], fmt.Sprintf("… and %d more", len(sorted)-maxLines))
 	}
 	return strings.Join(keys, "\n"), summary, strings.Join(lines, "\n")
 }

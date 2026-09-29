@@ -8,8 +8,8 @@ import (
 	"os"
 )
 
-// tx registra o que uma instalação criou ou substituiu, para desfazer tudo
-// se alguma etapa falhar no meio.
+// tx records what an installation created or replaced, to undo everything
+// if any step fails halfway.
 type tx struct {
 	created []string
 	backups []backup
@@ -23,8 +23,8 @@ func randSuffix() string {
 	return hex.EncodeToString(b[:])
 }
 
-// prepare deve ser chamado antes de criar path. Se já existir algo lá, é
-// movido de lado (mesmo diretório, rename atômico) para poder ser restaurado.
+// prepare must be called before creating path. If something already exists
+// there, it is moved aside (same directory, atomic rename) so it can be restored.
 func (t *tx) prepare(path string) error {
 	if _, err := os.Lstat(path); err == nil {
 		saved := path + ".omastore-bak-" + randSuffix()
@@ -39,7 +39,7 @@ func (t *tx) prepare(path string) error {
 	return nil
 }
 
-// rollback remove o que foi criado e restaura o que foi substituído.
+// rollback removes what was created and restores what was replaced.
 func (t *tx) rollback() error {
 	var errs []error
 	for i := len(t.created) - 1; i >= 0; i-- {
@@ -57,7 +57,7 @@ func (t *tx) rollback() error {
 	return errors.Join(errs...)
 }
 
-// commit descarta as cópias de segurança.
+// commit discards the backup copies.
 func (t *tx) commit() error {
 	var errs []error
 	for _, b := range t.backups {

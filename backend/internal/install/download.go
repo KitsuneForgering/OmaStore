@@ -16,22 +16,22 @@ import (
 	"strings"
 )
 
-// Limites de download.
+// Download limits.
 var (
 	maxDownloadBytes int64 = 2 << 30
-	maxSmallBytes    int64 = 5 << 20 // checksums e ícones
+	maxSmallBytes    int64 = 5 << 20 // checksums and icons
 )
 
-// ErrChecksum indica que o arquivo baixado não bate com o checksum publicado.
-var ErrChecksum = errors.New("checksum não confere")
+// ErrChecksum means the downloaded file does not match the published checksum.
+var ErrChecksum = errors.New("checksum mismatch")
 
 func checkURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return fmt.Errorf("URL inválida %q: %w", raw, err)
+		return fmt.Errorf("invalid URL %q: %w", raw, err)
 	}
 	if u.Scheme != "https" {
-		return fmt.Errorf("URL %q não é https", raw)
+		return fmt.Errorf("URL %q is not https", raw)
 	}
 	return nil
 }
@@ -47,16 +47,16 @@ func (in *Installer) get(ctx context.Context, raw string) (*http.Response, error
 	req.Header.Set("User-Agent", "omastore")
 	resp, err := in.http().Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("baixar %s: %w", raw, err)
+		return nil, fmt.Errorf("download %s: %w", raw, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return nil, fmt.Errorf("baixar %s: HTTP %d", raw, resp.StatusCode)
+		return nil, fmt.Errorf("download %s: HTTP %d", raw, resp.StatusCode)
 	}
 	return resp, nil
 }
 
-// download grava raw em dst e retorna o sha256 e o sha512 do conteúdo.
+// download writes raw to dst and returns the sha256 and sha512 of the content.
 func (in *Installer) download(ctx context.Context, raw, dst string, progress func(done, total int64)) (sum256, sum512 string, err error) {
 	resp, err := in.get(ctx, raw)
 	if err != nil {
@@ -79,7 +79,7 @@ func (in *Installer) download(ctx context.Context, raw, dst string, progress fun
 		if n > 0 {
 			done += int64(n)
 			if done > maxDownloadBytes {
-				return "", "", fmt.Errorf("download maior que %d bytes", maxDownloadBytes)
+				return "", "", fmt.Errorf("download larger than %d bytes", maxDownloadBytes)
 			}
 			if _, err := w.Write(buf[:n]); err != nil {
 				return "", "", err
@@ -92,16 +92,16 @@ func (in *Installer) download(ctx context.Context, raw, dst string, progress fun
 			break
 		}
 		if rerr != nil {
-			return "", "", fmt.Errorf("baixar %s: %w", raw, rerr)
+			return "", "", fmt.Errorf("download %s: %w", raw, rerr)
 		}
 	}
 	if total > 0 && done != total {
-		return "", "", fmt.Errorf("download incompleto: %d de %d bytes", done, total)
+		return "", "", fmt.Errorf("incomplete download: %d of %d bytes", done, total)
 	}
 	return hex.EncodeToString(h256.Sum(nil)), hex.EncodeToString(h512.Sum(nil)), f.Close()
 }
 
-// fetchSmall baixa um arquivo pequeno (checksum, ícone) para a memória.
+// fetchSmall downloads a small file (checksum, icon) into memory.
 func (in *Installer) fetchSmall(ctx context.Context, raw string) ([]byte, error) {
 	resp, err := in.get(ctx, raw)
 	if err != nil {
@@ -113,7 +113,7 @@ func (in *Installer) fetchSmall(ctx context.Context, raw string) ([]byte, error)
 		return nil, err
 	}
 	if int64(len(b)) > maxSmallBytes {
-		return nil, fmt.Errorf("%s maior que %d bytes", raw, maxSmallBytes)
+		return nil, fmt.Errorf("%s larger than %d bytes", raw, maxSmallBytes)
 	}
 	return b, nil
 }
@@ -123,9 +123,9 @@ var (
 	reBSDLine = regexp.MustCompile(`^SHA(256|512) \((.+)\) = ([0-9a-fA-F]+)$`)
 )
 
-// ParseChecksums lê arquivos no formato do sha256sum ("hex  nome",
-// "hex *nome"), BSD ("SHA256 (nome) = hex") ou só "hex" (arquivo .sha256 de
-// um único asset). Retorna o hash (minúsculo) de assetName, ou "".
+// ParseChecksums reads files in sha256sum format ("hex  name",
+// "hex *name"), BSD format ("SHA256 (name) = hex") or just "hex" (a .sha256
+// file for a single asset). Returns the (lowercase) hash of assetName, or "".
 func ParseChecksums(data []byte, assetName string) string {
 	var lone []string
 	sc := bufio.NewScanner(strings.NewReader(string(data)))
@@ -167,8 +167,8 @@ func baseName(p string) string {
 	return p
 }
 
-// expected descobre o hash esperado de um asset: primeiro o digest da API,
-// depois o arquivo de checksum da release. Retorna "" se não houver nenhum.
+// expected finds an asset's expected hash: first the API digest, then the
+// release checksum file. Returns "" if there is none.
 func (in *Installer) expected(ctx context.Context, digest, checksumURL, assetName string) (string, error) {
 	if algo, hexsum, ok := strings.Cut(digest, ":"); ok && (algo == "sha256" || algo == "sha512") && reHex.MatchString(hexsum) {
 		return strings.ToLower(hexsum), nil
@@ -178,16 +178,16 @@ func (in *Installer) expected(ctx context.Context, digest, checksumURL, assetNam
 	}
 	data, err := in.fetchSmall(ctx, checksumURL)
 	if err != nil {
-		return "", fmt.Errorf("baixar checksum: %w", err)
+		return "", fmt.Errorf("download checksum: %w", err)
 	}
 	sum := ParseChecksums(data, assetName)
 	if sum == "" {
-		return "", fmt.Errorf("%w: %s não aparece em %s", ErrChecksum, assetName, checksumURL)
+		return "", fmt.Errorf("%w: %s does not appear in %s", ErrChecksum, assetName, checksumURL)
 	}
 	return sum, nil
 }
 
-// verify compara o hash esperado com o calculado no download.
+// verify compares the expected hash with the one computed while downloading.
 func verify(expected, sum256, sum512 string) error {
 	var got string
 	switch len(expected) {
@@ -196,10 +196,10 @@ func verify(expected, sum256, sum512 string) error {
 	case 128:
 		got = sum512
 	default:
-		return fmt.Errorf("%w: hash esperado inválido", ErrChecksum)
+		return fmt.Errorf("%w: invalid expected hash", ErrChecksum)
 	}
 	if got != expected {
-		return fmt.Errorf("%w: esperado %s, obtido %s", ErrChecksum, expected, got)
+		return fmt.Errorf("%w: expected %s, got %s", ErrChecksum, expected, got)
 	}
 	return nil
 }

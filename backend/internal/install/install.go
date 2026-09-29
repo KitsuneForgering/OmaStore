@@ -1,6 +1,6 @@
-// Package install baixa, verifica e instala o binário da última release de
-// um app no $HOME do usuário, gerando o .desktop e o ícone. Nada é executado
-// durante a instalação, nada é escrito fora do $HOME e não há sudo.
+// Package install downloads, verifies and installs the latest release binary
+// of an app into the user's $HOME, generating the .desktop file and the icon.
+// Nothing is run during installation, nothing is written outside $HOME and there is no sudo.
 package install
 
 import (
@@ -28,37 +28,37 @@ import (
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/xdg"
 )
 
-// Erros retornados pelo instalador.
+// Errors returned by the installer.
 var (
-	ErrNotInstallable = errors.New("app sem binário para esta arquitetura")
-	ErrNotInstalled   = errors.New("app não está instalado")
-	ErrUpToDate       = errors.New("app já está na versão mais recente")
-	ErrConflict       = errors.New("arquivo já existe e não pertence ao OmaStore")
-	ErrOutsideHome    = errors.New("caminho fora do $HOME")
+	ErrNotInstallable = errors.New("app has no binary for this architecture")
+	ErrNotInstalled   = errors.New("app is not installed")
+	ErrUpToDate       = errors.New("app is already at the latest version")
+	ErrConflict       = errors.New("file already exists and does not belong to OmaStore")
+	ErrOutsideHome    = errors.New("path outside $HOME")
 )
 
-// Installer instala e remove apps.
+// Installer installs and removes apps.
 type Installer struct {
 	Store *store.Store
 	Paths xdg.Paths
-	HTTP  *http.Client // default: cliente com timeout de conexão
-	// GOARCH decide o asset (default runtime.GOARCH).
+	HTTP  *http.Client // default: client with a connection timeout
+	// GOARCH decides the asset (default runtime.GOARCH).
 	GOARCH string
-	// Hooks roda update-desktop-database e gtk-update-icon-cache do sistema.
+	// Hooks runs the system's update-desktop-database and gtk-update-icon-cache.
 	Hooks bool
 	Log   *slog.Logger
 
 	locks sync.Map // full_name → *sync.Mutex
 }
 
-// Progress é o andamento de uma instalação.
+// Progress is an installation's progress.
 type Progress struct {
 	Stage string // download, verify, extract, integrate, done
 	Done  int64
 	Total int64
 }
 
-// Etapas de Progress.Stage.
+// Progress.Stage values.
 const (
 	StageDownload  = "download"
 	StageVerify    = "verify"
@@ -67,7 +67,7 @@ const (
 	StageDone      = "done"
 )
 
-// New valida que todos os destinos estão dentro do $HOME.
+// New validates that every destination is inside $HOME.
 func New(st *store.Store, p xdg.Paths) (*Installer, error) {
 	for _, d := range []string{p.AppsDir, p.BinDir, p.Applications, p.Icons, p.CacheDir} {
 		if !within(p.Home, d) {
@@ -109,7 +109,7 @@ func (in *Installer) lock(fullName string) func() {
 	return mu.Unlock
 }
 
-// within diz se p está dentro de root (ou é root).
+// within reports whether p is inside root (or is root).
 func within(root, p string) bool {
 	if root == "" || !filepath.IsAbs(p) {
 		return false
@@ -118,14 +118,14 @@ func within(root, p string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// reName valida owner e repo com as regras de nome do GitHub, para que não
-// possam virar componentes de caminho perigosos.
+// reName validates owner and repo with GitHub's naming rules, so they cannot
+// turn into dangerous path components.
 var reName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 
 func splitName(fullName string) (owner, repo string, err error) {
 	owner, repo, ok := strings.Cut(fullName, "/")
 	if !ok || !reName.MatchString(owner) || !reName.MatchString(repo) || repo == ".." || strings.Contains(repo, "..") {
-		return "", "", fmt.Errorf("nome de repositório inválido: %q", fullName)
+		return "", "", fmt.Errorf("invalid repository name: %q", fullName)
 	}
 	return owner, repo, nil
 }
@@ -141,14 +141,14 @@ func sanitizeVersion(tag string) string {
 	return v
 }
 
-// appID é o identificador usado em nomes de arquivos (.desktop, ícone).
+// appID is the identifier used in file names (.desktop, icon).
 func appID(owner, repo string) string {
 	return strings.ToLower("omastore-" + owner + "-" + repo)
 }
 
-// SelectAsset escolhe o asset para goarch: o declarado no manifesto (se
-// houver e existir na release), senão arquitetura exata antes de genérica e
-// depois o formato preferido.
+// SelectAsset picks the asset for goarch: the one declared in the manifest (if
+// any and present in the release), otherwise exact architecture before
+// generic and then the preferred format.
 func SelectAsset(assets []store.Asset, goarch string, m *manifest.Manifest) (store.Asset, bool) {
 	if t, ok := m.Target(goarch); ok && t.Asset != "" {
 		for _, a := range assets {
@@ -180,7 +180,7 @@ func SelectAsset(assets []store.Asset, goarch string, m *manifest.Manifest) (sto
 	return cands[0], true
 }
 
-// Install instala (ou reinstala/atualiza) a última release de fullName.
+// Install installs (or reinstalls/updates) the latest release of fullName.
 func (in *Installer) Install(ctx context.Context, fullName string, progress func(Progress)) (*store.Install, error) {
 	defer in.lock(fullName)()
 	report := func(p Progress) {
@@ -208,7 +208,7 @@ func (in *Installer) Install(ctx context.Context, fullName string, progress func
 		return nil, err
 	}
 
-	// 1. Download para um diretório temporário.
+	// 1. Download into a temporary directory.
 	if err := os.MkdirAll(in.Paths.CacheDir, 0o755); err != nil {
 		return nil, err
 	}
@@ -226,19 +226,19 @@ func (in *Installer) Install(ctx context.Context, fullName string, progress func
 		return nil, err
 	}
 
-	// 2. Verificação de checksum, quando a release publica um.
+	// 2. Checksum verification, when the release publishes one.
 	report(Progress{Stage: StageVerify})
 	want, err := in.expected(ctx, asset.Digest, asset.ChecksumURL, asset.Name)
 	if err != nil {
 		return nil, err
 	}
 	if want == "" {
-		in.log().Warn("release sem checksum; instalando sem verificação", "repo", fullName, "asset", asset.Name)
+		in.log().Warn("release without checksum; installing without verification", "repo", fullName, "asset", asset.Name)
 	} else if err := verify(want, sum256, sum512); err != nil {
 		return nil, fmt.Errorf("%s: %w", asset.Name, err)
 	}
 
-	// 3. Extração numa área de staging dentro do diretório do app.
+	// 3. Extraction into a staging area inside the app directory.
 	report(Progress{Stage: StageExtract})
 	appDir := filepath.Join(in.Paths.AppsDir, owner+"__"+repo)
 	if err := os.MkdirAll(appDir, 0o755); err != nil {
@@ -251,7 +251,7 @@ func (in *Installer) Install(ctx context.Context, fullName string, progress func
 		binName += ".AppImage"
 	}
 	if err := Extract(archive, asset.Format, staging, binName); err != nil {
-		return nil, fmt.Errorf("extrair %s: %w", asset.Name, err)
+		return nil, fmt.Errorf("extract %s: %w", asset.Name, err)
 	}
 	execAbs, err := in.findExec(staging, repo, asset.Format, asset.Tag, m)
 	if err != nil {
@@ -262,23 +262,23 @@ func (in *Installer) Install(ctx context.Context, fullName string, progress func
 		return nil, err
 	}
 
-	// 4. Integração: diretório da versão, link, ícone e .desktop. Tudo passa
-	// pelo tx para poder ser desfeito.
+	// 4. Integration: version directory, launcher, icon and .desktop. Everything
+	// goes through tx so it can be undone.
 	report(Progress{Stage: StageIntegrate})
 	t := &tx{}
 	inst, err := in.integrate(ctx, t, d, m, prev, owner, repo, staging, execRel)
 	if err != nil {
 		if rbErr := t.rollback(); rbErr != nil {
-			in.log().Error("rollback incompleto", "repo", fullName, "err", rbErr)
+			in.log().Error("incomplete rollback", "repo", fullName, "err", rbErr)
 		}
 		return nil, err
 	}
 	if err := t.commit(); err != nil {
-		in.log().Warn("não foi possível remover backups", "repo", fullName, "err", err)
+		in.log().Warn("could not remove backups", "repo", fullName, "err", err)
 	}
 
-	// Remove o que a instalação anterior criou e a nova não usa mais (ex.:
-	// o diretório da versão antiga).
+	// Remove what the previous installation created and the new one no longer
+	// uses (e.g. the old version directory).
 	if prev != nil {
 		keep := map[string]bool{}
 		for _, f := range inst.Files {
@@ -309,7 +309,7 @@ func (in *Installer) integrate(ctx context.Context, t *tx, d *store.AppDetail, m
 	execPath := filepath.Join(versionDir, execRel)
 	files := []string{versionDir}
 
-	// Lançador em ~/.local/bin com o nome do executável (ver launcherScript).
+	// Launcher in ~/.local/bin named after the executable (see launcherScript).
 	cmd := filepath.Base(execPath)
 	if strings.EqualFold(filepath.Ext(cmd), ".appimage") {
 		cmd = strings.TrimSuffix(cmd, filepath.Ext(cmd))
@@ -333,12 +333,12 @@ func (in *Installer) integrate(ctx context.Context, t *tx, d *store.AppDetail, m
 	}
 	files = append(files, link)
 
-	// Ícone: do pacote extraído ou baixado do repositório. Falhar aqui não
-	// impede a instalação.
+	// Icon: from the extracted package or downloaded from the repository. A
+	// failure here does not stop the installation.
 	id := appID(owner, repo)
 	iconName := "application-x-executable"
 	if iconPath, err := in.installIcon(ctx, t, id, versionDir, repo, d.IconURL); err != nil {
-		in.log().Warn("ícone não instalado", "repo", d.FullName, "err", err)
+		in.log().Warn("icon not installed", "repo", d.FullName, "err", err)
 	} else if iconPath != "" {
 		iconName = id
 		files = append(files, iconPath)
@@ -389,29 +389,29 @@ func (in *Installer) integrate(ctx context.Context, t *tx, d *store.AppDetail, m
 	return inst, nil
 }
 
-// reservedCommands nunca podem ser criados em ~/.local/bin por um app.
+// reservedCommands can never be created in ~/.local/bin by an app.
 var reservedCommands = map[string]bool{"omastore": true, "omastored": true, "omastore-gui": true}
 
-// systemBinDirs são consultados para não esconder comandos do sistema:
-// ~/.local/bin costuma vir antes deles no PATH.
+// systemBinDirs are checked so we never shadow system commands:
+// ~/.local/bin usually comes before them in PATH.
 var systemBinDirs = []string{"/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin"}
 
-// checkCommandName recusa lançadores que esconderiam comandos do sistema
-// (ex.: um app cujo executável se chame "sudo" ou "ls") ou do OmaStore.
+// checkCommandName refuses launchers that would shadow system commands
+// (e.g. an app whose executable is named "sudo" or "ls") or OmaStore's own.
 func (in *Installer) checkCommandName(cmd string) error {
 	if reservedCommands[cmd] {
-		return fmt.Errorf("%w: o comando %q é reservado ao OmaStore", ErrConflict, cmd)
+		return fmt.Errorf("%w: the command %q is reserved for OmaStore", ErrConflict, cmd)
 	}
 	for _, d := range systemBinDirs {
 		if _, err := os.Lstat(filepath.Join(d, cmd)); err == nil {
-			return fmt.Errorf("%w: o comando %q já existe em %s e seria encoberto", ErrConflict, cmd, d)
+			return fmt.Errorf("%w: the command %q already exists in %s and would be shadowed", ErrConflict, cmd, d)
 		}
 	}
 	return nil
 }
 
-// findExec usa o executável declarado no manifesto para a arquitetura, se
-// existir dentro do pacote; senão, a heurística de FindExecutable.
+// findExec uses the executable declared in the manifest for the architecture,
+// if it exists in the package; otherwise, the FindExecutable heuristic.
 func (in *Installer) findExec(staging, repo, format, tag string, m *manifest.Manifest) (string, error) {
 	t, ok := m.Target(in.goarch())
 	if ok && t.Exec != "" && format != index.FormatBinary && format != index.FormatAppImage {
@@ -419,13 +419,13 @@ func (in *Installer) findExec(staging, repo, format, tag string, m *manifest.Man
 		if err == nil {
 			return p, nil
 		}
-		in.log().Warn("executável do manifesto inválido; usando heurística", "exec", t.Exec, "err", err)
+		in.log().Warn("invalid manifest executable; using the heuristic", "exec", t.Exec, "err", err)
 	}
 	return FindExecutable(staging, repo)
 }
 
-// declaredExec valida um caminho do manifesto: precisa ser um arquivo
-// regular dentro de dir, sem sair dele nem por symlink.
+// declaredExec validates a manifest path: it must be a regular file inside
+// dir, without leaving it, not even through a symlink.
 func declaredExec(dir, rel string) (string, error) {
 	p := filepath.Join(dir, filepath.FromSlash(rel))
 	if !within(dir, p) {
@@ -440,14 +440,14 @@ func declaredExec(dir, rel string) (string, error) {
 		return "", err
 	}
 	if !within(realDir, resolved) {
-		return "", fmt.Errorf("%w: %s aponta para fora do pacote", ErrUnsafePath, rel)
+		return "", fmt.Errorf("%w: %s points outside the package", ErrUnsafePath, rel)
 	}
 	st, err := os.Stat(resolved)
 	if err != nil {
 		return "", err
 	}
 	if !st.Mode().IsRegular() {
-		return "", fmt.Errorf("%s não é um arquivo", rel)
+		return "", fmt.Errorf("%s is not a file", rel)
 	}
 	return resolved, nil
 }
@@ -466,12 +466,12 @@ func categoriesFor(d *store.AppDetail, m *manifest.Manifest) []string {
 	return []string{d.Category}
 }
 
-// testHookBeforeSave permite aos testes simular uma falha na última etapa.
+// testHookBeforeSave lets tests simulate a failure in the last step.
 var testHookBeforeSave func() error
 
-// checkOwned recusa sobrescrever um arquivo que não seja nosso: só aceita se
-// não existir, se estiver registrado na instalação anterior ou, para
-// lançadores, se apontar para dentro de ownDir.
+// checkOwned refuses to overwrite a file that is not ours: it only accepts it
+// if it does not exist, if it is registered in the previous installation or,
+// for launchers, if it points inside ownDir.
 func (in *Installer) checkOwned(p, ownDir string, prev *store.Install) error {
 	_, err := os.Lstat(p)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -493,8 +493,8 @@ func (in *Installer) checkOwned(p, ownDir string, prev *store.Install) error {
 	return fmt.Errorf("%w: %s", ErrConflict, p)
 }
 
-// installIcon procura o ícone no conteúdo extraído (ex.: usr/share/icons de
-// um pacote) e, na falta, baixa iconURL. Retorna "" se não houver ícone.
+// installIcon looks for the icon in the extracted content (e.g. a package's
+// usr/share/icons) and, failing that, downloads iconURL. Returns "" if there is no icon.
 func (in *Installer) installIcon(ctx context.Context, t *tx, id, versionDir, repo, iconURL string) (string, error) {
 	var files []string
 	filepath.WalkDir(versionDir, func(p string, d fs.DirEntry, err error) error {
@@ -528,12 +528,12 @@ func readSmall(p string) ([]byte, error) {
 		return nil, err
 	}
 	if st.Size() > maxSmallBytes {
-		return nil, fmt.Errorf("%s grande demais", p)
+		return nil, fmt.Errorf("%s too large", p)
 	}
 	return os.ReadFile(p)
 }
 
-// Update instala a nova versão se houver; senão retorna ErrUpToDate.
+// Update installs the new version if there is one; otherwise returns ErrUpToDate.
 func (in *Installer) Update(ctx context.Context, fullName string, progress func(Progress)) (*store.Install, error) {
 	inst, err := in.Store.GetInstall(ctx, fullName)
 	if errors.Is(err, store.ErrNotFound) {
@@ -552,7 +552,7 @@ func (in *Installer) Update(ctx context.Context, fullName string, progress func(
 	return in.Install(ctx, fullName, progress)
 }
 
-// Uninstall remove apenas os caminhos registrados no banco.
+// Uninstall removes only the paths registered in the database.
 func (in *Installer) Uninstall(ctx context.Context, fullName string) error {
 	defer in.lock(fullName)()
 	inst, err := in.Store.GetInstall(ctx, fullName)
@@ -566,7 +566,7 @@ func (in *Installer) Uninstall(ctx context.Context, fullName string) error {
 		in.removeRegistered(inst.Files[i])
 	}
 	if owner, repo, err := splitName(inst.FullName); err == nil {
-		os.Remove(filepath.Join(in.Paths.AppsDir, owner+"__"+repo)) // só se vazio
+		os.Remove(filepath.Join(in.Paths.AppsDir, owner+"__"+repo)) // only if empty
 	}
 	if err := in.Store.DeleteInstall(ctx, inst.FullName); err != nil {
 		return err
@@ -575,9 +575,9 @@ func (in *Installer) Uninstall(ctx context.Context, fullName string) error {
 	return nil
 }
 
-// removeRegistered remove um caminho registrado, com travas: precisa estar
-// num dos diretórios gerenciados; em ~/.local/bin só remove lançadores nossos; só
-// apaga diretórios inteiros dentro de apps/.
+// removeRegistered removes a registered path, with safeguards: it must be in
+// one of the managed directories; in ~/.local/bin only our launchers are removed;
+// whole directories are only deleted inside apps/.
 func (in *Installer) removeRegistered(p string) {
 	p = filepath.Clean(p)
 	st, err := os.Lstat(p)
@@ -589,7 +589,7 @@ func (in *Installer) removeRegistered(p string) {
 		err = os.RemoveAll(p)
 	case filepath.Dir(p) == filepath.Clean(in.Paths.BinDir):
 		if !isOurLink(p, in.Paths.AppsDir) {
-			in.log().Warn("não é mais um lançador do OmaStore; mantido", "path", p)
+			in.log().Warn("no longer an OmaStore launcher; kept", "path", p)
 			return
 		}
 		err = os.Remove(p)
@@ -597,21 +597,21 @@ func (in *Installer) removeRegistered(p string) {
 		strings.HasPrefix(path.Base(filepath.ToSlash(p)), "omastore-"):
 		err = os.Remove(p)
 	default:
-		in.log().Warn("caminho registrado fora dos diretórios gerenciados; ignorado", "path", p)
+		in.log().Warn("registered path outside the managed directories; ignored", "path", p)
 		return
 	}
 	if err != nil {
-		in.log().Warn("falha ao remover", "path", p, "err", err)
+		in.log().Warn("failed to remove", "path", p, "err", err)
 	}
 }
 
-// Ferramentas do sistema usadas nos hooks. Caminhos absolutos: nunca
-// resolvemos pelo PATH, que inclui ~/.local/bin (onde ficam apps baixados).
+// System tools used by the hooks. Absolute paths: we never resolve them
+// through PATH, which includes ~/.local/bin (where downloaded apps live).
 var (
 	updateDesktopDB = "/usr/bin/update-desktop-database"
 	updateIconCache = "/usr/bin/gtk-update-icon-cache"
 	hookTimeout     = 20 * time.Second
-	errHookSkipped  = errors.New("ferramenta ausente")
+	errHookSkipped  = errors.New("tool not installed")
 )
 
 func runCommand(ctx context.Context, name string, args ...string) error {
@@ -628,9 +628,9 @@ func (in *Installer) runHooks(ctx context.Context) {
 		return
 	}
 	if err := runCommand(ctx, updateDesktopDB, "-q", in.Paths.Applications); err != nil && !errors.Is(err, errHookSkipped) {
-		in.log().Debug("update-desktop-database falhou", "err", err)
+		in.log().Debug("update-desktop-database failed", "err", err)
 	}
 	if err := runCommand(ctx, updateIconCache, "-q", "-t", "-f", in.Paths.Icons); err != nil && !errors.Is(err, errHookSkipped) {
-		in.log().Debug("gtk-update-icon-cache falhou", "err", err)
+		in.log().Debug("gtk-update-icon-cache failed", "err", err)
 	}
 }

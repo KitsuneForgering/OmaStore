@@ -218,7 +218,7 @@ func printItems(stdout io.Writer, items []store.ListItem, asJSON bool) error {
 		if it.InstalledVersion != "" {
 			inst = it.InstalledVersion
 			if it.InstalledVersion != it.LatestTag {
-				inst += " (desatualizado)"
+				inst += " (outdated)"
 			}
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\t%s\n", it.FullName, it.Name, it.Category, it.Stars,
