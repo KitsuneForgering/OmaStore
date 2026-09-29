@@ -18,7 +18,7 @@
    "built by workflow X of the repository itself" when available, and
    allow requiring it in a setting ("only apps with provenance").
 2. **minisign/cosign signatures:** verify when the repository publishes
-   the public key (or in the manifest, see [manifesto.md](manifesto.md)).
+   the public key (or in the manifest, see [manifest.md](manifest.md)).
 3. **Reputation signals in the catalog:** repository age, number of
    releases, whether the release is newer than the last commit, and whether the asset was
    uploaded by a CI bot (`uploader.type`). Show them, without blocking.

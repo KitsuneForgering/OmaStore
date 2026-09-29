@@ -12,7 +12,7 @@ release with one click, generating the matching `.desktop`.
 Catalog items are **standalone apps**, not Omarchy plugins or themes. **Only repositories with an
 `omastore.toml` at the root** declaring an app get into the catalog (`kind = "app"`, the default; `plugin` and
 `theme` are left out). The file's presence is the author's opt-in; its content may be empty and the rest is
-inferred by heuristics. Format in `docs/autores.md`; skills for authors in `skills/`.
+inferred by heuristics. Format in `docs/authors.md`; skills for authors in `skills/`.
 
 ## Architecture
 
@@ -124,7 +124,7 @@ frontend/
   qml/                  # screens and components
   tests/                # Qt Test with a fake daemon (QLocalServer)
 packaging/              # PKGBUILD, systemd units, the store's .desktop and icon
-docs/                   # ipc.md, autores.md, ideas/, screenshots/
+docs/                   # ipc.md, authors.md, ideas/, screenshots/
 skills/                 # Claude Code skills for app authors
 ```
 

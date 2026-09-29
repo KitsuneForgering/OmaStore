@@ -132,9 +132,9 @@ Each phase must end with `go test ./...` (or `ctest`) passing.
 - [x] `PKGBUILD` (`packaging/arch/`, package `omastore-git`) with PIE/trimpath build, `check()` and `make install DESTDIR`
 - [x] OmaStore's own `.desktop` entry
 - [x] README with screenshots, installation and how to publish a compatible app
-- [x] Guide for app authors (`docs/autores.md`): `omarchy` topic, asset names, icon, checksums
+- [x] Guide for app authors (`docs/authors.md`): `omarchy` topic, asset names, icon, checksums
 - [x] `make release`/`install`/`uninstall`; the frontend reconfigures when `BUILD_TYPE` changes
-- [ ] Publish on the AUR (depends on the first commit/push; see `docs/ideas/distribuicao.md`)
+- [ ] Publish on the AUR (depends on the first commit/push; see `docs/ideas/distribution.md`)
 
 ## Phase 10 — Search and recommendation (`internal/search`)
 
@@ -152,16 +152,16 @@ result), with no external service or LLM.
 - [x] Portuguese queries: pt→en dictionary of app terms ("editor de fotos", "voz para texto", "calendário")
 - [x] Calibrated on the real catalog (34 repos): similarity threshold 0.12 (real pairs > 0.2; noise 0.09–0.16)
 
-## Phase 11 — `omastore.toml` manifest (see `docs/ideas/manifesto.md`)
+## Phase 11 — `omastore.toml` manifest (see `docs/ideas/manifest.md`)
 
 - [x] Parser and validation (optional fields; paths go through the same locks)
 - [x] The indexer reads the manifest from the tree and overrides the heuristics (name, summary, categories, icon, screenshots, terminal)
 - [x] Per-architecture asset with a `{version}` pattern and declared executable; fall back to heuristics if it does not match
-- [x] `omastore lint-manifest <dir>`; document in `docs/autores.md`; bump `index.Version`
+- [x] `omastore lint-manifest <dir>`; document in `docs/authors.md`; bump `index.Version`
 - [x] Migration 0003 (`apps.manifest`); the installer uses the declared asset/exec/terminal/categories; an `exec` that is a symlink pointing outside is refused
 - [x] An invalid manifest never breaks indexing; it is only fetched when it shows up in the tree
 
-## Phase 12 — Batch discovery (see `docs/ideas/descoberta-graphql.md`)
+## Phase 12 — Batch discovery (see `docs/ideas/graphql-discovery.md`)
 
 - [x] Batched GraphQL query of the cache-check fields (with token); REST still used without a token
 - [x] Repos without a release skip README/tree
@@ -170,7 +170,7 @@ result), with no external service or LLM.
 - [x] `omastore index` shows the number of requests; `--no-batch` forces REST; nonexistent repos outside the catalog count as "skipped"
 - [x] `aorumbayev/awesome-omarchy` list in the seeds: installable catalog from 15 → 25 apps
 
-## Phase 13 — On-demand daemon (see `docs/ideas/daemon-sob-demanda.md`)
+## Phase 13 — On-demand daemon (see `docs/ideas/on-demand-daemon.md`)
 
 - [x] Exit when idle (no connections and no jobs) when socket-activated
 - [x] `omastore update --check` and desktop notification via D-Bus
@@ -179,7 +179,7 @@ result), with no external service or LLM.
 - [x] Notify only when the set of repo@version changes; a failure to notify does not save the state (retries)
 - [x] Tested: daemon with `-idle-timeout 1s` exits ~1 s after the last client and removes the socket; D-Bus without a notification server gives a clear error
 
-## Phase 14 — Distribution (see `docs/ideas/distribuicao.md`)
+## Phase 14 — Distribution (see `docs/ideas/distribution.md`)
 
 - [x] Tag-triggered release workflow (`.github/workflows/release.yml`, validated with actionlint): tests, tarball, SLSA attestation, `-bin` PKGBUILD and upload
 - [x] `omastore-bin` `PKGBUILD` generated from `packaging/arch-bin/PKGBUILD.in` with the real sha256 (`make pkgbuild-bin`); tested with `makepkg`

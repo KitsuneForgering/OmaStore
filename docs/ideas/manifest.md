@@ -3,7 +3,7 @@
 > **Status:** implemented in Phase 11 (`backend/internal/manifest`) and made
 > **mandatory** in Phase 15: only repositories with an app `omastore.toml` are
 > indexed. Format
-> documented in [`../autores.md`](../autores.md#6-the-omastoretoml-manifest-required).
+> documented in [`../authors.md`](../authors.md#6-the-omastoretoml-manifest-required).
 
 ## Evidence
 

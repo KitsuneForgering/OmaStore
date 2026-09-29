@@ -7,11 +7,11 @@ the decision.
 
 | File | Summary | Priority |
 |---|---|---|
-| [manifesto.md](manifesto.md) | Optional `omastore.toml` file in the app repo to eliminate heuristics | **done** (Phase 11) |
-| [descoberta-graphql.md](descoberta-graphql.md) | GraphQL for batch indexing and "awesome" lists as seeds | **done** (Phase 12) |
-| [busca-relevancia.md](busca-relevancia.md) | Relevance cutoff and feedback for searches without good results | medium |
-| [daemon-sob-demanda.md](daemon-sob-demanda.md) | Daemon that exits when idle, periodic index and update notifications | **done** (Phase 13) |
-| [confianca.md](confianca.md) | GitHub attestations, reputation signals and optional sandbox | medium |
-| [formatos.md](formatos.md) | `.deb`/`.rpm` and the limits of relocating packages into `$HOME` | medium |
+| [manifest.md](manifest.md) | Optional `omastore.toml` file in the app repo to eliminate heuristics | **done** (Phase 11) |
+| [graphql-discovery.md](graphql-discovery.md) | GraphQL for batch indexing and "awesome" lists as seeds | **done** (Phase 12) |
+| [search-relevance.md](search-relevance.md) | Relevance cutoff and feedback for searches without good results | medium |
+| [on-demand-daemon.md](on-demand-daemon.md) | Daemon that exits when idle, periodic index and update notifications | **done** (Phase 13) |
+| [trust.md](trust.md) | GitHub attestations, reputation signals and optional sandbox | medium |
+| [formats.md](formats.md) | `.deb`/`.rpm` and the limits of relocating packages into `$HOME` | medium |
 | [ux-frontend.md](ux-frontend.md) | Interface: remaining shortcuts, `omastore://` links, pagination, i18n | medium |
-| [distribuicao.md](distribuicao.md) | Release workflow, `omastore-bin` on the AUR, the store in its own catalog | **done** (Phase 14), except self-update |
+| [distribution.md](distribution.md) | Release workflow, `omastore-bin` on the AUR, the store in its own catalog | **done** (Phase 14), except self-update |

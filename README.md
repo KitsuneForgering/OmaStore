@@ -13,11 +13,11 @@ interface or the command line, without `sudo`.
 
 | Discover | See the details before installing |
 |---|---|
-| ![OmaStore catalog screen](docs/screenshots/catalogo.png) | ![An app's detail screen in OmaStore](docs/screenshots/detalhe.png) |
+| ![OmaStore catalog screen](docs/screenshots/catalog.png) | ![An app's detail screen in OmaStore](docs/screenshots/detail.png) |
 
 > **In beta:** the screenshots show the interface under development. Apps
 > get into the catalog when their authors publish an `omastore.toml`;
-> the current catalog may still be empty. [See how to publish an app](docs/autores.md).
+> the current catalog may still be empty. [See how to publish an app](docs/authors.md).
 
 ## Why use it
 
@@ -149,7 +149,7 @@ omastore-gui (C++/Qt Quick)  ── JSON-RPC 2.0 / Unix socket ──▶  omasto
 
 ## For app authors
 
-Want your app in the store? See [`docs/autores.md`](docs/autores.md): the
+Want your app in the store? See [`docs/authors.md`](docs/authors.md): the
 `omarchy` topic, asset names, icon, screenshots and checksums.
 
 ## Development

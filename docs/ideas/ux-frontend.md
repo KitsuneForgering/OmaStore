@@ -7,7 +7,7 @@ Notes for the frontend. Items marked **done** are already in Phase 8.
   updates, `Esc` goes back.
 - **Verification badge** (*done*): `AssetInfo.verified` already exists in the protocol.
   Show "checksum verified" or "no checksum" before installing, and ask for
-  confirmation in the second case (see [confianca.md](confianca.md)).
+  confirmation in the second case (see [trust.md](trust.md)).
 - **Release notes:** show the new version's changelog on the
   "Update" button. *Backend:* store the release `body` in the index (it is not
   stored today).

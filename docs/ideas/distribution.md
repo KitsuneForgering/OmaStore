@@ -12,7 +12,7 @@
 - The `PKGBUILD` (`packaging/arch/`) produces `omastore-git`, which builds from source
   and requires `go`, `cmake` and `ninja` on the user's machine. Simulating the
   build and check steps, the package took a few minutes to build.
-- The project follows its own publishing rules ([`../autores.md`](../autores.md)),
+- The project follows its own publishing rules ([`../authors.md`](../authors.md)),
   but does not publish releases yet: OmaStore could not install itself
   (or update itself).
 
@@ -21,7 +21,7 @@
 1. **Release workflow** (`.github/workflows/release.yml`, triggered by a `v*`
    tag): builds backend and frontend for `x86_64` and `aarch64` and publishes
    `omastore-<version>-<arch>-linux.tar.gz` with the `make install` tree.
-   Add `actions/attest-build-provenance` (see [confianca.md](confianca.md)).
+   Add `actions/attest-build-provenance` (see [trust.md](trust.md)).
 2. **Two AUR packages:** `omastore-git` (current) and `omastore-bin`, which downloads
    the release tarball and checks its sha256. Installs in seconds.
 3. **`omarchy` topic on the repository itself:** the store shows up in the catalog and
