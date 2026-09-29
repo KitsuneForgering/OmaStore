@@ -1,66 +1,66 @@
-# Manifesto `omastore.toml` no repositório do app
+# `omastore.toml` manifest in the app repository
 
-> **Status:** implementado na Fase 11 (`backend/internal/manifest`) e tornado
-> **obrigatório** na Fase 15: só repositórios com `omastore.toml` de app são
-> indexados. Formato
-> documentado em [`../autores.md`](../autores.md#6-declarando-tudo-com-omastoretoml-opcional).
+> **Status:** implemented in Phase 11 (`backend/internal/manifest`) and made
+> **mandatory** in Phase 15: only repositories with an app `omastore.toml` are
+> indexed. Format
+> documented in [`../autores.md`](../autores.md#6-the-omastoretoml-manifest-required).
 
-## Evidência
+## Evidence
 
-As heurísticas acertam na maioria dos casos, mas os testes reais mostraram
-falhas que só o autor do app resolve com certeza:
+The heuristics get it right most of the time, but real tests showed
+failures that only the app author can resolve with certainty:
 
-- **Categoria:** `pch/rawmakase` não tem topics; caía em `Utility` até
-  adicionarmos "lightroom" à lista de palavras. `devmobasa/wayscriber` caía em
-  `System` por causa do topic `wayland`.
-- **Asset:** `omacom/try-omarchy-windows` publicava `vmlinuz-linux` e um zip
-  de Windows, e ambos eram aceitos como binário Linux.
-- **Executável:** o tarball do RAWmakase traz `usr/bin/rawmakase` (script) e
-  `usr/lib/rawmakase/rawmakase` (ELF). Escolhemos certo pelo nome, mas por sorte.
-- **Terminal:** `Terminal=true` é deduzido só dos topics `cli`/`tui`.
-- **Ícone:** em `erans/hyprmon`, o arquivo `hyprmon.png` casa com o nome do
-  repositório e vira o ícone, mas é uma screenshot retangular do app.
+- **Category:** `pch/rawmakase` has no topics; it fell into `Utility` until
+  we added "lightroom" to the word list. `devmobasa/wayscriber` fell into
+  `System` because of the `wayland` topic.
+- **Asset:** `omacom/try-omarchy-windows` published `vmlinuz-linux` and a Windows
+  zip, and both were accepted as a Linux binary.
+- **Executable:** the RAWmakase tarball ships `usr/bin/rawmakase` (script) and
+  `usr/lib/rawmakase/rawmakase` (ELF). We picked the right one by name, but by luck.
+- **Terminal:** `Terminal=true` is inferred only from the `cli`/`tui` topics.
+- **Icon:** in `erans/hyprmon`, the file `hyprmon.png` matches the repository
+  name and becomes the icon, but it is a rectangular screenshot of the app.
 
-Cada correção dessas exige mudar regras e incrementar `index.Version`.
+Each of these fixes requires changing rules and bumping `index.Version`.
 
-## Proposta
+## Proposal
 
-Ler, se existir, um `omastore.toml` na raiz do repositório (pela Trees API,
-que já listamos). Tudo opcional; o que faltar continua heurístico.
+Read, if it exists, an `omastore.toml` at the repository root (through the Trees API,
+which we already list). Everything optional; whatever is missing stays heuristic.
 
 ```toml
 name = "RAWmakase"
-summary = "Alternativa livre ao Lightroom"
+summary = "Free alternative to Lightroom"
 categories = ["Graphics", "Photography"]   # freedesktop
 icon = "packaging/rawmakase.svg"
 screenshots = ["docs/images/screenshot.png"]
 terminal = false
 
 [linux.x86_64]
-asset = "rawmakase-{version}-x86_64-linux.tar.gz"   # padrão com {version}
-exec = "usr/bin/rawmakase"                           # dentro do pacote
+asset = "rawmakase-{version}-x86_64-linux.tar.gz"   # pattern with {version}
+exec = "usr/bin/rawmakase"                           # inside the package
 [linux.aarch64]
 asset = "rawmakase-{version}-aarch64-linux.tar.gz"
 exec = "usr/bin/rawmakase"
 ```
 
-Regras:
+Rules:
 
-- O manifesto **nunca** amplia permissões: `exec` continua precisando ficar
-  dentro do diretório extraído; os caminhos passam pelas mesmas validações.
-- Valores do manifesto têm prioridade sobre as heurísticas, mas os campos de
-  texto passam pelo mesmo escape do `.desktop`.
-- Publicar um guia (Fase 9) e um validador: `omastore lint-manifest <dir>`.
+- The manifest **never** widens permissions: `exec` still has to stay
+  inside the extracted directory; paths go through the same validations.
+- Manifest values take priority over the heuristics, but the text
+  fields go through the same `.desktop` escaping.
+- Publish a guide (Phase 9) and a validator: `omastore lint-manifest <dir>`.
 
-## Custo
+## Cost
 
-Pequeno a médio: um parser TOML (`github.com/pelletier/go-toml/v2` ou
-`BurntSushi/toml`), uma coluna/JSON no banco, integração em `extract()` e
-`SelectAsset()`, e testes. Incrementar `index.Version`.
+Small to medium: a TOML parser (`github.com/pelletier/go-toml/v2` or
+`BurntSushi/toml`), a column/JSON in the database, integration in `extract()` and
+`SelectAsset()`, and tests. Bump `index.Version`.
 
-## Riscos
+## Risks
 
-- Adoção depende dos autores; por isso o manifesto é opcional.
-- Um manifesto desatualizado (nome de asset antigo) deixa o app não instalável.
-  Mitigação: se o padrão não casar com nenhum asset, cair na heurística e
-  registrar aviso.
+- Adoption depends on authors; that is why the manifest is optional.
+- An outdated manifest (old asset name) leaves the app not installable.
+  Mitigation: if the pattern matches no asset, fall back to the heuristics and
+  log a warning.

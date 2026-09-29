@@ -1,25 +1,25 @@
-# Publicando um app na OmaStore
+# Publishing an app on OmaStore
 
-A OmaStore indexa apps **standalone** para o Omarchy (não plugins nem temas)
-direto do GitHub. Não há cadastro, mas há um requisito: **o repositório precisa
-ter um `omastore.toml` na raiz** (seção 6). Sem ele, o repositório não entra no
-catálogo, mesmo com o topic `omarchy`. O arquivo pode até estar vazio: a
-presença dele é o sinal de que você quer o app na loja.
+OmaStore indexes **standalone** apps for Omarchy (not plugins or themes)
+straight from GitHub. There is no sign-up, but there is one requirement: **the
+repository must have an `omastore.toml` at its root** (section 6). Without it,
+the repository is not added to the catalog, even with the `omarchy` topic. The
+file may even be empty: its presence is the signal that you want the app in the store.
 
-> Atalho: as skills em [`skills/`](../skills/) fazem isso com o Claude Code:
-> `omastore-manifest` escreve o manifesto, `omastore-release` configura as
-> releases e `omastore-check` audita tudo.
+> Shortcut: the skills in [`skills/`](../skills/) do this with Claude Code:
+> `omastore-manifest` writes the manifest, `omastore-release` sets up the
+> releases and `omastore-check` audits everything.
 
-## 1. Seja encontrado
+## 1. Be found
 
-- Tenha o `omastore.toml` na raiz do branch padrão: a loja encontra
-  repositórios pela busca de código do GitHub por esse arquivo, mesmo sem
+- Have `omastore.toml` at the root of the default branch: the store finds
+  repositories through GitHub code search for that file, even without a
   topic.
 
-- Adicione o topic **`omarchy`** ao repositório (Settings → Topics).
-- Adicione topics que descrevam o app; eles definem a categoria no catálogo:
+- Add the **`omarchy`** topic to the repository (Settings → Topics).
+- Add topics that describe the app; they define its category in the catalog:
 
-  | Categoria | Exemplos de topics |
+  | Category | Example topics |
   |---|---|
   | Graphics | `photo`, `image`, `design`, `drawing`, `annotation` |
   | AudioVideo | `audio`, `music`, `video`, `voice`, `speech`, `recorder` |
@@ -29,135 +29,135 @@ presença dele é o sinal de que você quer o app na loja.
   | System | `virtualization`, `monitor`, `hyprland`, `backup` |
   | Game | `game`, `emulator` |
 
-  Sem topics, a categoria é deduzida da descrição e cai em *Utility* se nada
-  casar.
-- Topics `cli`, `tui` ou `terminal` fazem o atalho abrir num terminal.
-- Repositórios arquivados não entram; forks não aparecem na busca por topic.
+  Without topics, the category is inferred from the description and falls back
+  to *Utility* if nothing matches.
+- The `cli`, `tui` or `terminal` topics make the launcher open in a terminal.
+- Archived repositories are left out; forks do not show up in the topic search.
 
-## 2. Publique uma release com binário para Linux
+## 2. Publish a release with a Linux binary
 
-Só a **última release estável** (não pre-release) é considerada. Nomeie os
-assets com sistema e arquitetura:
+Only the **latest stable release** (not a pre-release) is considered. Name the
+assets with the system and architecture:
 
 ```
-meuapp-1.2.0-x86_64-linux.tar.gz
-meuapp-1.2.0-aarch64-linux.tar.gz
+myapp-1.2.0-x86_64-linux.tar.gz
+myapp-1.2.0-aarch64-linux.tar.gz
 ```
 
-- Arquiteturas reconhecidas: `x86_64`/`amd64`/`x64` e `aarch64`/`arm64`.
-- Formatos, em ordem de preferência:
+- Recognized architectures: `x86_64`/`amd64`/`x64` and `aarch64`/`arm64`.
+- Formats, in order of preference:
   1. `.tar.gz`, `.tar.xz`, `.tar.zst`, `.tar.bz2`;
-  2. `.zip` (precisa de `linux` ou da arquitetura no nome);
-  3. binário puro (idem);
+  2. `.zip` (needs `linux` or the architecture in the name);
+  3. plain binary (same);
   4. `.AppImage`;
   5. `.pkg.tar.zst`.
-- Ignorados: `.deb`, `.rpm`, `.dmg`, `.exe`, `.msi`, tarballs de código-fonte
-  (`source`, `src`) e assets com `darwin`, `macos`, `windows` etc. no nome.
+- Ignored: `.deb`, `.rpm`, `.dmg`, `.exe`, `.msi`, source tarballs
+  (`source`, `src`) and assets with `darwin`, `macos`, `windows` etc. in the name.
 
-**Prefira um tarball portátil.** Dos pacotes `.pkg.tar.zst` só é extraído o
-conteúdo de `usr/` (scripts `.INSTALL` nunca rodam). Como tudo fica no
-`$HOME`, e não em `/usr`, programas que procuram dados em caminhos absolutos
-como `/usr/share/meuapp` não funcionam.
+**Prefer a portable tarball.** From `.pkg.tar.zst` packages only the
+contents of `usr/` are extracted (`.INSTALL` scripts never run). Since
+everything lives in `$HOME`, not in `/usr`, programs that look for data at
+absolute paths such as `/usr/share/myapp` do not work.
 
-### O executável
+### The executable
 
-Dentro do pacote, o executável principal é escolhido por, nesta ordem:
+Inside the package, the main executable is chosen by, in this order:
 
-1. nome igual ao do repositório;
-2. estar em `bin/` ou `usr/bin/`;
-3. ser ELF (não script).
+1. having the same name as the repository;
+2. being in `bin/` or `usr/bin/`;
+3. being ELF (not a script).
 
-Bibliotecas `.so` e arquivos em `lib/` e `share/` são ignorados. Scripts
-precisam do bit de execução e de shebang.
+`.so` libraries and files in `lib/` and `share/` are ignored. Scripts
+need the executable bit and a shebang.
 
-O comando instalado em `~/.local/bin` é um pequeno lançador que chama o
-caminho absoluto do seu binário, então `$0`/`argv[0]` apontam para o arquivo
-real e caminhos relativos a ele (`$(dirname "$0")/../lib`) funcionam.
+The command installed in `~/.local/bin` is a small launcher that calls the
+absolute path of your binary, so `$0`/`argv[0]` point to the real file and
+paths relative to it (`$(dirname "$0")/../lib`) work.
 
-O nome do comando não pode colidir com um comando do sistema (`/usr/bin/...`):
-a instalação é recusada para não encobrir, por exemplo, `ls` ou `sudo`.
+The command name cannot collide with a system command (`/usr/bin/...`):
+the installation is refused so it does not shadow, for example, `ls` or `sudo`.
 
-## 3. Publique checksums
+## 3. Publish checksums
 
-A OmaStore confere o sha256 que o próprio GitHub calcula para cada asset
-(campo `digest`). Se preferir publicar os seus, qualquer um destes serve:
+OmaStore checks the sha256 that GitHub itself computes for each asset
+(the `digest` field). If you prefer to publish your own, any of these works:
 
-- `meuapp-1.2.0-x86_64-linux.tar.gz.sha256` (só o hash, ou `hash  nome`);
-- `checksums.txt` / `SHA256SUMS` no formato do `sha256sum`, ou o formato BSD
-  `SHA256 (nome) = hash`.
+- `myapp-1.2.0-x86_64-linux.tar.gz.sha256` (just the hash, or `hash  name`);
+- `checksums.txt` / `SHA256SUMS` in `sha256sum` format, or the BSD format
+  `SHA256 (name) = hash`.
 
-Se o hash não bater, nada é instalado. Releases sem nenhum checksum pedem
-confirmação ao usuário.
+If the hash does not match, nothing is installed. Releases without any checksum
+ask the user for confirmation.
 
-## 4. Ícone e screenshots
+## 4. Icon and screenshots
 
-- **Ícone:** um `icon.svg`/`icon.png` na raiz, em `assets/`, `icons/`,
-  `resources/` ou `data/`. Também servem nomes como `<repo>.svg`, `logo.svg` e
-  `app-icon.png`, ou a estrutura `icons/hicolor/<tam>/apps/`. SVG é o
-  preferido; PNG de pelo menos 256×256 é redimensionado para o tema.
-- **Screenshots:** as imagens do README (badges são ignorados) e arquivos em
-  pastas ou com nomes contendo `screenshot`, `preview` ou `demo`. Até 8 são
-  exibidas.
+- **Icon:** an `icon.svg`/`icon.png` at the root, in `assets/`, `icons/`,
+  `resources/` or `data/`. Names such as `<repo>.svg`, `logo.svg` and
+  `app-icon.png` also work, as does the `icons/hicolor/<size>/apps/` layout. SVG is
+  preferred; a PNG of at least 256×256 is resized for the theme.
+- **Screenshots:** the README images (badges are ignored) and files in
+  folders or with names containing `screenshot`, `preview` or `demo`. Up to 8 are
+  shown.
 
-## 5. Descrição
+## 5. Description
 
-- O resumo é a descrição do repositório (a frase curta no topo do GitHub); se
-  estiver vazia, o primeiro parágrafo do README.
-- O nome exibido é o do repositório, com a grafia do primeiro título do
-  README quando eles batem (ex.: repo `omaphoto`, título `# OmaPhoto`).
-- O README é exibido na página do app, com links relativos convertidos em
-  absolutos.
+- The summary is the repository description (the short sentence at the top on GitHub); if
+  it is empty, the first paragraph of the README.
+- The display name is the repository's, with the spelling of the README's first
+  heading when they match (e.g. repo `omaphoto`, heading `# OmaPhoto`).
+- The README is shown on the app page, with relative links converted to
+  absolute ones.
 
-## 6. O manifesto `omastore.toml` (obrigatório)
+## 6. The `omastore.toml` manifest (required)
 
-O arquivo precisa existir na raiz do branch padrão. Todos os campos são
-opcionais; o que não for declarado é deduzido pelas regras acima. Declare o
-que as heurísticas errariam (ícone, executável, asset).
+The file must exist at the root of the default branch. All fields are
+optional; whatever is not declared is inferred by the rules above. Declare
+what the heuristics would get wrong (icon, executable, asset).
 
 ```toml
-kind = "app"                               # padrão; "plugin" e "theme" não são indexados
-name = "RAWmakase"                         # nome exibido
-summary = "Alternativa livre ao Lightroom" # resumo (até 300 caracteres)
-categories = ["Graphics", "Photography"]   # freedesktop; a 1ª principal vira a categoria
-icon = "packaging/rawmakase.svg"           # PNG ou SVG, caminho no repositório
-screenshots = ["docs/images/screenshot.png", "https://exemplo.com/tela.png"]
-terminal = false                           # abrir num terminal?
+kind = "app"                               # default; "plugin" and "theme" are not indexed
+name = "RAWmakase"                         # display name
+summary = "Free alternative to Lightroom"  # summary (up to 300 characters)
+categories = ["Graphics", "Photography"]   # freedesktop; the 1st main one becomes the category
+icon = "packaging/rawmakase.svg"           # PNG or SVG, path in the repository
+screenshots = ["docs/images/screenshot.png", "https://example.com/screen.png"]
+terminal = false                           # open in a terminal?
 
-[linux.x86_64]                             # ou aarch64
-asset = "rawmakase-{version}-x86_64-linux.tar.gz"   # {version} = tag sem "v"; {tag}; *
-exec = "usr/bin/rawmakase"                 # executável dentro do pacote ({version}/{tag} valem aqui também)
+[linux.x86_64]                             # or aarch64
+asset = "rawmakase-{version}-x86_64-linux.tar.gz"   # {version} = tag without "v"; {tag}; *
+exec = "usr/bin/rawmakase"                 # executable inside the package ({version}/{tag} work here too)
 ```
 
-Regras:
+Rules:
 
-- **Caminhos:** precisam ser relativos e ficar dentro do repositório (ou do
-  pacote, no caso de `exec`). Um `exec` que seja symlink para fora do pacote
-  é recusado.
-- **Asset:** o declarado tem prioridade sobre a escolha automática e é aceito
-  mesmo com um nome que a heurística não entenderia. Se o padrão não casar
-  com nenhum asset da release, a loja volta à escolha automática.
-- **Campos inválidos:** são ignorados, com aviso; o resto do manifesto
-  continua valendo. Um arquivo que não é TOML válido tira o repositório do
-  catálogo, por isso valide antes de publicar.
-- **Só apps:** `kind = "plugin"` ou `"theme"` (ou qualquer valor que não seja
-  `app`) deixa o repositório fora da loja.
+- **Paths:** must be relative and stay inside the repository (or the
+  package, for `exec`). An `exec` that is a symlink pointing outside the package
+  is refused.
+- **Asset:** the declared one takes priority over the automatic choice and is accepted
+  even with a name the heuristics would not understand. If the pattern does not match
+  any asset of the release, the store falls back to the automatic choice.
+- **Invalid fields:** are ignored, with a warning; the rest of the manifest
+  still applies. A file that is not valid TOML removes the repository from the
+  catalog, so validate it before publishing.
+- **Apps only:** `kind = "plugin"` or `"theme"` (or any value other than
+  `app`) keeps the repository out of the store.
 
-Valide antes de publicar:
+Validate before publishing:
 
 ```sh
-omastore lint-manifest .        # no diretório do repositório
+omastore lint-manifest .        # in the repository directory
 ```
 
-O modo `lint` é estrito: um campo com nome errado (ex.: `icone`) é erro. A
-indexação é tolerante, para que campos de versões futuras não quebrem nada.
+`lint` mode is strict: a misnamed field (e.g. `icone`) is an error.
+Indexing is lenient, so that fields from future versions do not break anything.
 
-## Testando antes de publicar
+## Testing before publishing
 
 ```sh
-omastore index voce/meuapp      # indexa só o seu repositório
-omastore show voce/meuapp       # mostra o que foi entendido (assets, ícone, categoria)
-omastore install voce/meuapp
+omastore index you/myapp        # indexes only your repository
+omastore show you/myapp         # shows what was understood (assets, icon, category)
+omastore install you/myapp
 ```
 
-Se algo foi detectado errado, declare no `omastore.toml` (seção 6) ou abra
-uma issue.
+If something was detected wrongly, declare it in `omastore.toml` (section 6) or open
+an issue.

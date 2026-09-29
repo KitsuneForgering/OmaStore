@@ -1,17 +1,17 @@
-# Ideias
+# Ideas
 
-Propostas de melhoria que ainda não estão no `TODO.md`. Cada arquivo traz a
-evidência que motivou a ideia, a proposta, o custo estimado e os riscos.
-Quando uma ideia for aceita, ela vira itens no `TODO.md` e o arquivo registra
-a decisão.
+Improvement proposals that are not in `TODO.md` yet. Each file records the
+evidence that motivated the idea, the proposal, the estimated cost and the risks.
+When an idea is accepted, it becomes items in `TODO.md` and the file records
+the decision.
 
-| Arquivo | Resumo | Prioridade |
+| File | Summary | Priority |
 |---|---|---|
-| [manifesto.md](manifesto.md) | Arquivo opcional `omastore.toml` no repo do app para eliminar heurísticas | **feito** (Fase 11) |
-| [descoberta-graphql.md](descoberta-graphql.md) | GraphQL para indexar em lote e listas "awesome" como sementes | **feito** (Fase 12) |
-| [busca-relevancia.md](busca-relevancia.md) | Corte de relevância e feedback de busca sem resultados bons | média |
-| [daemon-sob-demanda.md](daemon-sob-demanda.md) | Daemon que encerra ocioso, índice periódico e aviso de atualizações | **feito** (Fase 13) |
-| [confianca.md](confianca.md) | Attestations do GitHub, sinais de reputação e sandbox opcional | média |
-| [formatos.md](formatos.md) | `.deb`/`.rpm` e limites da realocação de pacotes para o `$HOME` | média |
-| [ux-frontend.md](ux-frontend.md) | Interface: atalhos restantes, links `omastore://`, paginação, i18n | média |
-| [distribuicao.md](distribuicao.md) | Workflow de release, `omastore-bin` no AUR, a loja no próprio catálogo | **feito** (Fase 14), exceto autoatualização |
+| [manifesto.md](manifesto.md) | Optional `omastore.toml` file in the app repo to eliminate heuristics | **done** (Phase 11) |
+| [descoberta-graphql.md](descoberta-graphql.md) | GraphQL for batch indexing and "awesome" lists as seeds | **done** (Phase 12) |
+| [busca-relevancia.md](busca-relevancia.md) | Relevance cutoff and feedback for searches without good results | medium |
+| [daemon-sob-demanda.md](daemon-sob-demanda.md) | Daemon that exits when idle, periodic index and update notifications | **done** (Phase 13) |
+| [confianca.md](confianca.md) | GitHub attestations, reputation signals and optional sandbox | medium |
+| [formatos.md](formatos.md) | `.deb`/`.rpm` and the limits of relocating packages into `$HOME` | medium |
+| [ux-frontend.md](ux-frontend.md) | Interface: remaining shortcuts, `omastore://` links, pagination, i18n | medium |
+| [distribuicao.md](distribuicao.md) | Release workflow, `omastore-bin` on the AUR, the store in its own catalog | **done** (Phase 14), except self-update |

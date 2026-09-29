@@ -1,39 +1,39 @@
-# Daemon sob demanda, índice periódico e aviso de atualizações
+# On-demand daemon, periodic index and update notifications
 
-> **Status:** implementado na Fase 13: `-idle-timeout` no `omastored`,
-> `omastore update --check --notify` (`internal/notify`, D-Bus direto) e
+> **Status:** implemented in Phase 13: `-idle-timeout` in `omastored`,
+> `omastore update --check --notify` (`internal/notify`, direct D-Bus) and
 > `packaging/systemd/omastore-index.{service,timer}`.
 
-## Evidência
+## Evidence
 
-- Com a socket activation (`packaging/systemd/omastored.socket`), o systemd já
-  inicia o daemon na primeira conexão, mas ele fica rodando para sempre.
-- Hoje a indexação só acontece quando alguém pede (`index.start` ou
-  `omastore index`). Um usuário que não abre a loja nunca fica sabendo de
-  atualizações dos apps instalados.
+- With socket activation (`packaging/systemd/omastored.socket`), systemd already
+  starts the daemon on the first connection, but it keeps running forever.
+- Today indexing only happens when someone asks for it (`index.start` or
+  `omastore index`). A user who does not open the store never hears about
+  updates to the installed apps.
 
-## Proposta
+## Proposal
 
-1. **Encerrar quando ocioso:** sem conexões e sem jobs por N minutos (padrão
-   10), o daemon encerra limpo. Com socket activation, a próxima conexão o
-   inicia de novo. Só ligar isso quando o socket vier do systemd
+1. **Exit when idle:** with no connections and no jobs for N minutes (default
+   10), the daemon exits cleanly. With socket activation, the next connection
+   starts it again. Only enable this when the socket comes from systemd
    (`ActivationListener() != nil`).
-2. **Timer do systemd:** `omastore-index.timer` (diário, `Persistent=true`,
-   `RandomizedDelaySec=1h`) roda `omastore index` e, em seguida,
+2. **systemd timer:** `omastore-index.timer` (daily, `Persistent=true`,
+   `RandomizedDelaySec=1h`) runs `omastore index` and then
    `omastore update --check`.
-3. **`update --check`:** lista os apps com versão nova sem instalar e, se
-   houver, manda uma notificação desktop (`notify-send` via
-   `org.freedesktop.Notifications` no D-Bus, sem chamar binários pelo `PATH`).
-   Atualizar sozinho continua opcional (configuração).
+3. **`update --check`:** lists the apps with a new version without installing and, if
+   there are any, sends a desktop notification (`notify-send` via
+   `org.freedesktop.Notifications` on D-Bus, without calling binaries from `PATH`).
+   Updating on its own stays optional (a setting).
 
-## Custo
+## Cost
 
-Pequeno: um contador de atividade no `Server`, as unidades do timer, a flag
-`--check` na CLI e a notificação por D-Bus (`godbus/dbus`).
+Small: an activity counter in `Server`, the timer units, the `--check` flag
+in the CLI and the D-Bus notification (`godbus/dbus`).
 
-## Riscos
+## Risks
 
-- Atualizar automaticamente sem o usuário ver é arriscado (binário novo não
-  revisado); por isso o padrão é só notificar.
-- Encerrar ocioso com jobs longos: o contador precisa considerar jobs em
-  andamento, e não só conexões.
+- Updating automatically without the user seeing it is risky (new binary not
+  reviewed); that is why the default is to only notify.
+- Exiting when idle with long jobs: the counter must take running jobs into
+  account, not just connections.

@@ -1,33 +1,33 @@
-# Ideias de interface (Fase 8)
+# Interface ideas (Phase 8)
 
-Notas para o frontend. Itens marcados como **feito** já estão na Fase 8.
+Notes for the frontend. Items marked **done** are already in Phase 8.
 
-- **Teclado primeiro** (*parcial: `/`, `Esc`, `Ctrl+R` e navegação no grid feitos; `i`/`u` faltam*): usuários do Omarchy vivem no teclado. `/` foca a
-  busca, `j/k` navega pelo grid, `Enter` abre o detalhe, `i` instala, `u`
-  atualiza, `Esc` volta.
-- **Selo de verificação** (*feito*): o `AssetInfo.verified` já existe no protocolo.
-  Mostrar "checksum verificado" ou "sem checksum" antes de instalar, e pedir
-  confirmação no segundo caso (ver [confianca.md](confianca.md)).
-- **Notas da release:** mostrar o changelog da versão nova no botão
-  "Atualizar". *Backend:* guardar `body` da release no índice (hoje não é
-  guardado).
-- **Abrir depois de instalar:** botão "Abrir" que usa o `.desktop` gerado
-  (`gtk-launch omastore-owner-repo`). A instalação continua sem executar nada;
-  abrir é uma ação explícita do usuário.
-- **Estado vazio** (*feito*): na primeira execução o catálogo está vazio. Iniciar
-  `index.start` automaticamente e mostrar o progresso (`job.progress` traz o
-  repo atual em `message`).
-- **Rate limit** (*feito*): o erro `-32005` deveria sugerir `gh auth login` e dizer
-  quando o limite volta.
-- **Tema** (*feito*): cores de `~/.local/state/omarchy/current/theme/colors.toml`,
-  recarregadas ao trocar de tema (o Omarchy substitui o diretório inteiro).
-- **Instalar pelo terminal com um link:** registrar um handler `x-scheme-handler/omastore`
-  para links `omastore://owner/repo` (ex.: num README), que abre o
-  `omastore-gui --open owner/repo`. A opção `--open` já existe.
-- **Paginação:** o `catalog.list` já aceita `limit`/`offset`; com centenas de
-  apps, carregar sob demanda no scroll do GridView.
-- **Tradução:** todas as strings da interface já passam por `qsTr()` e estão
-  em português. Gerar `.ts` com `qt_add_translations` e um `en` para usuários
-  que não falam português; a CLI e as mensagens de erro do daemon também
-  estão em português e precisariam de outro mecanismo (códigos de erro já são
-  estáveis, então o frontend pode traduzir pela tabela de `docs/ipc.md`).
+- **Keyboard first** (*partial: `/`, `Esc`, `Ctrl+R` and grid navigation done; `i`/`u` missing*): Omarchy users live on the keyboard. `/` focuses the
+  search, `j/k` moves through the grid, `Enter` opens the detail, `i` installs, `u`
+  updates, `Esc` goes back.
+- **Verification badge** (*done*): `AssetInfo.verified` already exists in the protocol.
+  Show "checksum verified" or "no checksum" before installing, and ask for
+  confirmation in the second case (see [confianca.md](confianca.md)).
+- **Release notes:** show the new version's changelog on the
+  "Update" button. *Backend:* store the release `body` in the index (it is not
+  stored today).
+- **Open after installing:** an "Open" button that uses the generated `.desktop`
+  (`gtk-launch omastore-owner-repo`). Installation still executes nothing;
+  opening is an explicit user action.
+- **Empty state** (*done*): on the first run the catalog is empty. Start
+  `index.start` automatically and show the progress (`job.progress` carries the
+  current repo in `message`).
+- **Rate limit** (*done*): error `-32005` should suggest `gh auth login` and say
+  when the limit resets.
+- **Theme** (*done*): colors from `~/.local/state/omarchy/current/theme/colors.toml`,
+  reloaded when the theme changes (Omarchy replaces the whole directory).
+- **Install from a link:** register an `x-scheme-handler/omastore` handler
+  for `omastore://owner/repo` links (e.g. in a README), which opens
+  `omastore-gui --open owner/repo`. The `--open` option already exists.
+- **Pagination:** `catalog.list` already accepts `limit`/`offset`; with hundreds of
+  apps, load on demand while scrolling the GridView.
+- **Translation:** all interface strings already go through `qsTr()` and are
+  in English. Generate `.ts` files with `qt_add_translations` and add a `pt_BR`
+  for Portuguese speakers; the CLI and the daemon's error messages are also
+  in English and would need another mechanism (error codes are already
+  stable, so the frontend can translate them through the table in `docs/ipc.md`).

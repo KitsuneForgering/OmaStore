@@ -1,32 +1,32 @@
-# Indexação em lote com GraphQL e novas fontes de descoberta
+# Batch indexing with GraphQL and new discovery sources
 
-> **Status:** implementado na Fase 12 (`internal/github/graphql.go`). Resultado
-> medido com ~230 repositórios reais (topic + `awesome-omarchy`):
+> **Status:** implemented in Phase 12 (`internal/github/graphql.go`). Result
+> measured with ~230 real repositories (topic + `awesome-omarchy`):
 >
-> | | REST | GraphQL em lote |
+> | | REST | Batched GraphQL |
 > |---|---|---|
-> | 1ª indexação | 863 requisições, 76 s | 173 requisições, 45 s |
-> | reindexação | 497 requisições, 44 s | 12 requisições, 15 s |
+> | 1st indexing | 863 requests, 76 s | 173 requests, 45 s |
+> | reindexing | 497 requests, 44 s | 12 requests, 15 s |
 >
-> O tempo restante da reindexação é quase todo do próprio GraphQL (~6 s por
-> consulta de 50 repositórios com assets); por isso lotes de 25 com 3 em
-> paralelo.
+> The remaining reindexing time is almost all GraphQL itself (~6 s per
+> query of 50 repositories with assets); hence batches of 25 with 3 in
+> parallel.
 
-## Evidência
+## Evidence
 
-- A indexação real de 34 repositórios levou ~15 s na primeira passada e ~8 s
-  quando nada mudou. O custo vem de **4–6 requisições REST por repositório**:
-  repo, HEAD, última release, README, árvore.
-- A busca por `topic:omarchy` retorna muitos repositórios que não são apps
-  (temas, dotfiles, listas). Eles custam requisições e só são descartados
-  depois, por não terem binário.
-- A própria busca trouxe `aorumbayev/awesome-omarchy`: uma lista curada que
-  poderia alimentar as sementes.
+- Real indexing of 34 repositories took ~15 s on the first pass and ~8 s
+  when nothing changed. The cost comes from **4–6 REST requests per repository**:
+  repo, HEAD, latest release, README, tree.
+- The `topic:omarchy` search returns many repositories that are not apps
+  (themes, dotfiles, lists). They cost requests and are only discarded
+  later, for having no binary.
+- The search itself brought up `aorumbayev/awesome-omarchy`: a curated list that
+  could feed the seeds.
 
-## Proposta
+## Proposal
 
-1. **GraphQL para a checagem de cache.** Uma única consulta traz, para até
-   ~50 repositórios, os campos que a verificação de cache compara:
+1. **GraphQL for the cache check.** A single query brings, for up to
+   ~50 repositories, the fields the cache check compares:
 
    ```graphql
    query($ids: [ID!]!) {
@@ -41,26 +41,26 @@
    }
    ```
 
-   Os repositórios que **não mudaram** (a maioria) saem da conta com ~1/50 de
-   requisição cada. README e árvore continuam via REST, só para os que mudaram.
-   Isso exige token (GraphQL não funciona anônimo), então o REST atual fica
-   como caminho sem token.
+   Repositories that **did not change** (most of them) cost ~1/50 of a
+   request each. README and tree still go through REST, only for the ones that changed.
+   This requires a token (GraphQL does not work anonymously), so the current REST stays
+   as the tokenless path.
 
-2. **Pré-filtro barato:** repositórios sem `latestRelease` nunca geram
-   requisições de README/árvore. Hoje eles já são marcados não instaláveis,
-   mas depois de buscar tudo.
+2. **Cheap pre-filter:** repositories without `latestRelease` never generate
+   README/tree requests. Today they are already marked not installable,
+   but only after fetching everything.
 
-3. **Sementes de listas curadas:** ler links `github.com/owner/repo` de
-   READMEs como o `awesome-omarchy` (uma requisição) e somar às sementes.
+3. **Seeds from curated lists:** read `github.com/owner/repo` links from
+   READMEs such as `awesome-omarchy` (one request) and add them to the seeds.
 
-## Custo
+## Cost
 
-Médio: cliente GraphQL (`githubv4` ou requisição HTTP simples), mapear para os
-tipos atuais, manter o REST como fallback, testes com fixtures.
+Medium: GraphQL client (`githubv4` or a plain HTTP request), mapping to the
+current types, keeping REST as a fallback, tests with fixtures.
 
-## Riscos
+## Risks
 
-- O custo de GraphQL é medido em "pontos", não em requisições; consultas com
-  muitos assets custam mais. Medir antes de adotar `first: 50`.
-- Listas "awesome" incluem temas e plugins: o filtro por release com binário
-  continua necessário.
+- GraphQL cost is measured in "points", not requests; queries with
+  many assets cost more. Measure before adopting `first: 50`.
+- "awesome" lists include themes and plugins: the filter by release with a binary
+  is still needed.

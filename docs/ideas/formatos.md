@@ -1,31 +1,31 @@
-# Formatos de pacote e realocação para o `$HOME`
+# Package formats and relocation into `$HOME`
 
-## Evidência
+## Evidence
 
-- `ZacharyZhang-NY/OmaPhoto` publica só `.deb`, `.rpm` e `.pkg.tar.zst`;
-  `pch/rawmakase` até a v0.1.5 publicava `.pkg.tar.zst`/`.rpm` e só depois
-  passou a publicar um tarball.
-- Extraímos de `.pkg.tar.zst` apenas `usr/` e descartamos `.INSTALL`. Isso é
-  seguro, mas o app passa a morar em
-  `~/.local/share/omastore/apps/<repo>/<versão>/usr/...`. Programas que
-  procuram dados em caminhos absolutos (`/usr/share/<app>`) quebram. O
-  RAWmakase funciona porque o lançador dele usa caminhos relativos a `$0`.
+- `ZacharyZhang-NY/OmaPhoto` publishes only `.deb`, `.rpm` and `.pkg.tar.zst`;
+  `pch/rawmakase` published `.pkg.tar.zst`/`.rpm` up to v0.1.5 and only then
+  started publishing a tarball.
+- From `.pkg.tar.zst` we extract only `usr/` and discard `.INSTALL`. This is
+  safe, but the app ends up living in
+  `~/.local/share/omastore/apps/<repo>/<version>/usr/...`. Programs that
+  look for data at absolute paths (`/usr/share/<app>`) break.
+  RAWmakase works because its launcher uses paths relative to `$0`.
 
-## Proposta
+## Proposal
 
-1. **`.deb`:** formato `ar` com `data.tar.{gz,xz,zst}`; extrair só `usr/`,
-   como no `.pkg.tar.zst`, e ignorar os scripts `control`. Custo pequeno.
-2. **`.rpm`:** cabeçalho próprio mais payload `cpio` comprimido. Custo médio;
-   só vale se aparecer app que publique apenas `.rpm`.
-3. **Detectar caminhos absolutos:** depois de extrair um pacote, procurar nos
-   binários ELF (seção `.rodata`, via `debug/elf`) strings como `/usr/share/<nome>`
-   ou `/usr/lib/<nome>` que não existam no sistema. Se houver, marcar a
-   instalação como "pode não funcionar fora de /usr" e avisar na interface.
-   É só leitura do arquivo; nada é executado.
-4. **Preferir tarballs portáteis** (já é o que o `SelectAsset` faz) e
-   documentar isso no guia para autores.
+1. **`.deb`:** `ar` format with `data.tar.{gz,xz,zst}`; extract only `usr/`,
+   as with `.pkg.tar.zst`, and ignore the `control` scripts. Small cost.
+2. **`.rpm`:** its own header plus a compressed `cpio` payload. Medium cost;
+   only worth it if an app shows up that publishes only `.rpm`.
+3. **Detect absolute paths:** after extracting a package, look in the
+   ELF binaries (`.rodata` section, via `debug/elf`) for strings such as `/usr/share/<name>`
+   or `/usr/lib/<name>` that do not exist on the system. If there are any, mark the
+   installation as "may not work outside /usr" and warn in the interface.
+   It only reads the file; nothing is executed.
+4. **Prefer portable tarballs** (which `SelectAsset` already does) and
+   document it in the authors guide.
 
-## Riscos
+## Risks
 
-- Extrair `.deb` de outra distribuição pode trazer dependências de bibliotecas
-  que não existem no Arch; o aviso do item 3 ajuda, mas não resolve.
+- Extracting a `.deb` from another distribution may bring library dependencies
+  that do not exist on Arch; the warning from item 3 helps, but does not solve it.

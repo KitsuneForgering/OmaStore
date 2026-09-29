@@ -1,40 +1,40 @@
-# Distribuição: releases, AUR e o próprio OmaStore no catálogo
+# Distribution: releases, AUR and OmaStore itself in the catalog
 
-> **Status:** itens 1 e 2 implementados na Fase 14 (`make dist`,
-> `.github/workflows/release.yml`, `packaging/arch-bin/`). O item 3 continua
-> em aberto: o tarball `omastore-<versão>-x86_64-linux.tar.gz` segue as
-> regras da própria loja, mas a instalação dela por ela mesma é recusada de
-> propósito (os comandos `omastore*` são reservados); a loja deve ser
-> gerenciada pelo pacman.
+> **Status:** items 1 and 2 implemented in Phase 14 (`make dist`,
+> `.github/workflows/release.yml`, `packaging/arch-bin/`). Item 3 is still
+> open: the `omastore-<version>-x86_64-linux.tar.gz` tarball follows the
+> store's own rules, but the store installing itself is refused on
+> purpose (the `omastore*` commands are reserved); the store should be
+> managed by pacman.
 
-## Evidência
+## Evidence
 
-- O `PKGBUILD` (`packaging/arch/`) gera `omastore-git`, que compila do código
-  e exige `go`, `cmake` e `ninja` na máquina do usuário. Com a simulação das
-  etapas de build e check, o pacote levou alguns minutos para compilar.
-- O projeto segue as próprias regras de publicação ([`../autores.md`](../autores.md)),
-  mas ainda não publica releases: a OmaStore não conseguiria se instalar
-  (nem se atualizar) por ela mesma.
+- The `PKGBUILD` (`packaging/arch/`) produces `omastore-git`, which builds from source
+  and requires `go`, `cmake` and `ninja` on the user's machine. Simulating the
+  build and check steps, the package took a few minutes to build.
+- The project follows its own publishing rules ([`../autores.md`](../autores.md)),
+  but does not publish releases yet: OmaStore could not install itself
+  (or update itself).
 
-## Proposta
+## Proposal
 
-1. **Workflow de release** (`.github/workflows/release.yml`, disparado por tag
-   `v*`): compila backend e frontend para `x86_64` e `aarch64` e publica
-   `omastore-<versão>-<arch>-linux.tar.gz` com a árvore de `make install`.
-   Adicionar `actions/attest-build-provenance` (ver [confianca.md](confianca.md)).
-2. **Dois pacotes no AUR:** `omastore-git` (atual) e `omastore-bin`, que baixa
-   o tarball da release e confere o sha256. Instala em segundos.
-3. **Topic `omarchy` no próprio repositório:** a loja aparece no catálogo e
-   pode se atualizar como qualquer app. Cuidado: o lançador `omastore` é nome
-   reservado (o instalador recusa), então a atualização da loja por ela mesma
-   precisa de tratamento especial ou deve ficar a cargo do pacman.
+1. **Release workflow** (`.github/workflows/release.yml`, triggered by a `v*`
+   tag): builds backend and frontend for `x86_64` and `aarch64` and publishes
+   `omastore-<version>-<arch>-linux.tar.gz` with the `make install` tree.
+   Add `actions/attest-build-provenance` (see [confianca.md](confianca.md)).
+2. **Two AUR packages:** `omastore-git` (current) and `omastore-bin`, which downloads
+   the release tarball and checks its sha256. Installs in seconds.
+3. **`omarchy` topic on the repository itself:** the store shows up in the catalog and
+   can update itself like any app. Careful: the `omastore` launcher is a
+   reserved name (the installer refuses it), so the store updating itself
+   needs special handling or should be left to pacman.
 
-## Custo
+## Cost
 
-Pequeno para o workflow e o `-bin`. O item 3 exige decidir quem gerencia a
-instalação da própria loja (pacman ou OmaStore) para não haver duas cópias.
+Small for the workflow and `-bin`. Item 3 requires deciding who manages the
+store's own installation (pacman or OmaStore) so there are not two copies.
 
-## Riscos
+## Risks
 
-- Cross-compilar o frontend Qt para `aarch64` no CI exige um runner ARM ou
-  QEMU; começar só com `x86_64`.
+- Cross-compiling the Qt frontend for `aarch64` in CI requires an ARM runner or
+  QEMU; start with `x86_64` only.

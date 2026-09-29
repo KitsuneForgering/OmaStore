@@ -1,24 +1,24 @@
-# Relevância mínima na busca
+# Minimum relevance in search
 
-## Evidência
+## Evidence
 
-Com o catálogo real (25 apps instaláveis), a consulta `notes` devolve
-OMARCHIST, wayscriber e RAWmakase. Nenhum deles é um app de notas: todos
-casam só porque a palavra "note(s)" aparece no README, que tem peso baixo. O
-usuário recebe resultados que parecem aleatórios em vez de "nada encontrado".
+With the real catalog (25 installable apps), the query `notes` returns
+OMARCHIST, wayscriber and RAWmakase. None of them is a notes app: they all
+match only because the word "note(s)" appears in the README, which has a low
+weight. The user gets results that look random instead of "nothing found".
 
-## Proposta
+## Proposal
 
-1. Marcar em cada resultado **onde** o termo casou (nome, topics, resumo ou
-   só README) e expor isso no `AppItem` (`matchedIn`).
-2. Se nenhum resultado casou fora do README, a interface mostra "Nenhum app
-   de notas no catálogo; resultados que só mencionam *notes* na
-   documentação:" e os lista separados.
-3. Não usar limiar absoluto de score: ele depende do tamanho do catálogo e
-   quebraria a consistência entre catálogos diferentes. A regra "casou em
-   campo forte ou não" é determinística e independe do corpus.
+1. Mark in each result **where** the term matched (name, topics, summary or
+   only the README) and expose it in `AppItem` (`matchedIn`).
+2. If no result matched outside the README, the interface shows "No notes app
+   in the catalog; results that only mention *notes* in their
+   documentation:" and lists them separately.
+3. Do not use an absolute score threshold: it depends on the catalog size and
+   would break consistency across different catalogs. The rule "matched in a
+   strong field or not" is deterministic and independent of the corpus.
 
-## Custo
+## Cost
 
-Pequeno: o `search.Index` já sabe os pesos por campo; falta guardar por
-campo, e não só a soma ponderada.
+Small: `search.Index` already knows the per-field weights; it only needs to keep
+per-field scores, not just the weighted sum.
