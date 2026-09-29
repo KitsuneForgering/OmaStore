@@ -2,9 +2,9 @@ package search
 
 import "strings"
 
-// ptToEn traduz termos comuns de busca em português para o inglês usado nas
-// descrições dos repositórios. Só a consulta é expandida; o índice não muda.
-// As chaves estão no formato de Tokens (minúsculas, sem acento, sem plural).
+// ptToEn translates common Portuguese search terms into the English used in
+// repository descriptions. Only the query is expanded; the index does not change.
+// The keys are in Tokens format (lowercase, no accents, no plural).
 var ptToEn = map[string][]string{}
 
 func init() {

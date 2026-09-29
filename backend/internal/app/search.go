@@ -9,8 +9,8 @@ import (
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
 )
 
-// searchCache guarda o índice de busca e o reconstrói quando a marca do
-// catálogo muda.
+// searchCache keeps the search index and rebuilds it when the catalog
+// stamp changes.
 type searchCache struct {
 	mu    sync.Mutex
 	stamp string
@@ -41,8 +41,8 @@ func (a *App) searchIndex(ctx context.Context) (*search.Index, error) {
 	return a.search.ix, nil
 }
 
-// ListApps lista o catálogo. Com f.Query, a ordem vem do ranking da busca
-// (e não do score de popularidade); os demais filtros continuam valendo.
+// ListApps lists the catalog. With f.Query, the order comes from the search
+// ranking (not the popularity score); the other filters still apply.
 func (a *App) ListApps(ctx context.Context, f store.Filter) ([]store.ListItem, error) {
 	q := strings.TrimSpace(f.Query)
 	if q == "" {
@@ -61,8 +61,8 @@ func (a *App) ListApps(ctx context.Context, f store.Filter) ([]store.ListItem, e
 	return a.pick(ctx, base, ranked, f.Offset, f.Limit)
 }
 
-// Similar retorna os apps mais parecidos com fullName, respeitando o filtro
-// (por padrão, só instaláveis).
+// Similar returns the apps most similar to fullName, honoring the filter
+// (by default, installable only).
 func (a *App) Similar(ctx context.Context, fullName string, limit int) ([]store.ListItem, error) {
 	if _, err := a.Store.GetApp(ctx, fullName); err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func (a *App) Similar(ctx context.Context, fullName string, limit int) ([]store.
 	return a.pick(ctx, store.Filter{}, ix.Similar(fullName, 0), 0, limit)
 }
 
-// pick devolve, na ordem de ranked, os itens que passam no filtro.
+// pick returns, in ranked order, the items that pass the filter.
 func (a *App) pick(ctx context.Context, f store.Filter, ranked []search.Result, offset, limit int) ([]store.ListItem, error) {
 	items, err := a.Store.ListApps(ctx, f)
 	if err != nil {

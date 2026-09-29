@@ -1,6 +1,6 @@
-// Package search implementa a busca e as recomendações ("apps parecidos")
-// do catálogo. Tudo é local e determinístico: a mesma entrada produz sempre
-// o mesmo resultado, com empates resolvidos pelo nome do repositório.
+// Package search implements the catalog search and recommendations ("similar
+// apps"). Everything is local and deterministic: the same input always yields
+// the same result, with ties broken by the repository name.
 package search
 
 import (
@@ -8,7 +8,7 @@ import (
 	"unicode"
 )
 
-// fold troca letras acentuadas pela versão sem acento.
+// fold replaces accented letters with their unaccented version.
 var fold = strings.NewReplacer(
 	"á", "a", "à", "a", "â", "a", "ã", "a", "ä", "a", "å", "a",
 	"é", "e", "è", "e", "ê", "e", "ë", "e",
@@ -18,7 +18,7 @@ var fold = strings.NewReplacer(
 	"ç", "c", "ñ", "n", "ý", "y", "ÿ", "y", "ß", "ss",
 )
 
-// stopwords em inglês e português que não ajudam a distinguir apps.
+// stopwords in English and Portuguese that do not help tell apps apart.
 var stopwords = map[string]bool{}
 
 func init() {
@@ -35,8 +35,8 @@ func init() {
 	}
 }
 
-// Tokens divide o texto em termos normalizados: minúsculas, sem acentos,
-// só letras e dígitos, sem stopwords, com plural simples removido.
+// Tokens splits text into normalized terms: lowercase, no accents, letters
+// and digits only, no stopwords, with simple plurals removed.
 func Tokens(text string) []string {
 	text = fold.Replace(strings.ToLower(text))
 	var out []string
@@ -51,9 +51,9 @@ func Tokens(text string) []string {
 	return out
 }
 
-// stem remove plurais regulares (inglês e português) e os sufixos
-// ingleses -ing/-ed de palavras longas. É propositalmente simples:
-// previsível importa mais que precisão.
+// stem removes regular plurals (English and Portuguese) and the English
+// -ing/-ed suffixes of long words. It is deliberately simple: being
+// predictable matters more than precision.
 func stem(w string) string {
 	if len(w) <= 4 || !isAlpha(w) {
 		return w
@@ -65,7 +65,7 @@ func stem(w string) string {
 	case strings.HasSuffix(w, "ies"):
 		return w[:len(w)-3] + "y"
 	case strings.HasSuffix(w, "oes"), strings.HasSuffix(w, "aes"):
-		return w[:len(w)-3] + "ao" // edições → edicao (após fold: edicoes)
+		return w[:len(w)-3] + "ao" // edições → edicao (after fold: edicoes)
 	case strings.HasSuffix(w, "ss"), strings.HasSuffix(w, "us"), strings.HasSuffix(w, "is"):
 		return w
 	case strings.HasSuffix(w, "s"):
@@ -74,7 +74,7 @@ func stem(w string) string {
 	return w
 }
 
-// stripIngEd aplica o passo 1b do stemmer de Porter: "theming" → "theme",
+// stripIngEd applies step 1b of the Porter stemmer: "theming" → "theme",
 // "recording" → "record", "running" → "run", "annotated" → "annotate".
 func stripIngEd(w string) (string, bool) {
 	var base string
@@ -87,7 +87,7 @@ func stripIngEd(w string) (string, bool) {
 		return w, false
 	}
 	if !strings.ContainsAny(base, "aeiouy") {
-		return w, false // "string", "bed": não é sufixo
+		return w, false // "string", "bed": not a suffix
 	}
 	switch {
 	case strings.HasSuffix(base, "at"), strings.HasSuffix(base, "bl"), strings.HasSuffix(base, "iz"):
@@ -110,7 +110,7 @@ func isVowel(w string, i int) bool {
 	return false
 }
 
-// measure conta as sequências vogal-consoante (o "m" de Porter).
+// measure counts vowel-consonant sequences (Porter's "m").
 func measure(w string) int {
 	m := 0
 	prevVowel := false
@@ -124,7 +124,7 @@ func measure(w string) int {
 	return m
 }
 
-// endsCVC: termina em consoante-vogal-consoante, e a última não é w, x ou y.
+// endsCVC: ends in consonant-vowel-consonant, and the last one is not w, x or y.
 func endsCVC(w string) bool {
 	n := len(w)
 	if n < 3 {
@@ -143,8 +143,8 @@ func isAlpha(w string) bool {
 	return true
 }
 
-// editDistance1 diz se a e b diferem por no máximo uma inserção, remoção,
-// substituição ou transposição de letras vizinhas.
+// editDistance1 reports whether a and b differ by at most one insertion,
+// deletion, substitution or transposition of adjacent letters.
 func editDistance1(a, b string) bool {
 	if a == b {
 		return true
@@ -158,7 +158,7 @@ func editDistance1(a, b string) bool {
 		for i := 0; i < la; i++ {
 			if a[i] != b[i] {
 				if diff >= 0 {
-					// Segunda diferença: só vale se for transposição vizinha.
+					// Second difference: only valid if it is an adjacent transposition.
 					return diff == i-1 && a[diff] == b[i] && a[i] == b[diff] && a[i+1:] == b[i+1:]
 				}
 				diff = i
@@ -169,7 +169,7 @@ func editDistance1(a, b string) bool {
 	if la < lb {
 		a, b = b, a
 	}
-	// a é um caractere maior que b.
+	// a is one character longer than b.
 	for i := 0; i < len(b); i++ {
 		if a[i] != b[i] {
 			return a[i+1:] == b[i:]

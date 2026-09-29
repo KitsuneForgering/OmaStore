@@ -22,7 +22,7 @@ func TestGet(t *testing.T) {
 		switch r.URL.Path {
 		case "/a.png":
 			time.Sleep(20 * time.Millisecond)
-			w.Header().Set("Content-Type", "text/html") // o servidor mente; vale o conteúdo
+			w.Header().Set("Content-Type", "text/html") // the server lies; the content wins
 			w.Write(pngHeader)
 		case "/logo.svg":
 			w.Write([]byte(`<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"/>`))
@@ -51,16 +51,16 @@ func TestGet(t *testing.T) {
 	}
 	wg.Wait()
 	if hits.Load() != 1 {
-		t.Errorf("downloads simultâneos não foram compartilhados: %d", hits.Load())
+		t.Errorf("concurrent downloads were not shared: %d", hits.Load())
 	}
 	if filepath.Ext(paths[0]) != ".png" || paths[0] != paths[4] {
 		t.Errorf("paths = %v", paths)
 	}
 	if b, _ := os.ReadFile(paths[0]); string(b) != string(pngHeader) {
-		t.Error("conteúdo errado")
+		t.Error("wrong content")
 	}
 	if _, err := c.Get(ctx, srv.URL+"/a.png"); err != nil || hits.Load() != 1 {
-		t.Errorf("cache em disco não usado: %v %d", err, hits.Load())
+		t.Errorf("disk cache not used: %v %d", err, hits.Load())
 	}
 
 	if p, err := c.Get(ctx, srv.URL+"/logo.svg"); err != nil || filepath.Ext(p) != ".svg" {
@@ -70,9 +70,9 @@ func TestGet(t *testing.T) {
 		t.Errorf("html: %v", err)
 	}
 	if _, err := c.Get(ctx, srv.URL+"/404"); err == nil {
-		t.Error("404 deveria falhar")
+		t.Error("404 should fail")
 	}
-	for _, bad := range []string{"http://x/a.png", "file:///etc/passwd", "nada"} {
+	for _, bad := range []string{"http://x/a.png", "file:///etc/passwd", "nothing"} {
 		if _, err := c.Get(ctx, bad); err == nil {
 			t.Errorf("%q aceito", bad)
 		}

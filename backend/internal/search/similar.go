@@ -5,20 +5,20 @@ import (
 	"sort"
 )
 
-// Termos genéricos demais no ecossistema: quase todo app do catálogo os
-// tem, então não indicam semelhança.
+// Terms too generic in this ecosystem: almost every app in the catalog has
+// them, so they do not indicate similarity.
 var genericTerms = map[string]bool{
 	"omarchy": true, "linux": true, "arch": true, "archlinux": true, "hyprland": true,
 	"wayland": true, "desktop": true, "gui": true, "open": true, "source": true,
 	"github": true, "install": true, "license": true, "mit": true, "release": true,
 }
 
-// minSimilarity descarta pares que só compartilham termos marginais.
-// Medido no catálogo real: pares relacionados ficam acima de ~0,2 e o
-// ruído entre apps sem relação entre 0,09 e 0,16.
+// minSimilarity discards pairs that only share marginal terms.
+// Measured on the real catalog: related pairs score above ~0.2 and the
+// noise between unrelated apps is between 0.09 and 0.16.
 const minSimilarity = 0.12
 
-// buildVectors calcula os vetores TF-IDF normalizados usados em Similar.
+// buildVectors computes the normalized TF-IDF vectors used by Similar.
 func (ix *Index) buildVectors() {
 	n := float64(len(ix.docs))
 	ix.vecs = make([]map[string]float64, len(ix.docs))
@@ -31,7 +31,7 @@ func (ix *Index) buildVectors() {
 			}
 			df := float64(ix.df[t])
 			if df <= 1 {
-				continue // termo exclusivo não aproxima de ninguém
+				continue // a unique term brings no one closer
 			}
 			w := math.Log1p(tf) * math.Log(n/df)
 			if w <= 0 {
@@ -48,8 +48,8 @@ func (ix *Index) buildVectors() {
 	}
 }
 
-// Similar retorna os apps mais parecidos com repo (sem incluí-lo), pela
-// similaridade de cosseno dos vetores TF-IDF. Empates: nome do repo.
+// Similar returns the apps most similar to repo (excluding it), by the
+// cosine similarity of the TF-IDF vectors. Ties: repo name.
 func (ix *Index) Similar(repo string, limit int) []Result {
 	self := -1
 	for i, d := range ix.docs {
@@ -67,7 +67,7 @@ func (ix *Index) Similar(repo string, limit int) []Result {
 		if i == self {
 			continue
 		}
-		// Percorre o menor vetor.
+		// Walk the smaller vector.
 		a, b := base, v
 		if len(a) > len(b) {
 			a, b = b, a

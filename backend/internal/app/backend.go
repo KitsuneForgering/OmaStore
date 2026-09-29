@@ -8,7 +8,7 @@ import (
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
 )
 
-// Métodos que fazem de *App um rpc.Backend.
+// Methods that make *App an rpc.Backend.
 
 func (a *App) GetApp(ctx context.Context, fullName string) (*store.AppDetail, error) {
 	return a.Store.GetApp(ctx, fullName)

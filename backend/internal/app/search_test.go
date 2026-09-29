@@ -46,7 +46,7 @@ func TestListAppsRankedSearch(t *testing.T) {
 	put(t, a, "a/cal", "Cal", "Terminal calendar", "Office", []string{"calendar"}, 3, true)
 	put(t, a, "a/calweb", "CalWeb", "Calendar sync server", "Network", []string{"calendar"}, 10, false)
 
-	// O mais relevante vem primeiro, mesmo com menos estrelas; não instaláveis ficam fora.
+	// The most relevant comes first, even with fewer stars; non-installable ones are left out.
 	got, err := a.ListApps(ctx, store.Filter{Query: "calendar"})
 	if err != nil {
 		t.Fatal(err)
@@ -60,27 +60,27 @@ func TestListAppsRankedSearch(t *testing.T) {
 	}
 	office, _ := a.ListApps(ctx, store.Filter{Query: "calendar", All: true, Category: "Network"})
 	if len(office) != 1 || office[0].FullName != "a/calweb" {
-		t.Errorf("categoria = %v", names(office))
+		t.Errorf("category = %v", names(office))
 	}
 	page, _ := a.ListApps(ctx, store.Filter{Query: "calendar", All: true, Offset: 1, Limit: 1})
 	if len(page) != 1 {
-		t.Errorf("paginação = %v", names(page))
+		t.Errorf("pagination = %v", names(page))
 	}
 	none, _ := a.ListApps(ctx, store.Filter{Query: "xyzzy"})
 	if none == nil || len(none) != 0 {
-		t.Errorf("sem resultado deve ser lista vazia, não nil: %v", none)
+		t.Errorf("no results must be an empty list, not nil: %v", none)
 	}
-	// Sem query, continua a ordem por score.
+	// Without a query, the score order still applies.
 	plain, _ := a.ListApps(ctx, store.Filter{})
 	if plain[0].FullName != "a/popular" {
-		t.Errorf("sem query = %v", names(plain))
+		t.Errorf("without query = %v", names(plain))
 	}
 
-	// Índice é reconstruído quando o catálogo muda.
+	// The index is rebuilt when the catalog changes.
 	put(t, a, "a/newcal", "NewCal", "Calendar for Omarchy", "Office", []string{"calendar"}, 1, true)
 	got, _ = a.ListApps(ctx, store.Filter{Query: "newcal"})
 	if len(got) != 1 || got[0].FullName != "a/newcal" {
-		t.Errorf("após mudança = %v", names(got))
+		t.Errorf("after change = %v", names(got))
 	}
 }
 
@@ -98,6 +98,6 @@ func TestSimilarApps(t *testing.T) {
 		t.Errorf("parecidos = %v", names(got))
 	}
 	if _, err := a.Similar(ctx, "x/y", 5); !errors.Is(err, store.ErrNotFound) {
-		t.Errorf("inexistente: %v", err)
+		t.Errorf("missing: %v", err)
 	}
 }

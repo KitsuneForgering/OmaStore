@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// catalog imita o catálogo real indexado do GitHub.
+// catalog mimics the real catalog indexed from GitHub.
 func catalog() []Doc {
 	return []Doc{
 		{Repo: "goodroot/hyprwhspr", Name: "hyprwhspr", Stars: 1222, Category: "AudioVideo",
@@ -57,7 +57,7 @@ func TestTokens(t *testing.T) {
 		t.Errorf("got %v", got)
 	}
 	if Tokens("the a de o") != nil {
-		t.Error("só stopwords deveria dar vazio")
+		t.Error("only stopwords should give nothing")
 	}
 }
 
@@ -80,12 +80,12 @@ func TestEditDistance1(t *testing.T) {
 	no := [][2]string{{"monitor", "mentor"}, {"abc", "abcde"}, {"moinotr", "monitor"}}
 	for _, p := range yes {
 		if !editDistance1(p[0], p[1]) {
-			t.Errorf("%v deveria casar", p)
+			t.Errorf("%v should match", p)
 		}
 	}
 	for _, p := range no {
 		if editDistance1(p[0], p[1]) {
-			t.Errorf("%v não deveria casar", p)
+			t.Errorf("%v should not match", p)
 		}
 	}
 }
@@ -102,31 +102,31 @@ func TestSearchRanking(t *testing.T) {
 		{"calendário", "t4t5/rencal"}, // pt → en
 		{"gravador de reunião", "jankeesvw/omarchy-meeting-recorder"},
 		{"editor de fotos", "ZacharyZhang-NY/OmaPhoto"},
-		{"zzzqqq", ""}, // sem correspondência: não inventa
+		{"zzzqqq", ""}, // no match: does not make things up
 		{"email", "huacnlee/omamail"},
 		{"photo editor", "ZacharyZhang-NY/OmaPhoto"},
-		{"omaphoto", "ZacharyZhang-NY/OmaPhoto"}, // pelo nome
-		{"rawmak", "pch/rawmakase"},              // prefixo
-		{"lightrom", "pch/rawmakase"},            // erro de digitação
-		{"transcripton", "kristoferlund/ostt"},   // erro de digitação
+		{"omaphoto", "ZacharyZhang-NY/OmaPhoto"}, // by name
+		{"rawmak", "pch/rawmakase"},              // prefix
+		{"lightrom", "pch/rawmakase"},            // typo
+		{"transcripton", "kristoferlund/ostt"},   // typo
 		{"meetings", "jankeesvw/omarchy-meeting-recorder"},
 	}
 	for _, c := range cases {
 		res := ix.Search(c.query, 0)
 		if c.first == "" {
 			if len(res) != 0 {
-				t.Errorf("%q: esperava nada, veio %v", c.query, repos(res))
+				t.Errorf("%q: expected nothing, got %v", c.query, repos(res))
 			}
 			continue
 		}
 		if len(res) == 0 || res[0].Repo != c.first {
-			t.Errorf("%q: primeiro = %v, want %s", c.query, repos(res), c.first)
+			t.Errorf("%q: first = %v, want %s", c.query, repos(res), c.first)
 		}
 	}
 }
 
-// Uma variante rara (prefixo ou erro de digitação) não pode passar à
-// frente do documento que contém exatamente o termo buscado.
+// A rare variant (prefix or typo) cannot rank ahead of the document that
+// contains exactly the searched term.
 func TestExactTermBeatsVariants(t *testing.T) {
 	ix := Build([]Doc{
 		{Repo: "a/aether", Name: "Aether", Summary: "Native theming made easy", Topics: []string{"omarchy-theme"}},
@@ -142,10 +142,10 @@ func TestExactTermBeatsVariants(t *testing.T) {
 	}
 	for _, r := range got {
 		if r == "c/there" {
-			t.Errorf("\"theme\" casou com \"there\" por erro de digitação: %v", got)
+			t.Errorf("\"theme\" matched \"there\" as a typo: %v", got)
 		}
 	}
-	// Termo inexistente continua sendo corrigido.
+	// A term that does not exist is still corrected.
 	if got := repos(ix.Search("aehter", 0)); len(got) == 0 || got[0] != "a/aether" {
 		t.Errorf("aehter = %v", got)
 	}
@@ -153,7 +153,7 @@ func TestExactTermBeatsVariants(t *testing.T) {
 
 func TestSearchTopTwo(t *testing.T) {
 	ix := Build(catalog())
-	// As duas ferramentas de monitor ficam à frente de todo o resto.
+	// The two monitor tools rank ahead of everything else.
 	got := repos(ix.Search("monitor hyprland", 2))
 	want := map[string]bool{"erans/hyprmon": true, "crmne/hyprmoncfg": true}
 	if len(got) != 2 || !want[got[0]] || !want[got[1]] {
@@ -163,21 +163,21 @@ func TestSearchTopTwo(t *testing.T) {
 
 func TestSearchAndThenOr(t *testing.T) {
 	ix := Build(catalog())
-	// "voice" e "calendar" nunca aparecem juntos: cai para OU e traz os dois lados.
+	// "voice" and "calendar" never appear together: falls back to OR and brings both sides.
 	res := repos(ix.Search("voice calendar", 0))
 	has := map[string]bool{}
 	for _, r := range res {
 		has[r] = true
 	}
 	if !has["t4t5/rencal"] || !has["kristoferlund/ostt"] {
-		t.Errorf("fallback OU: %v", res)
+		t.Errorf("OR fallback: %v", res)
 	}
-	// "voice terminal" casa só com ostt no modo E.
+	// "voice terminal" only matches ostt in AND mode.
 	if got := repos(ix.Search("voice terminal", 0)); !reflect.DeepEqual(got, []string{"kristoferlund/ostt"}) {
 		t.Errorf("E: %v", got)
 	}
 	if ix.Search("", 0) != nil || ix.Search("the of", 0) != nil {
-		t.Error("consulta vazia deveria dar nil")
+		t.Error("empty query should give nil")
 	}
 	if n := len(ix.Search("omarchy", 3)); n != 3 {
 		t.Errorf("limit: %d", n)
@@ -194,32 +194,32 @@ func TestSimilar(t *testing.T) {
 	for repo, want := range cases {
 		res := ix.Similar(repo, 3)
 		if len(res) == 0 || res[0].Repo != want {
-			t.Errorf("parecidos com %s = %v, want %s primeiro", repo, repos(res), want)
+			t.Errorf("similar to %s = %v, want %s first", repo, repos(res), want)
 		}
 		for _, r := range res {
 			if r.Repo == repo {
-				t.Errorf("%s aparece como parecido consigo mesmo", repo)
+				t.Errorf("%s shows up as similar to itself", repo)
 			}
 		}
 	}
-	// Os editores de imagem se agrupam.
+	// Image editors group together.
 	photo := repos(ix.Similar("ZacharyZhang-NY/OmaPhoto", 2))
 	gfx := map[string]bool{"pch/rawmakase": true, "michaelmonetized/omadesign": true}
 	if len(photo) != 2 || !gfx[photo[0]] || !gfx[photo[1]] {
-		t.Errorf("parecidos com OmaPhoto = %v", photo)
+		t.Errorf("similar to OmaPhoto = %v", photo)
 	}
-	// Um app de calendário não é parecido com os monitores.
+	// A calendar app is not similar to the monitor tools.
 	for _, r := range ix.Similar("t4t5/rencal", 0) {
 		if r.Repo == "erans/hyprmon" || r.Repo == "crmne/hyprmoncfg" {
-			t.Errorf("rencal parecido com %s (%.3f)", r.Repo, r.Score)
+			t.Errorf("rencal similar to %s (%.3f)", r.Repo, r.Score)
 		}
 	}
 	if ix.Similar("x/y", 5) != nil {
-		t.Error("repo desconhecido")
+		t.Error("unknown repo")
 	}
 }
 
-// A ordem de entrada nunca muda o resultado.
+// The input order never changes the result.
 func TestDeterministic(t *testing.T) {
 	base := Build(catalog())
 	queries := []string{"monitor", "photo", "voice", "omarchy", "linux editor"}
@@ -230,12 +230,12 @@ func TestDeterministic(t *testing.T) {
 		ix := Build(docs)
 		for _, q := range queries {
 			if !reflect.DeepEqual(ix.Search(q, 0), base.Search(q, 0)) {
-				t.Fatalf("busca %q mudou com a ordem de entrada", q)
+				t.Fatalf("search %q changed with the input order", q)
 			}
 		}
 		for _, d := range docs {
 			if !reflect.DeepEqual(ix.Similar(d.Repo, 0), base.Similar(d.Repo, 0)) {
-				t.Fatalf("parecidos de %s mudaram com a ordem de entrada", d.Repo)
+				t.Fatalf("similar apps of %s changed with the input order", d.Repo)
 			}
 		}
 	}

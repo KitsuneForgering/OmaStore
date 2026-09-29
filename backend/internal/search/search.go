@@ -6,9 +6,9 @@ import (
 	"strings"
 )
 
-// Doc é um app indexado para busca.
+// Doc is an app indexed for search.
 type Doc struct {
-	Repo     string // owner/repo (identificador e desempate final)
+	Repo     string // owner/repo (identifier and final tiebreaker)
 	Name     string
 	Summary  string
 	Readme   string
@@ -17,49 +17,49 @@ type Doc struct {
 	Stars    int
 }
 
-// Pesos dos campos: um termo no nome vale mais que no README.
+// Field weights: a term in the name is worth more than one in the README.
 const (
 	weightName    = 4.0
-	weightRepo    = 2.0 // owner e nome do repositório
+	weightRepo    = 2.0 // repository owner and name
 	weightTopics  = 2.5
 	weightSummary = 1.5
 	weightReadme  = 0.6
-	// Só o começo do README entra: é onde está a descrição; o resto costuma
-	// ser instalação, changelog e licença.
+	// Only the beginning of the README counts: that is where the description
+	// is; the rest is usually installation, changelog and license.
 	maxReadme = 4000
 
 	bm25K1 = 1.2
 	bm25B  = 0.75
 
-	// Pesos de correspondências aproximadas.
-	// Peso do README nos vetores de similaridade.
+	// Weight of the README in the similarity vectors (see indexed.sim).
 	simReadmeWeight = 0.15
 
+	// Weights of approximate matches.
 	prefixWeight = 0.75
 	fuzzyWeight  = 0.5
 )
 
-// indexed guarda os termos ponderados de um documento.
+// indexed keeps a document's weighted terms.
 type indexed struct {
 	doc   Doc
-	terms map[string]float64 // termo → frequência ponderada pelos campos
+	terms map[string]float64 // term → frequency weighted by the fields
 	len   float64
-	// sim são os termos usados na similaridade: o README pesa bem menos,
-	// porque trechos padrão (instalação, atalhos, licença) aproximam apps
-	// que não têm nada a ver.
+	// sim are the terms used for similarity: the README weighs much less,
+	// because boilerplate sections (installation, shortcuts, license) bring
+	// unrelated apps closer together.
 	sim map[string]float64
 }
 
-// Index é um índice imutável; crie outro quando o catálogo mudar.
+// Index is an immutable index; create another one when the catalog changes.
 type Index struct {
 	docs   []indexed
-	df     map[string]int // em quantos documentos cada termo aparece
+	df     map[string]int // how many documents each term appears in
 	avgLen float64
-	vocab  []string // termos ordenados (para busca por prefixo determinística)
+	vocab  []string // sorted terms (for deterministic prefix search)
 	vecs   []map[string]float64
 }
 
-// Build monta o índice. A ordem de docs não afeta os resultados.
+// Build builds the index. The order of docs does not affect the results.
 func Build(docs []Doc) *Index {
 	sorted := append([]Doc(nil), docs...)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Repo < sorted[j].Repo })
@@ -106,7 +106,7 @@ func Build(docs []Doc) *Index {
 	return ix
 }
 
-// Len é o número de documentos.
+// Len is the number of documents.
 func (ix *Index) Len() int { return len(ix.docs) }
 
 func (ix *Index) idf(t string) float64 {
@@ -115,18 +115,18 @@ func (ix *Index) idf(t string) float64 {
 	return math.Log(1 + (n-df+0.5)/(df+0.5))
 }
 
-// expansion é um termo do vocabulário que casa com um termo da consulta.
+// expansion is a vocabulary term that matches a query term.
 type expansion struct {
-	weight float64 // 1 exato, prefixWeight ou fuzzyWeight
+	weight float64 // 1 exact, prefixWeight or fuzzyWeight
 	idf    float64
 }
 
-// expand devolve os termos do vocabulário que casam com um termo da
-// consulta: o próprio termo (peso 1), termos que começam com ele (consulta
-// com 3+ letras, peso 0,75) e, só se o termo não existir no vocabulário,
-// termos a um erro de digitação (5+ letras, peso 0,5). O idf das variantes
-// é limitado ao do termo exato: uma variante rara nunca vale mais que o
-// termo que o usuário digitou.
+// expand returns the vocabulary terms that match a query term: the term
+// itself (weight 1), terms that start with it (queries with 3+ letters,
+// weight 0.75) and, only if the term is not in the vocabulary, terms one
+// typo away (5+ letters, weight 0.5). The variants' idf is capped at the
+// exact term's: a rare variant is never worth more than the term the user
+// typed.
 func (ix *Index) expand(q string) map[string]expansion {
 	out := map[string]expansion{}
 	_, exact := ix.df[q]
@@ -156,15 +156,15 @@ func (ix *Index) expand(q string) map[string]expansion {
 	return out
 }
 
-// Result é um documento encontrado.
+// Result is a found document.
 type Result struct {
 	Repo  string
 	Score float64
 }
 
-// Search ordena os documentos pela relevância para a consulta. Todos os
-// termos precisam casar (E lógico); se nenhum documento satisfizer isso, a
-// busca é repetida com OU. Empates: mais estrelas, depois o nome do repo.
+// Search sorts the documents by relevance to the query. Every term must
+// match (logical AND); if no document satisfies that, the search is
+// repeated with OR. Ties: more stars, then the repo name.
 func (ix *Index) Search(query string, limit int) []Result {
 	qterms := uniq(Tokens(query))
 	if len(qterms) == 0 || len(ix.docs) == 0 {
@@ -173,7 +173,7 @@ func (ix *Index) Search(query string, limit int) []Result {
 	expansions := make([]map[string]expansion, len(qterms))
 	for i, q := range qterms {
 		expansions[i] = ix.expand(q)
-		// Termo em português: a tradução conta como o mesmo termo da consulta.
+		// Portuguese term: its translation counts as the same query term.
 		for _, en := range ptToEn[q] {
 			for t, e := range ix.expand(en) {
 				if cur, ok := expansions[i][t]; !ok || e.weight*e.idf > cur.weight*cur.idf {
@@ -221,7 +221,7 @@ func (ix *Index) score(expansions []map[string]expansion, all bool) []Result {
 		if matched == 0 || (all && matched < len(expansions)) {
 			continue
 		}
-		// Popularidade só como leve desempate entre relevâncias parecidas.
+		// Popularity only as a light tiebreaker between similar relevances.
 		total *= 1 + 0.02*math.Log1p(float64(d.doc.Stars))
 		out = append(out, scored{Result{d.doc.Repo, round(total)}, d.doc.Stars})
 	}
@@ -241,8 +241,8 @@ func (ix *Index) score(expansions []map[string]expansion, all bool) []Result {
 	return res
 }
 
-// round elimina ruído de ponto flutuante para que a ordenação não dependa
-// da ordem das somas.
+// round removes floating point noise so the ordering does not depend on
+// the order of the sums.
 func round(f float64) float64 { return math.Round(f*1e9) / 1e9 }
 
 func uniq(ts []string) []string {

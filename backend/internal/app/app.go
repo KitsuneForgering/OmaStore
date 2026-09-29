@@ -1,5 +1,5 @@
-// Package app monta as dependências do backend (caminhos, banco, cliente do
-// GitHub, indexador e instalador), compartilhadas pela CLI e pelo daemon.
+// Package app wires the backend dependencies (paths, database, GitHub client,
+// indexer and installer), shared by the CLI and the daemon.
 package app
 
 import (
@@ -16,7 +16,7 @@ import (
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/xdg"
 )
 
-// App agrupa os serviços do backend.
+// App groups the backend services.
 type App struct {
 	Paths     xdg.Paths
 	Store     *store.Store
@@ -29,7 +29,7 @@ type App struct {
 	search searchCache
 }
 
-// Open resolve os caminhos XDG, abre o banco e cria os serviços.
+// Open resolves the XDG paths, opens the database and creates the services.
 func Open(ctx context.Context, log *slog.Logger) (*App, error) {
 	if log == nil {
 		log = slog.Default()
@@ -47,7 +47,7 @@ func Open(ctx context.Context, log *slog.Logger) (*App, error) {
 	}
 	token := github.TokenFromEnv(ctx)
 	if token == "" {
-		log.Info("sem token do GitHub; usando acesso anônimo (limite de 60 req/h)")
+		log.Info("no GitHub token; using anonymous access (limit of 60 req/h)")
 	}
 	gh, err := github.New(github.Options{Token: token})
 	if err != nil {
@@ -76,5 +76,5 @@ func Open(ctx context.Context, log *slog.Logger) (*App, error) {
 	}, nil
 }
 
-// Close libera os recursos.
+// Close releases the resources.
 func (a *App) Close() error { return a.Store.Close() }

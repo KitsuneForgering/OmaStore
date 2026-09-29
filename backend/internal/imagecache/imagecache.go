@@ -1,5 +1,5 @@
-// Package imagecache baixa e guarda em disco imagens remotas (ícones e
-// screenshots) para o frontend, que não acessa a rede.
+// Package imagecache downloads and stores remote images (icons and
+// screenshots) on disk for the frontend, which does not access the network.
 package imagecache
 
 import (
@@ -19,13 +19,13 @@ import (
 	"time"
 )
 
-// MaxBytes limita o tamanho de uma imagem.
+// MaxBytes limits the size of an image.
 var MaxBytes int64 = 15 << 20
 
-// ErrNotImage indica que o conteúdo baixado não é uma imagem.
-var ErrNotImage = errors.New("conteúdo não é imagem")
+// ErrNotImage means the downloaded content is not an image.
+var ErrNotImage = errors.New("content is not an image")
 
-// Cache guarda imagens em Dir, nomeadas pelo sha256 da URL.
+// Cache keeps images in Dir, named by the sha256 of the URL.
 type Cache struct {
 	Dir  string
 	HTTP *http.Client
@@ -47,7 +47,7 @@ func (c *Cache) client() *http.Client {
 	return &http.Client{Timeout: 60 * time.Second}
 }
 
-// extFor escolhe a extensão pelo tipo detectado.
+// extFor picks the extension from the detected type.
 func extFor(ctype string) string {
 	switch ctype {
 	case "image/png":
@@ -64,7 +64,7 @@ func extFor(ctype string) string {
 	return ""
 }
 
-// sniff identifica o tipo pelos bytes (nunca pelo header do servidor).
+// sniff identifies the type from the bytes (never from the server header).
 func sniff(b []byte) string {
 	ct := http.DetectContentType(b)
 	if strings.HasPrefix(ct, "image/") && extFor(ct) != "" {
@@ -85,7 +85,7 @@ func key(u string) string {
 	return hex.EncodeToString(s[:])
 }
 
-// cached procura um arquivo já baixado para a URL.
+// cached looks for an already downloaded file for the URL.
 func (c *Cache) cached(k string) string {
 	matches, _ := filepath.Glob(filepath.Join(c.Dir, k+".*"))
 	for _, m := range matches {
@@ -96,12 +96,12 @@ func (c *Cache) cached(k string) string {
 	return ""
 }
 
-// Get retorna o caminho local da imagem em rawURL, baixando se preciso.
-// Pedidos simultâneos da mesma URL compartilham um único download.
+// Get returns the local path of the image at rawURL, downloading it if needed.
+// Concurrent requests for the same URL share a single download.
 func (c *Cache) Get(ctx context.Context, rawURL string) (string, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Scheme != "https" || u.Host == "" {
-		return "", fmt.Errorf("URL de imagem inválida: %q", rawURL)
+		return "", fmt.Errorf("invalid image URL: %q", rawURL)
 	}
 	k := key(rawURL)
 	if p := c.cached(k); p != "" {
@@ -141,18 +141,18 @@ func (c *Cache) fetch(ctx context.Context, rawURL, k string) (string, error) {
 	req.Header.Set("User-Agent", "omastore")
 	resp, err := c.client().Do(req)
 	if err != nil {
-		return "", fmt.Errorf("baixar imagem: %w", err)
+		return "", fmt.Errorf("download image: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("baixar imagem %s: HTTP %d", rawURL, resp.StatusCode)
+		return "", fmt.Errorf("download image %s: HTTP %d", rawURL, resp.StatusCode)
 	}
 	b, err := io.ReadAll(io.LimitReader(resp.Body, MaxBytes+1))
 	if err != nil {
-		return "", fmt.Errorf("baixar imagem: %w", err)
+		return "", fmt.Errorf("download image: %w", err)
 	}
 	if int64(len(b)) > MaxBytes {
-		return "", fmt.Errorf("imagem maior que %d bytes", MaxBytes)
+		return "", fmt.Errorf("image larger than %d bytes", MaxBytes)
 	}
 	ct := sniff(b)
 	if ct == "" {
