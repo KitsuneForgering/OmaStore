@@ -1,5 +1,5 @@
-// Package gitrepo mantém clones rasos (Depth 1) de repositórios em cache e
-// localiza neles arquivos que a API não entrega bem (ícone, screenshots).
+// Package gitrepo keeps shallow clones (Depth 1) of repositories in a cache and
+// finds files in them that the API does not serve well (icon, screenshots).
 package gitrepo
 
 import (
@@ -16,15 +16,15 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 )
 
-// Cache guarda clones em Dir/<owner>__<repo>.
+// Cache keeps clones in Dir/<owner>__<repo>.
 type Cache struct {
 	Dir string
-	// URL monta a URL de clone; o default é https://github.com/<full>.git.
-	// Os testes apontam para repositórios locais.
+	// URL builds the clone URL; the default is https://github.com/<full>.git.
+	// Tests point it at local repositories.
 	URL func(fullName string) string
 }
 
-// Path retorna o diretório do clone de fullName.
+// Path returns the clone directory of fullName.
 func (c *Cache) Path(fullName string) string {
 	return filepath.Join(c.Dir, strings.ReplaceAll(fullName, "/", "__"))
 }
@@ -36,9 +36,9 @@ func (c *Cache) url(fullName string) string {
 	return "https://github.com/" + fullName + ".git"
 }
 
-// Sync garante um clone raso atualizado de fullName e retorna o diretório
-// e o SHA do HEAD. Se já houver clone, faz fetch raso e reset; se isso falhar,
-// apaga e clona de novo.
+// Sync ensures an up-to-date shallow clone of fullName and returns the directory
+// and the HEAD SHA. If a clone exists, it does a shallow fetch and reset; if that
+// fails, it deletes it and clones again.
 func (c *Cache) Sync(ctx context.Context, fullName string) (dir, sha string, err error) {
 	dir = c.Path(fullName)
 	if _, statErr := os.Stat(filepath.Join(dir, ".git")); statErr == nil {
@@ -51,10 +51,10 @@ func (c *Cache) Sync(ctx context.Context, fullName string) (dir, sha string, err
 		}
 	}
 	if err := os.RemoveAll(dir); err != nil {
-		return "", "", fmt.Errorf("limpar clone de %s: %w", fullName, err)
+		return "", "", fmt.Errorf("clean clone of %s: %w", fullName, err)
 	}
 	if err := os.MkdirAll(c.Dir, 0o755); err != nil {
-		return "", "", fmt.Errorf("criar cache de repos: %w", err)
+		return "", "", fmt.Errorf("create repo cache: %w", err)
 	}
 	r, err := git.PlainCloneContext(ctx, dir, false, &git.CloneOptions{
 		URL:          c.url(fullName),
@@ -68,12 +68,12 @@ func (c *Cache) Sync(ctx context.Context, fullName string) (dir, sha string, err
 	}
 	head, err := r.Head()
 	if err != nil {
-		return "", "", fmt.Errorf("HEAD de %s: %w", fullName, err)
+		return "", "", fmt.Errorf("HEAD of %s: %w", fullName, err)
 	}
 	return dir, head.Hash().String(), nil
 }
 
-// update faz fetch raso do branch atual e reseta a worktree para ele.
+// update does a shallow fetch of the current branch and resets the worktree to it.
 func update(ctx context.Context, dir string) (string, error) {
 	r, err := git.PlainOpen(dir)
 	if err != nil {
@@ -113,17 +113,17 @@ func update(ctx context.Context, dir string) (string, error) {
 	return ref.Hash().String(), nil
 }
 
-// skipDirs não são percorridos ao listar arquivos.
+// skipDirs are not walked when listing files.
 var skipDirs = map[string]bool{
 	".git": true, "node_modules": true, "vendor": true, "target": true,
 	"build": true, "dist": true, ".venv": true, "__pycache__": true,
 }
 
-// maxDepth limita a profundidade da listagem.
+// maxDepth limits the listing depth.
 const maxDepth = 6
 
-// ListFiles lista os arquivos regulares de dir como caminhos relativos com "/".
-// Symlinks não são seguidos nem listados.
+// ListFiles lists the regular files of dir as relative paths with "/".
+// Symlinks are neither followed nor listed.
 func ListFiles(dir string) ([]string, error) {
 	var out []string
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
@@ -143,7 +143,7 @@ func ListFiles(dir string) ([]string, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("listar %s: %w", dir, err)
+		return nil, fmt.Errorf("list %s: %w", dir, err)
 	}
 	return out, nil
 }

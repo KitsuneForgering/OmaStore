@@ -8,12 +8,12 @@ import (
 	"strings"
 )
 
-// Estas funções trabalham sobre listas de caminhos relativos ("/"), vindas de
-// um clone (ListFiles) ou da Trees API do GitHub.
+// These functions work on lists of relative paths ("/"), coming from
+// a clone (ListFiles) or from GitHub's Trees API.
 
 var imageExt = map[string]bool{".png": true, ".svg": true, ".jpg": true, ".jpeg": true, ".webp": true, ".gif": true}
 
-// IsImage diz se p tem extensão de imagem.
+// IsImage reports whether p has an image extension.
 func IsImage(p string) bool { return imageExt[strings.ToLower(path.Ext(p))] }
 
 var shotWords = []string{"screenshot", "screen-shot", "screen_shot", "screencap", "preview", "showcase", "demo"}
@@ -40,8 +40,8 @@ func inTestDir(lp string) bool {
 
 var sizeRe = regexp.MustCompile(`(?:^|[^0-9])(16|22|24|32|48|64|96|128|192|256|512|1024)(?:x(?:16|22|24|32|48|64|96|128|192|256|512|1024))?(?:[^0-9]|$)`)
 
-// FindIcon escolhe o arquivo mais provável de ser o ícone do app, ou "".
-// Aceita apenas PNG e SVG (formatos que o tema hicolor suporta).
+// FindIcon picks the file most likely to be the app icon, or "".
+// Accepts only PNG and SVG (formats the hicolor theme supports).
 func FindIcon(files []string, repoName string) string {
 	repo := strings.ToLower(repoName)
 	best, bestScore := "", 0
@@ -82,7 +82,7 @@ func FindIcon(files []string, repoName string) string {
 		if dir == "." {
 			score += 3
 		}
-		// SVG escala sem perda; entre PNGs, preferir resoluções maiores (até 512).
+		// SVG scales losslessly; among PNGs, prefer larger resolutions (up to 512).
 		if ext == ".svg" {
 			score += 10
 		} else if m := sizeRe.FindStringSubmatch(lf); m != nil {
@@ -96,7 +96,7 @@ func FindIcon(files []string, repoName string) string {
 				score -= 10
 			}
 		}
-		// Menos profundo ganha no empate.
+		// Shallower wins ties.
 		score -= strings.Count(f, "/")
 		if score > bestScore || (score == bestScore && f < best) {
 			best, bestScore = f, score
@@ -105,7 +105,7 @@ func FindIcon(files []string, repoName string) string {
 	return best
 }
 
-// FindScreenshots lista imagens que parecem screenshots, em ordem estável.
+// FindScreenshots lists images that look like screenshots, in a stable order.
 func FindScreenshots(files []string, max int) []string {
 	var out []string
 	for _, f := range files {

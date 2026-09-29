@@ -13,8 +13,8 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
-// makeRepo cria um repositório git local com os arquivos dados e retorna
-// o caminho e uma função para adicionar commits.
+// makeRepo creates a local git repository with the given files and returns
+// its path and a function to add commits.
 func makeRepo(t *testing.T, files map[string]string) (string, func(map[string]string) string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -71,10 +71,10 @@ func TestSyncCloneAndUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 	if sha2 == sha1 || sha2 != want {
-		t.Errorf("sha após update = %s, want %s", sha2, want)
+		t.Errorf("sha after update = %s, want %s", sha2, want)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "screenshots/main.png")); err != nil {
-		t.Errorf("arquivo novo ausente: %v", err)
+		t.Errorf("new file missing: %v", err)
 	}
 }
 
@@ -90,7 +90,7 @@ func TestSyncRecoversFromBrokenClone(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "lixo")); !os.IsNotExist(err) {
-		t.Error("clone quebrado não foi substituído")
+		t.Error("broken clone was not replaced")
 	}
 }
 

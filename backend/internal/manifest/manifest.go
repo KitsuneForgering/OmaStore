@@ -1,11 +1,11 @@
-// Package manifest lê o omastore.toml opcional que o autor de um app coloca
-// na raiz do repositório para declarar o que as heurísticas deduziriam:
-// nome, resumo, categorias, ícone, screenshots, terminal e, por
-// arquitetura, qual asset instalar e qual é o executável.
+// Package manifest reads the omastore.toml an app author puts at the root
+// of the repository to declare what the heuristics would otherwise guess:
+// name, summary, categories, icon, screenshots, terminal and, per
+// architecture, which asset to install and which file is the executable.
 //
-// O conteúdo vem de repositórios não confiáveis: todo caminho é validado
-// (relativo, sem "..") e todo texto tem tamanho limitado. O manifesto nunca
-// amplia o que o instalador aceita; só escolhe entre opções já seguras.
+// The content comes from untrusted repositories: every path is validated
+// (relative, no "..") and every text has a bounded length. The manifest never
+// widens what the installer accepts; it only chooses among already-safe options.
 package manifest
 
 import (
@@ -22,16 +22,16 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// FileName é o nome do arquivo na raiz do repositório.
+// FileName is the file name at the repository root.
 const FileName = "omastore.toml"
 
-// MaxSize limita o tamanho do arquivo.
+// MaxSize limits the file size.
 const MaxSize = 64 << 10
 
-// Manifest é o conteúdo do omastore.toml. Todos os campos são opcionais.
+// Manifest is the content of omastore.toml. Every field is optional.
 type Manifest struct {
-	// Kind é o tipo do projeto. Só "app" (o padrão) é indexado: a OmaStore
-	// não distribui plugins nem temas do Omarchy.
+	// Kind is the project type. Only "app" (the default) is indexed: OmaStore
+	// does not distribute Omarchy plugins or themes.
 	Kind        string   `toml:"kind" json:"kind,omitempty"`
 	Name        string   `toml:"name" json:"name,omitempty"`
 	Summary     string   `toml:"summary" json:"summary,omitempty"`
@@ -39,28 +39,28 @@ type Manifest struct {
 	Icon        string   `toml:"icon" json:"icon,omitempty"`
 	Screenshots []string `toml:"screenshots" json:"screenshots,omitempty"`
 	Terminal    *bool    `toml:"terminal" json:"terminal,omitempty"`
-	// Linux mapeia arquitetura (x86_64, aarch64 ou os sinônimos amd64,
-	// arm64) para o asset e o executável daquela arquitetura.
+	// Linux maps an architecture (x86_64, aarch64 or the synonyms amd64,
+	// arm64) to that architecture's asset and executable.
 	Linux map[string]Target `toml:"linux" json:"linux,omitempty"`
 }
 
-// Target descreve a instalação numa arquitetura.
+// Target describes the installation on one architecture.
 type Target struct {
-	// Asset é o nome do asset da release. Aceita {version} (tag sem o "v"
-	// inicial), {tag} (tag como está) e * (qualquer sequência).
+	// Asset is the release asset name. Accepts {version} (tag without the
+	// leading "v"), {tag} (tag as is) and * (any sequence).
 	Asset string `toml:"asset" json:"asset,omitempty"`
-	// Exec é o caminho do executável dentro do pacote extraído. Aceita
-	// {version} e {tag}, como Asset (ex.: "app-{version}-x86_64-linux/bin/app").
+	// Exec is the executable path inside the extracted package. Accepts
+	// {version} and {tag}, like Asset (e.g. "app-{version}-x86_64-linux/bin/app").
 	Exec string `toml:"exec" json:"exec,omitempty"`
 }
 
-// KindApp é o único tipo indexado.
+// KindApp is the only indexed kind.
 const KindApp = "app"
 
-// IsApp diz se o manifesto declara um app (os demais tipos não são indexados).
+// IsApp reports whether the manifest declares an app (other kinds are not indexed).
 func (m *Manifest) IsApp() bool { return m != nil && m.Kind == KindApp }
 
-// Limites dos campos de texto.
+// Limits of the text fields.
 const (
 	maxName        = 80
 	maxSummary     = 300
@@ -69,15 +69,15 @@ const (
 	maxPath        = 256
 )
 
-// mainCategories são as categorias principais da freedesktop.
+// mainCategories are the freedesktop main categories.
 var mainCategories = map[string]bool{
 	"AudioVideo": true, "Audio": true, "Video": true, "Development": true, "Education": true,
 	"Game": true, "Graphics": true, "Network": true, "Office": true, "Science": true,
 	"Settings": true, "System": true, "Utility": true,
 }
 
-// additionalCategories aceitas além das principais (subconjunto comum da
-// especificação); servem só para o .desktop.
+// reAdditional accepts additional categories besides the main ones (a common
+// subset of the specification); they only go into the .desktop file.
 var reAdditional = regexp.MustCompile(`^[A-Z][A-Za-z0-9]{1,39}$`)
 
 var archAliases = map[string]string{
@@ -85,13 +85,13 @@ var archAliases = map[string]string{
 	"aarch64": "arm64", "arm64": "arm64",
 }
 
-// NormArch converte o nome de arquitetura do manifesto para o do GOARCH.
+// NormArch converts a manifest architecture name into its GOARCH name.
 func NormArch(a string) (string, bool) {
 	n, ok := archAliases[strings.ToLower(a)]
 	return n, ok
 }
 
-// Problem é um erro ou aviso encontrado ao validar.
+// Problem is an error or warning found while validating.
 type Problem struct {
 	Field   string
 	Message string
@@ -99,20 +99,20 @@ type Problem struct {
 }
 
 func (p Problem) String() string {
-	kind := "erro"
+	kind := "error"
 	if p.Warning {
-		kind = "aviso"
+		kind = "warning"
 	}
 	return fmt.Sprintf("%s: %s: %s", kind, p.Field, p.Message)
 }
 
-// Parse lê e valida um manifesto. strict rejeita campos desconhecidos (útil
-// no lint; o indexador aceita campos novos para manter compatibilidade).
-// Campos inválidos são removidos do resultado e reportados em problems;
-// err só é retornado se o arquivo não puder ser lido como TOML.
+// Parse reads and validates a manifest. strict rejects unknown fields (useful
+// for linting; the indexer accepts new fields to stay compatible).
+// Invalid fields are removed from the result and reported in problems;
+// err is only returned if the file cannot be read as TOML.
 func Parse(data []byte, strict bool) (*Manifest, []Problem, error) {
 	if len(data) > MaxSize {
-		return nil, nil, fmt.Errorf("%s maior que %d bytes", FileName, MaxSize)
+		return nil, nil, fmt.Errorf("%s larger than %d bytes", FileName, MaxSize)
 	}
 	var m Manifest
 	dec := toml.NewDecoder(bytes.NewReader(data))
@@ -122,15 +122,15 @@ func Parse(data []byte, strict bool) (*Manifest, []Problem, error) {
 	if err := dec.Decode(&m); err != nil {
 		var sm *toml.StrictMissingError
 		if errors.As(err, &sm) {
-			return nil, []Problem{{Field: "(arquivo)", Message: "campos desconhecidos:\n" + sm.String()}}, nil
+			return nil, []Problem{{Field: "(file)", Message: "unknown fields:\n" + sm.String()}}, nil
 		}
-		return nil, nil, fmt.Errorf("ler %s: %w", FileName, err)
+		return nil, nil, fmt.Errorf("read %s: %w", FileName, err)
 	}
 	problems := m.sanitize()
 	return &m, problems, nil
 }
 
-// cleanText normaliza espaços e limita o tamanho.
+// cleanText normalizes whitespace and limits the length.
 func cleanText(s string, max int) (string, bool) {
 	s = strings.Join(strings.Fields(s), " ")
 	if !utf8.ValidString(s) {
@@ -142,20 +142,20 @@ func cleanText(s string, max int) (string, bool) {
 	return s, true
 }
 
-// relPath valida um caminho relativo dentro do repositório/pacote.
+// relPath validates a relative path inside the repository/package.
 func relPath(p string) (string, error) {
 	if p == "" {
-		return "", errors.New("vazio")
+		return "", errors.New("empty")
 	}
 	if len(p) > maxPath {
-		return "", errors.New("longo demais")
+		return "", errors.New("too long")
 	}
 	if strings.Contains(p, `\`) || strings.HasPrefix(p, "/") || strings.ContainsRune(p, 0) {
-		return "", errors.New("precisa ser relativo, com /")
+		return "", errors.New("must be relative, with /")
 	}
 	c := path.Clean(p)
 	if c == "." || c == ".." || strings.HasPrefix(c, "../") {
-		return "", errors.New("sai do repositório")
+		return "", errors.New("leaves the repository")
 	}
 	return c, nil
 }
@@ -168,7 +168,7 @@ func isImagePath(p string) bool {
 	return false
 }
 
-// sanitize remove valores inválidos e devolve os problemas encontrados.
+// sanitize removes invalid values and returns the problems found.
 func (m *Manifest) sanitize() []Problem {
 	var ps []Problem
 	errf := func(field, format string, a ...any) {
@@ -183,23 +183,23 @@ func (m *Manifest) sanitize() []Problem {
 		m.Kind = KindApp
 	case "plugin", "theme":
 		m.Kind = k
-		warnf("kind", "%q: a OmaStore só indexa apps; este repositório não entra no catálogo", k)
+		warnf("kind", "%q: OmaStore only indexes apps; this repository is not added to the catalog", k)
 	default:
-		errf("kind", "%q desconhecido (use \"app\")", m.Kind)
+		errf("kind", "%q is unknown (use \"app\")", m.Kind)
 		m.Kind = k
 	}
 
 	if m.Name != "" {
 		n, ok := cleanText(m.Name, maxName)
 		if !ok {
-			warnf("name", "cortado em %d caracteres", maxName)
+			warnf("name", "truncated to %d characters", maxName)
 		}
 		m.Name = n
 	}
 	if m.Summary != "" {
 		s, ok := cleanText(m.Summary, maxSummary)
 		if !ok {
-			warnf("summary", "cortado em %d caracteres", maxSummary)
+			warnf("summary", "truncated to %d characters", maxSummary)
 		}
 		m.Summary = s
 	}
@@ -212,10 +212,10 @@ func (m *Manifest) sanitize() []Problem {
 		case seen[c]:
 			continue
 		case !mainCategories[c] && !reAdditional.MatchString(c):
-			errf("categories", "categoria inválida %q", c)
+			errf("categories", "invalid category %q", c)
 			continue
 		case len(cats) == maxCategories:
-			warnf("categories", "só as %d primeiras são usadas", maxCategories)
+			warnf("categories", "only the first %d are used", maxCategories)
 			continue
 		}
 		seen[c] = true
@@ -223,8 +223,8 @@ func (m *Manifest) sanitize() []Problem {
 	}
 	m.Categories = cats
 	if len(cats) > 0 && m.MainCategory() == "" {
-		// Sem categoria principal o app não aparece em nenhum menu.
-		warnf("categories", "nenhuma categoria principal da freedesktop (ex.: Graphics, System)")
+		// Without a main category the app does not show up in any menu.
+		warnf("categories", "no freedesktop main category (e.g. Graphics, System)")
 	}
 
 	if m.Icon != "" {
@@ -234,7 +234,7 @@ func (m *Manifest) sanitize() []Problem {
 			errf("icon", "%q: %v", m.Icon, err)
 			p = ""
 		case !isImagePath(p) || (path.Ext(p) != ".png" && path.Ext(p) != ".svg"):
-			errf("icon", "%q: use PNG ou SVG", m.Icon)
+			errf("icon", "%q: use PNG or SVG", m.Icon)
 			p = ""
 		}
 		m.Icon = p
@@ -248,14 +248,14 @@ func (m *Manifest) sanitize() []Problem {
 			errf("screenshots", "%q: %v", s, err)
 			continue
 		} else if !isImagePath(p) {
-			errf("screenshots", "%q não é imagem", s)
+			errf("screenshots", "%q is not an image", s)
 			continue
 		} else {
 			shots = append(shots, p)
 		}
 		if len(shots) == maxScreenshots {
 			if len(m.Screenshots) > maxScreenshots {
-				warnf("screenshots", "só as %d primeiras são usadas", maxScreenshots)
+				warnf("screenshots", "only the first %d are used", maxScreenshots)
 			}
 			break
 		}
@@ -273,11 +273,11 @@ func (m *Manifest) sanitize() []Problem {
 		arch, ok := NormArch(k)
 		field := "linux." + k
 		if !ok {
-			errf(field, "arquitetura desconhecida (use x86_64 ou aarch64)")
+			errf(field, "unknown architecture (use x86_64 or aarch64)")
 			continue
 		}
 		if _, dup := targets[arch]; dup {
-			errf(field, "arquitetura repetida")
+			errf(field, "duplicated architecture")
 			continue
 		}
 		if t.Asset != "" {
@@ -309,7 +309,7 @@ func (m *Manifest) sanitize() []Problem {
 	return ps
 }
 
-// MainCategory é a primeira categoria principal declarada, ou "".
+// MainCategory is the first declared main category, or "".
 func (m *Manifest) MainCategory() string {
 	for _, c := range m.Categories {
 		if mainCategories[c] {
@@ -319,7 +319,7 @@ func (m *Manifest) MainCategory() string {
 	return ""
 }
 
-// Target retorna o alvo da arquitetura (nome do GOARCH).
+// Target returns the target for an architecture (GOARCH name).
 func (m *Manifest) Target(goarch string) (Target, bool) {
 	if m == nil {
 		return Target{}, false
@@ -328,7 +328,7 @@ func (m *Manifest) Target(goarch string) (Target, bool) {
 	return t, ok
 }
 
-// Empty diz se o manifesto não declara nada.
+// Empty reports whether the manifest declares nothing.
 func (m *Manifest) Empty() bool {
 	return m == nil || ((m.Kind == "" || m.Kind == KindApp) && m.Name == "" && m.Summary == "" && len(m.Categories) == 0 && m.Icon == "" &&
 		len(m.Screenshots) == 0 && m.Terminal == nil && len(m.Linux) == 0)
@@ -338,16 +338,16 @@ var rePlaceholder = regexp.MustCompile(`\{[^}]*\}`)
 
 func checkPattern(p string) error {
 	if len(p) > maxPath {
-		return errors.New("padrão longo demais")
+		return errors.New("pattern too long")
 	}
 	if strings.ContainsAny(p, "/\\") {
-		return errors.New("o nome do asset não pode conter /")
+		return errors.New("the asset name cannot contain /")
 	}
 	if err := checkPlaceholders(p); err != nil {
 		return err
 	}
 	if strings.Trim(p, "*") == "" {
-		return errors.New("padrão genérico demais")
+		return errors.New("pattern too generic")
 	}
 	return nil
 }
@@ -355,24 +355,24 @@ func checkPattern(p string) error {
 func checkPlaceholders(p string) error {
 	for _, ph := range rePlaceholder.FindAllString(p, -1) {
 		if ph != "{version}" && ph != "{tag}" {
-			return fmt.Errorf("marcador desconhecido %s (use {version} ou {tag})", ph)
+			return fmt.Errorf("unknown placeholder %s (use {version} or {tag})", ph)
 		}
 	}
 	return nil
 }
 
-// Expand troca {version} (tag sem "v") e {tag} pelo valor da release.
+// Expand replaces {version} (tag without "v") and {tag} with the release values.
 func Expand(pattern, tag string) string {
 	version := strings.TrimPrefix(strings.TrimPrefix(tag, "v"), "V")
 	return strings.NewReplacer("{version}", version, "{tag}", tag).Replace(pattern)
 }
 
-// MatchAsset diz se o nome do asset casa com o padrão para a tag dada.
+// MatchAsset reports whether the asset name matches the pattern for the given tag.
 func MatchAsset(pattern, tag, name string) bool {
 	return globMatch(Expand(pattern, tag), name)
 }
 
-// globMatch casa * com qualquer sequência (sem outros metacaracteres).
+// globMatch matches * against any sequence (no other metacharacters).
 func globMatch(pattern, s string) bool {
 	parts := strings.Split(pattern, "*")
 	if len(parts) == 1 {
@@ -392,9 +392,9 @@ func globMatch(pattern, s string) bool {
 	return strings.HasSuffix(s, parts[len(parts)-1])
 }
 
-// Encode serializa o manifesto (já validado) para guardar no banco. Um
-// manifesto vazio vira "{...kind...}", nunca "": a presença do arquivo é o
-// que habilita a indexação.
+// Encode serializes the (already validated) manifest for the database. An
+// empty manifest becomes "{...kind...}", never "": the presence of the file is
+// what enables indexing.
 func (m *Manifest) Encode() string {
 	if m == nil {
 		return ""
@@ -403,7 +403,7 @@ func (m *Manifest) Encode() string {
 	return string(b)
 }
 
-// Decode lê o que Encode gravou. Um valor vazio ou inválido vira nil.
+// Decode reads what Encode wrote. An empty or invalid value becomes nil.
 func Decode(s string) *Manifest {
 	if s == "" {
 		return nil

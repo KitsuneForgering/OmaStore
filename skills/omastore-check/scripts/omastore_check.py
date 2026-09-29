@@ -136,7 +136,7 @@ def audit(repo: str, omastore: str, manifest_file: str | None, install: bool, wo
     if lint.returncode != 0:
         a.add(FAIL, "omastore.toml válido", lint_out, "corrija com `omastore lint-manifest` (skill omastore-manifest)")
         return a
-    if "a OmaStore só indexa apps" in lint_out:
+    if "OmaStore only indexes apps" in lint_out:
         a.add(FAIL, "É um app", lint_out, "a OmaStore não distribui plugins nem temas")
         return a
     a.add(PASS, "omastore.toml válido", "publicado" if not manifest_file else f"local: {manifest_file}")

@@ -7,7 +7,7 @@ import (
 
 const full = `
 name = "  RAWmakase  "
-summary = "Alternativa livre ao Lightroom"
+summary = "Free Lightroom alternative"
 categories = ["Graphics", "Photography", "Graphics"]
 icon = "packaging/rawmakase.svg"
 screenshots = ["docs/images/screenshot.png", "https://example.com/s.png"]
@@ -34,14 +34,14 @@ func TestParseFull(t *testing.T) {
 		t.Errorf("m = %+v", m)
 	}
 	if m.Terminal == nil || *m.Terminal {
-		t.Error("terminal = false não lido")
+		t.Error("terminal = false not read")
 	}
 	tg, ok := m.Target("amd64")
 	if !ok || tg.Exec != "usr/bin/rawmakase" {
 		t.Errorf("x86_64 = %+v", tg)
 	}
 	if _, ok := m.Target("arm64"); !ok {
-		t.Error("aarch64 deveria virar arm64")
+		t.Error("aarch64 should become arm64")
 	}
 	back := Decode(m.Encode())
 	if back == nil || back.Name != m.Name || back.Linux["arm64"].Asset != m.Linux["arm64"].Asset {
@@ -68,19 +68,19 @@ asset = "*"
 		t.Fatal(err)
 	}
 	if len([]rune(m.Name)) != maxName {
-		t.Errorf("nome não cortado: %d", len(m.Name))
+		t.Errorf("name not truncated: %d", len(m.Name))
 	}
 	if len(m.Categories) != 1 || m.Categories[0] != "System" {
 		t.Errorf("categorias = %v", m.Categories)
 	}
 	if m.Icon != "" {
-		t.Errorf("ícone perigoso aceito: %q", m.Icon)
+		t.Errorf("dangerous icon accepted: %q", m.Icon)
 	}
 	if len(m.Screenshots) != 1 || m.Screenshots[0] != "ok.png" {
 		t.Errorf("screenshots = %v", m.Screenshots)
 	}
 	if m.Linux != nil {
-		t.Errorf("alvos inválidos aceitos: %+v", m.Linux)
+		t.Errorf("invalid targets accepted: %+v", m.Linux)
 	}
 	errs := 0
 	for _, p := range ps {
@@ -103,10 +103,10 @@ func TestStrictUnknownFields(t *testing.T) {
 		t.Errorf("leniente: %v %v %v", m, ps, err)
 	}
 	if _, _, err := Parse([]byte("name = "), false); err == nil {
-		t.Error("TOML inválido deveria dar erro")
+		t.Error("invalid TOML should be an error")
 	}
 	if _, _, err := Parse(make([]byte, MaxSize+1), false); err == nil {
-		t.Error("arquivo grande demais aceito")
+		t.Error("oversized file accepted")
 	}
 }
 
@@ -140,13 +140,13 @@ func TestNoMainCategoryWarns(t *testing.T) {
 }
 
 func TestEmpty(t *testing.T) {
-	m, _, _ := Parse([]byte("# nada\n"), true)
+	m, _, _ := Parse([]byte("# nothing\n"), true)
 	if !m.Empty() || !m.IsApp() || Decode("") != nil || Decode("{lixo") != nil {
-		t.Error("manifesto vazio")
+		t.Error("empty manifest")
 	}
-	// Vazio continua sendo um manifesto (a presença do arquivo é o opt-in).
+	// Empty is still a manifest (the presence of the file is the opt-in).
 	if back := Decode(m.Encode()); back == nil || !back.IsApp() {
-		t.Errorf("Encode de vazio perdeu a presença: %q", m.Encode())
+		t.Errorf("Encode of empty lost its presence: %q", m.Encode())
 	}
 }
 
@@ -167,7 +167,7 @@ func TestKind(t *testing.T) {
 			t.Errorf("%q: IsApp = %v", src, m.IsApp())
 		}
 		if !app && len(ps) == 0 {
-			t.Errorf("%q: deveria reportar que não é indexado", src)
+			t.Errorf("%q: should report that it is not indexed", src)
 		}
 	}
 }
@@ -175,13 +175,13 @@ func TestKind(t *testing.T) {
 func TestExecPlaceholders(t *testing.T) {
 	m, ps, _ := Parse([]byte("[linux.x86_64]\nexec = \"app-{version}-x86_64-linux/bin/app\"\n"), true)
 	if len(ps) != 0 || m.Linux["amd64"].Exec != "app-{version}-x86_64-linux/bin/app" {
-		t.Errorf("exec com {version}: %v %+v", ps, m.Linux)
+		t.Errorf("exec with {version}: %v %+v", ps, m.Linux)
 	}
 	if got := Expand(m.Linux["amd64"].Exec, "v1.2.0"); got != "app-1.2.0-x86_64-linux/bin/app" {
 		t.Errorf("Expand = %q", got)
 	}
 	_, ps, _ = Parse([]byte("[linux.x86_64]\nexec = \"{arch}/bin/app\"\n"), true)
 	if len(ps) != 1 || ps[0].Field != "linux.x86_64.exec" {
-		t.Errorf("marcador inválido no exec: %v", ps)
+		t.Errorf("invalid placeholder in exec: %v", ps)
 	}
 }

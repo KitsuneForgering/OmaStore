@@ -12,11 +12,11 @@ func TestFindIcon(t *testing.T) {
 		files []string
 		want  string
 	}{
-		{"nenhum", "app", []string{"README.md", "main.go", "docs/diagram.png"}, ""},
-		{"icon na raiz", "app", []string{"icon.png", "assets/logo.png"}, "icon.png"},
+		{"none", "app", []string{"README.md", "main.go", "docs/diagram.png"}, ""},
+		{"icon at the root", "app", []string{"icon.png", "assets/logo.png"}, "icon.png"},
 		{"svg vence png", "app", []string{"assets/icon.png", "assets/icon.svg"}, "assets/icon.svg"},
-		{"nome do repo", "omaphoto", []string{"data/omaphoto.svg", "docs/logo-old.png"}, "data/omaphoto.svg"},
-		{"hicolor maior", "omavm", []string{
+		{"repo name", "omaphoto", []string{"data/omaphoto.svg", "docs/logo-old.png"}, "data/omaphoto.svg"},
+		{"larger hicolor", "omavm", []string{
 			"data/icons/hicolor/16x16/apps/omavm.png",
 			"data/icons/hicolor/256x256/apps/omavm.png",
 		}, "data/icons/hicolor/256x256/apps/omavm.png"},
@@ -24,7 +24,7 @@ func TestFindIcon(t *testing.T) {
 			"screenshots/icon.png", "testdata/icon.png", "internal/latest/logo.png",
 		}, "internal/latest/logo.png"},
 		{"favicon perde", "app", []string{"web/favicon.png", "assets/app-logo.png"}, "assets/app-logo.png"},
-		{"jpg não é ícone", "app", []string{"icon.jpg"}, ""},
+		{"jpg is not an icon", "app", []string{"icon.jpg"}, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

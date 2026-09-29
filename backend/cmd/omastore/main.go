@@ -90,7 +90,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			if errors.Is(err, errUsage) {
 				return 2
 			}
-			fmt.Fprintln(stderr, "erro:", err)
+			fmt.Fprintln(stderr, "error:", err)
 			return 1
 		}
 		return 0
@@ -108,7 +108,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	a, err := app.Open(ctx, log)
 	if err != nil {
-		fmt.Fprintln(stderr, "erro:", err)
+		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
 	defer a.Close()
@@ -117,7 +117,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		if errors.Is(err, errUsage) || errors.Is(err, flag.ErrHelp) {
 			return 2
 		}
-		fmt.Fprintln(stderr, "erro:", err)
+		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
 	return 0
@@ -253,7 +253,7 @@ func cmdSimilar(ctx context.Context, a *app.App, args []string, stdout, stderr i
 	return printItems(stdout, items, *asJSON)
 }
 
-var errLint = errors.New("manifesto com erros")
+var errLint = errors.New("manifest has errors")
 
 func cmdLintManifest(args []string, stdout, stderr io.Writer) error {
 	target := "."
@@ -275,7 +275,7 @@ func cmdLintManifest(args []string, stdout, stderr io.Writer) error {
 	}
 	m, problems, err := manifest.Parse(data, true)
 	if err != nil {
-		fmt.Fprintf(stdout, "erro: (arquivo): %v\n", err)
+		fmt.Fprintf(stdout, "error: (file): %v\n", err)
 		return fmt.Errorf("%w: 1 erro(s)", errLint)
 	}
 	// Com o diretório do repositório, confere se os arquivos existem.
@@ -307,7 +307,7 @@ func cmdLintManifest(args []string, stdout, stderr io.Writer) error {
 		return nil // o aviso sobre kind já foi impresso entre os problemas
 	}
 	if m.Empty() {
-		fmt.Fprintf(stdout, "ok: %s (vazio: o repositório entra no catálogo e o resto é deduzido)\n", file)
+		fmt.Fprintf(stdout, "ok: %s (empty: the repository joins the catalog and the rest is inferred)\n", file)
 		return nil
 	}
 	fmt.Fprintf(stdout, "ok: %s\n", file)

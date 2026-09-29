@@ -1,9 +1,9 @@
 kind = "app"
 name = "RAWmakase"
-summary = "Alternativa livre ao Lightroom"
+summary = "Free Lightroom alternative"
 categories = ["Graphics", "Photography"]
 icon = "packaging/rawmakase.svg"
-screenshots = ["docs/tela.png", "https://example.com/extra.png"]
+screenshots = ["docs/screen.png", "https://example.com/extra.png"]
 terminal = false
 
 [linux.x86_64]

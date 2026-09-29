@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Valida um omastore.toml com as mesmas regras do `omastore lint-manifest`.
+"""Validate an omastore.toml with the same rules as `omastore lint-manifest`.
 
-Uso:
-    validate_manifest.py [arquivo-ou-diretório] [--tag v1.2.0 --asset nome ...]
+Usage:
+    validate_manifest.py [file-or-directory] [--tag v1.2.0 --asset name ...]
 
-- Com um diretório, lê <dir>/omastore.toml e confere se ícone e screenshots
-  existem no repositório.
-- Com --tag e um ou mais --asset (nomes dos arquivos da release), confere se
-  os padrões `asset` de cada arquitetura casam com algum deles.
+- With a directory, reads <dir>/omastore.toml and checks that the icon and
+  screenshots exist in the repository.
+- With --tag and one or more --asset (the release file names), checks that
+  each architecture's `asset` pattern matches one of them.
 
-Saída: uma linha "erro: campo: mensagem" ou "aviso: campo: mensagem" por
-problema e, no fim, "ok: ..." se não houver erros. Código de saída 1 se houver
-erro. Só usa a biblioteca padrão (Python 3.11+).
+Output: one "error: field: message" or "warning: field: message" line per
+problem and, at the end, "ok: ..." if there are no errors. Exit code 1 if
+there is an error. Standard library only (Python 3.11+).
 
-A referência é o validador em Go (backend/internal/manifest). Se os dois
-divergirem, vale o do Go; `make test-skills` compara os dois.
+The reference is the Go validator (backend/internal/manifest). If the two
+disagree, Go wins; `make test-skills` compares them.
 """
 from __future__ import annotations
 
@@ -46,27 +46,27 @@ class Report:
         self.lines: list[tuple[str, str, str]] = []
 
     def err(self, field: str, msg: str) -> None:
-        self.lines.append(("erro", field, msg))
+        self.lines.append(("error", field, msg))
 
     def warn(self, field: str, msg: str) -> None:
-        self.lines.append(("aviso", field, msg))
+        self.lines.append(("warning", field, msg))
 
     @property
     def errors(self) -> int:
-        return sum(1 for k, _, _ in self.lines if k == "erro")
+        return sum(1 for k, _, _ in self.lines if k == "error")
 
 
 def rel_path(p: str) -> tuple[str | None, str | None]:
-    """Valida um caminho relativo; devolve (caminho limpo, erro)."""
+    """Validate a relative path; return (clean path, error)."""
     if not p:
-        return None, "vazio"
+        return None, "empty"
     if len(p) > MAX_PATH:
-        return None, "longo demais"
+        return None, "too long"
     if "\\" in p or p.startswith("/") or "\x00" in p:
-        return None, "precisa ser relativo, com /"
+        return None, "must be relative, with /"
     c = posixpath.normpath(p)
     if c in (".", "..") or c.startswith("../"):
-        return None, "sai do repositório"
+        return None, "leaves the repository"
     return c, None
 
 
@@ -79,21 +79,21 @@ def clean_text(s: str, limit: int) -> tuple[str, bool]:
 
 def check_pattern(p: str) -> str | None:
     if len(p) > MAX_PATH:
-        return "padrão longo demais"
+        return "pattern too long"
     if "/" in p or "\\" in p:
-        return "o nome do asset não pode conter /"
+        return "the asset name cannot contain /"
     e = check_placeholders(p)
     if e:
         return e
     if p.strip("*") == "":
-        return "padrão genérico demais"
+        return "pattern too generic"
     return None
 
 
 def check_placeholders(p: str) -> str | None:
     for ph in RE_PLACEHOLDER.findall(p):
         if ph not in ("{version}", "{tag}"):
-            return f"marcador desconhecido {ph} (use {{version}} ou {{tag}})"
+            return f"unknown placeholder {ph} (use {{version}} or {{tag}})"
     return None
 
 
@@ -115,20 +115,20 @@ def match_asset(pattern: str, tag: str, name: str) -> bool:
 
 
 def validate(data: dict, rep: Report) -> dict:
-    """Aplica as regras e devolve o manifesto normalizado."""
+    """Apply the rules and return the normalized manifest."""
     unknown = sorted(set(data) - TOP_KEYS)
     for arch_key, target in (data.get("linux") or {}).items() if isinstance(data.get("linux"), dict) else []:
         if isinstance(target, dict):
             unknown += [f"linux.{arch_key}.{k}" for k in sorted(set(target) - TARGET_KEYS)]
     if unknown:
-        rep.err("(arquivo)", "campos desconhecidos: " + ", ".join(unknown))
+        rep.err("(file)", "unknown fields: " + ", ".join(unknown))
         return {}
 
     types = {"kind": str, "name": str, "summary": str, "icon": str, "terminal": bool,
              "categories": list, "screenshots": list, "linux": dict}
     for k, t in types.items():
         if k in data and not isinstance(data[k], t):
-            rep.err("(arquivo)", f"{k}: tipo inválido")
+            rep.err("(file)", f"{k}: invalid type")
             return {}
 
     m: dict = {}
@@ -137,16 +137,16 @@ def validate(data: dict, rep: Report) -> dict:
         m["kind"] = "app"
     elif kind in ("plugin", "theme"):
         m["kind"] = kind
-        rep.warn("kind", f'"{kind}": a OmaStore só indexa apps; este repositório não entra no catálogo')
+        rep.warn("kind", f'"{kind}": OmaStore only indexes apps; this repository is not added to the catalog')
     else:
         m["kind"] = kind
-        rep.err("kind", f'"{data.get("kind")}" desconhecido (use "app")')
+        rep.err("kind", f'"{data.get("kind")}" is unknown (use "app")')
 
     for field, limit in (("name", MAX_NAME), ("summary", MAX_SUMMARY)):
         if data.get(field):
             text, ok = clean_text(data[field], limit)
             if not ok:
-                rep.warn(field, f"cortado em {limit} caracteres")
+                rep.warn(field, f"truncated to {limit} characters")
             m[field] = text
 
     cats: list[str] = []
@@ -155,22 +155,22 @@ def validate(data: dict, rep: Report) -> dict:
         if c in cats:
             continue
         if c not in MAIN_CATEGORIES and not RE_ADDITIONAL.match(c):
-            rep.err("categories", f'categoria inválida "{c}"')
+            rep.err("categories", f'invalid category "{c}"')
             continue
         if len(cats) == MAX_CATEGORIES:
-            rep.warn("categories", f"só as {MAX_CATEGORIES} primeiras são usadas")
+            rep.warn("categories", f"only the first {MAX_CATEGORIES} are used")
             continue
         cats.append(c)
     m["categories"] = cats
     if cats and not any(c in MAIN_CATEGORIES for c in cats):
-        rep.warn("categories", "nenhuma categoria principal da freedesktop (ex.: Graphics, System)")
+        rep.warn("categories", "no freedesktop main category (e.g. Graphics, System)")
 
     if data.get("icon"):
         p, e = rel_path(data["icon"])
         if e:
             rep.err("icon", f'"{data["icon"]}": {e}')
         elif posixpath.splitext(p)[1] not in (".png", ".svg"):
-            rep.err("icon", f'"{data["icon"]}": use PNG ou SVG')
+            rep.err("icon", f'"{data["icon"]}": use PNG or SVG')
         else:
             m["icon"] = p
 
@@ -185,12 +185,12 @@ def validate(data: dict, rep: Report) -> dict:
                 rep.err("screenshots", f'"{s}": {e}')
                 continue
             if posixpath.splitext(p)[1].lower() not in IMAGE_EXT:
-                rep.err("screenshots", f'"{s}" não é imagem')
+                rep.err("screenshots", f'"{s}" is not an image')
                 continue
             shots.append(p)
         if len(shots) == MAX_SCREENSHOTS:
             if len(data.get("screenshots", [])) > MAX_SCREENSHOTS:
-                rep.warn("screenshots", f"só as {MAX_SCREENSHOTS} primeiras são usadas")
+                rep.warn("screenshots", f"only the first {MAX_SCREENSHOTS} are used")
             break
     m["screenshots"] = shots
 
@@ -200,13 +200,13 @@ def validate(data: dict, rep: Report) -> dict:
         field = f"linux.{key}"
         arch = ARCH.get(key.lower())
         if not arch:
-            rep.err(field, "arquitetura desconhecida (use x86_64 ou aarch64)")
+            rep.err(field, "unknown architecture (use x86_64 or aarch64)")
             continue
         if arch in targets:
-            rep.err(field, "arquitetura repetida")
+            rep.err(field, "duplicated architecture")
             continue
         if not isinstance(t, dict):
-            rep.err(field, "precisa ser uma tabela [linux.<arq>]")
+            rep.err(field, "must be a [linux.<arch>] table")
             continue
         tgt = {"asset": t.get("asset", ""), "exec": t.get("exec", "")}
         if tgt["asset"]:
@@ -231,8 +231,8 @@ def validate(data: dict, rep: Report) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("target", nargs="?", default=".")
-    ap.add_argument("--tag", help="tag da release, para conferir os padrões de asset")
-    ap.add_argument("--asset", action="append", default=[], help="nome de um asset da release (repita)")
+    ap.add_argument("--tag", help="release tag, to check the asset patterns")
+    ap.add_argument("--asset", action="append", default=[], help="name of a release asset (repeat)")
     args = ap.parse_args()
 
     path, repo_dir = args.target, None
@@ -242,15 +242,15 @@ def main() -> int:
         with open(path, "rb") as f:
             raw = f.read(MAX_SIZE + 1)
     except OSError as e:
-        print(f"erro: {e}")
+        print(f"error: {e}")
         return 1
     if len(raw) > MAX_SIZE:
-        print(f"erro: (arquivo): maior que {MAX_SIZE} bytes")
+        print(f"error: (file): larger than {MAX_SIZE} bytes")
         return 1
     try:
         data = tomllib.loads(raw.decode("utf-8"))
     except (tomllib.TOMLDecodeError, UnicodeDecodeError) as e:
-        print(f"erro: (arquivo): TOML inválido: {e}")
+        print(f"error: (file): invalid TOML: {e}")
         return 1
 
     rep = Report()
@@ -259,19 +259,19 @@ def main() -> int:
     if m and repo_dir:
         for p in ([m["icon"]] if m.get("icon") else []) + m.get("screenshots", []):
             if not p.startswith("https://") and not os.path.exists(os.path.join(repo_dir, p)):
-                rep.err(p, "arquivo não existe no repositório")
+                rep.err(p, "file does not exist in the repository")
 
     if m and args.tag and args.asset:
         for arch, t in m.get("linux", {}).items():
             if t.get("asset") and not any(match_asset(t["asset"], args.tag, a) for a in args.asset):
-                rep.err(f"linux.{arch}.asset", f'"{t["asset"]}" não casa com nenhum asset da release {args.tag}')
+                rep.err(f"linux.{arch}.asset", f'"{t["asset"]}" matches no asset of release {args.tag}')
 
     for kind, field, msg in rep.lines:
         print(f"{kind}: {field}: {msg}")
     if rep.errors:
         return 1
     if m.get("kind") != "app":
-        return 0  # o aviso sobre kind já foi impresso entre os problemas
+        return 0  # the kind warning was already printed with the problems
     print(f"ok: {path}")
     for arch, t in sorted(m.get("linux", {}).items()):
         print(f'  {arch:<6} asset="{t.get("asset", "")}" exec="{t.get("exec", "")}"')
