@@ -1,0 +1,43 @@
+package app
+
+import (
+	"context"
+
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/index"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/install"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
+)
+
+// Métodos que fazem de *App um rpc.Backend.
+
+func (a *App) GetApp(ctx context.Context, fullName string) (*store.AppDetail, error) {
+	return a.Store.GetApp(ctx, fullName)
+}
+
+func (a *App) Categories(ctx context.Context) ([]store.CategoryCount, error) {
+	return a.Store.Categories(ctx)
+}
+
+func (a *App) ListInstalls(ctx context.Context) ([]store.Install, error) {
+	return a.Store.ListInstalls(ctx)
+}
+
+func (a *App) Index(ctx context.Context, opts index.Options) (index.Stats, error) {
+	return a.Indexer.Run(ctx, opts)
+}
+
+func (a *App) Install(ctx context.Context, fullName string, p func(install.Progress)) (*store.Install, error) {
+	return a.Installer.Install(ctx, fullName, p)
+}
+
+func (a *App) Update(ctx context.Context, fullName string, p func(install.Progress)) (*store.Install, error) {
+	return a.Installer.Update(ctx, fullName, p)
+}
+
+func (a *App) Uninstall(ctx context.Context, fullName string) error {
+	return a.Installer.Uninstall(ctx, fullName)
+}
+
+func (a *App) Image(ctx context.Context, url string) (string, error) {
+	return a.Images.Get(ctx, url)
+}
