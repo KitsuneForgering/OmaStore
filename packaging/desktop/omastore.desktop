@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=OmaStore
+GenericName=App Store
+GenericName[pt_BR]=Loja de aplicativos
+Comment=Install apps for Omarchy from GitHub releases
+Comment[pt_BR]=Instale apps para o Omarchy a partir de releases do GitHub
+Exec=omastore-gui
+Icon=omastore
+Terminal=false
+Categories=System;PackageManager;
+Keywords=store;apps;install;omarchy;github;
+StartupWMClass=omastore
