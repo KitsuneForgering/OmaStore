@@ -14,7 +14,7 @@ import (
 
 func umask(m int) int { return syscall.Umask(m) }
 
-// Backend são as operações que o servidor expõe.
+// Backend is the set of operations the server exposes.
 type Backend interface {
 	ListApps(ctx context.Context, f store.Filter) ([]store.ListItem, error)
 	GetApp(ctx context.Context, fullName string) (*store.AppDetail, error)
@@ -28,10 +28,10 @@ type Backend interface {
 	Image(ctx context.Context, url string) (string, error)
 }
 
-// DTOs: o formato JSON exposto ao frontend, estável e em camelCase,
-// independente das structs internas.
+// DTOs: the JSON format exposed to the frontend, stable and in camelCase,
+// independent of the internal structs.
 
-// AppItem é uma linha do catálogo.
+// AppItem is a catalog row.
 type AppItem struct {
 	Repo             string   `json:"repo"`
 	Name             string   `json:"name"`
@@ -47,16 +47,16 @@ type AppItem struct {
 	UpdateAvailable  bool     `json:"updateAvailable"`
 }
 
-// AssetInfo é um asset de release.
+// AssetInfo is a release asset.
 type AssetInfo struct {
 	Name     string `json:"name"`
 	Size     int64  `json:"size"`
 	Arch     string `json:"arch"`
 	Format   string `json:"format"`
-	Verified bool   `json:"verified"` // há digest ou arquivo de checksum
+	Verified bool   `json:"verified"` // there is a digest or a checksum file
 }
 
-// InstallInfo é um app instalado.
+// InstallInfo is an installed app.
 type InstallInfo struct {
 	Repo        string    `json:"repo"`
 	Version     string    `json:"version"`
@@ -65,7 +65,7 @@ type InstallInfo struct {
 	DesktopPath string    `json:"desktopPath"`
 }
 
-// AppDetail é o detalhe de um app.
+// AppDetail is an app's detail.
 type AppDetail struct {
 	AppItem
 	Readme      string       `json:"readme"`
@@ -79,7 +79,7 @@ type AppDetail struct {
 	Install     *InstallInfo `json:"install"`
 }
 
-// IndexResult é o resultado de um job de indexação.
+// IndexResult is the result of an indexing job.
 type IndexResult struct {
 	Updated   int `json:"updated"`
 	Refreshed int `json:"refreshed"`
@@ -132,7 +132,7 @@ func nonNil(s []string) []string {
 	return s
 }
 
-// Parâmetros dos métodos.
+// Method parameters.
 type (
 	listParams struct {
 		Category  string `json:"category"`
@@ -161,7 +161,7 @@ type (
 	}
 )
 
-// decode lê params no destino; ausência de params equivale a {}.
+// decode reads params into dst; missing params count as {}.
 func decode(raw json.RawMessage, dst any) error {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil
@@ -169,7 +169,7 @@ func decode(raw json.RawMessage, dst any) error {
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
-		return errInvalidParams("parâmetros inválidos: %v", err)
+		return errInvalidParams("invalid params: %v", err)
 	}
 	return nil
 }
@@ -177,15 +177,15 @@ func decode(raw json.RawMessage, dst any) error {
 func (p repoParams) validate() error {
 	owner, repo, ok := strings.Cut(p.Repo, "/")
 	if !ok || owner == "" || repo == "" || strings.Contains(repo, "/") {
-		return errInvalidParams(`"repo" deve ser "owner/repo", recebido %q`, p.Repo)
+		return errInvalidParams(`"repo" must be "owner/repo", got %q`, p.Repo)
 	}
 	return nil
 }
 
-// callTimeout limita chamadas síncronas (as longas viram jobs).
+// callTimeout limits synchronous calls (long ones become jobs).
 const callTimeout = 2 * time.Minute
 
-// call despacha um método.
+// call dispatches a method.
 func (s *Server) call(method string, raw json.RawMessage) (any, error) {
 	ctx, cancel := context.WithTimeout(s.ctx, callTimeout)
 	defer cancel()
@@ -287,7 +287,7 @@ func (s *Server) call(method string, raw json.RawMessage) (any, error) {
 			return IndexResult{Updated: st.Updated, Refreshed: st.Refreshed, Unchanged: st.Unchanged,
 				Removed: st.Removed, Skipped: st.Skipped, NotApps: st.NotApps, Failed: st.Failed}, err
 		}, func(Job, error) {
-			// Mesmo um índice cancelado pode ter gravado repos.
+			// Even a canceled index may have written repos.
 			s.broadcast("catalog.changed", struct{}{})
 		})
 
@@ -325,7 +325,7 @@ func (s *Server) call(method string, raw json.RawMessage) (any, error) {
 		if err := p.validate(); err != nil {
 			return nil, err
 		}
-		// Não pode desinstalar no meio de uma instalação do mesmo app.
+		// Cannot uninstall in the middle of an installation of the same app.
 		for _, j := range s.jobs.list() {
 			if j.State == StateRunning && j.Kind != KindIndex && strings.EqualFold(j.Repo, p.Repo) {
 				return nil, ErrBusy
@@ -358,5 +358,5 @@ func (s *Server) call(method string, raw json.RawMessage) (any, error) {
 		}
 		return map[string]string{"path": path}, nil
 	}
-	return nil, &Error{Code: CodeMethodNotFound, Message: "método desconhecido: " + method}
+	return nil, &Error{Code: CodeMethodNotFound, Message: "unknown method: " + method}
 }

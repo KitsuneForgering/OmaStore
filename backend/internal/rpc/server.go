@@ -16,13 +16,13 @@ import (
 	"time"
 )
 
-// maxSocketPath é o tamanho de sockaddr_un.sun_path no Linux.
+// maxSocketPath is the size of sockaddr_un.sun_path on Linux.
 const maxSocketPath = 108
 
-// maxMessage limita o tamanho de uma mensagem recebida.
+// maxMessage limits the size of a received message.
 const maxMessage = 1 << 20
 
-// Server atende clientes JSON-RPC.
+// Server serves JSON-RPC clients.
 type Server struct {
 	backend Backend
 	log     *slog.Logger
@@ -31,14 +31,14 @@ type Server struct {
 	mu        sync.Mutex
 	conns     map[*conn]struct{}
 	listeners []net.Listener
-	// lastActive é quando o servidor deixou de ter conexões ou jobs.
+	// lastActive is when the server stopped having connections or jobs.
 	lastActive time.Time
-	ctx        context.Context // cancelado no Shutdown
+	ctx        context.Context // canceled on Shutdown
 	cancel     context.CancelFunc
 	connsWG    sync.WaitGroup
 }
 
-// NewServer cria um servidor sobre o backend.
+// NewServer creates a server on top of the backend.
 func NewServer(b Backend, log *slog.Logger) *Server {
 	if log == nil {
 		log = slog.Default()
@@ -49,14 +49,14 @@ func NewServer(b Backend, log *slog.Logger) *Server {
 	return s
 }
 
-// conn é um cliente conectado.
+// conn is a connected client.
 type conn struct {
 	c   net.Conn
 	wmu sync.Mutex
 }
 
-// send escreve uma mensagem numa linha. Um cliente lento não trava os
-// demais: a escrita tem prazo.
+// send writes a message on one line. A slow client does not block the
+// others: the write has a deadline.
 func (c *conn) send(v any) error {
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -70,7 +70,7 @@ func (c *conn) send(v any) error {
 	return err
 }
 
-// broadcast envia uma notificação a todos os clientes.
+// broadcast sends a notification to every client.
 func (s *Server) broadcast(method string, params any) {
 	s.mu.Lock()
 	conns := make([]*conn, 0, len(s.conns))
@@ -81,20 +81,20 @@ func (s *Server) broadcast(method string, params any) {
 	msg := notification{JSONRPC: "2.0", Method: method, Params: params}
 	for _, c := range conns {
 		if err := c.send(msg); err != nil {
-			s.log.Debug("falha ao notificar cliente", "err", err)
+			s.log.Debug("failed to notify client", "err", err)
 			c.c.Close()
 		}
 	}
 }
 
-// Listen abre o socket Unix em path com permissão 0600. Um socket órfão
-// (de um daemon que morreu) é removido; se outro daemon estiver atendendo,
-// retorna erro.
+// Listen opens the Unix socket at path with 0600 permissions. An orphan
+// socket (from a daemon that died) is removed; if another daemon is serving,
+// it returns an error.
 func Listen(path string) (net.Listener, error) {
-	// sockaddr_un.sun_path tem 108 bytes (com o terminador); o erro do bind
-	// ("invalid argument") não explica isso.
+	// sockaddr_un.sun_path has 108 bytes (including the terminator); the bind
+	// error ("invalid argument") does not explain that.
 	if len(path) >= maxSocketPath {
-		return nil, fmt.Errorf("caminho do socket longo demais (%d bytes, máximo %d): %s", len(path), maxSocketPath-1, path)
+		return nil, fmt.Errorf("socket path too long (%d bytes, maximum %d): %s", len(path), maxSocketPath-1, path)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
@@ -102,13 +102,13 @@ func Listen(path string) (net.Listener, error) {
 	if _, err := os.Lstat(path); err == nil {
 		if c, err := net.DialTimeout("unix", path, time.Second); err == nil {
 			c.Close()
-			return nil, fmt.Errorf("outro omastored já está rodando em %s", path)
+			return nil, fmt.Errorf("another omastored is already running at %s", path)
 		}
 		if err := os.Remove(path); err != nil {
-			return nil, fmt.Errorf("remover socket órfão: %w", err)
+			return nil, fmt.Errorf("remove orphan socket: %w", err)
 		}
 	}
-	// umask restritivo durante o bind para não haver janela com 0777.
+	// Restrictive umask during bind so there is no window with 0777.
 	old := umask(0o177)
 	l, err := net.Listen("unix", path)
 	umask(old)
@@ -122,7 +122,7 @@ func Listen(path string) (net.Listener, error) {
 	return l, nil
 }
 
-// Serve atende conexões até o listener ser fechado ou Shutdown ser chamado.
+// Serve serves connections until the listener is closed or Shutdown is called.
 func (s *Server) Serve(l net.Listener) error {
 	s.mu.Lock()
 	if s.ctx.Err() != nil {
@@ -157,8 +157,8 @@ func (s *Server) Serve(l net.Listener) error {
 	}
 }
 
-// IdleFor diz há quanto tempo o servidor está ocioso: sem conexões e sem
-// jobs em andamento. Retorna 0 se houver atividade.
+// IdleFor reports how long the server has been idle: no connections and no
+// running jobs. Returns 0 if there is activity.
 func (s *Server) IdleFor() time.Duration {
 	running, lastJob := s.jobs.activity()
 	s.mu.Lock()
@@ -173,11 +173,11 @@ func (s *Server) IdleFor() time.Duration {
 	return time.Since(since)
 }
 
-// Shutdown para de aceitar conexões, cancela os jobs, espera terminarem e
-// fecha as conexões.
+// Shutdown stops accepting connections, cancels the jobs, waits for them to
+// finish and closes the connections.
 func (s *Server) Shutdown() {
-	// Fecha os listeners antes de retornar: depois do Shutdown nenhuma
-	// conexão nova é aceita (e o socket Unix é removido pelo Close).
+	// Close the listeners before returning: after Shutdown no new connection
+	// is accepted (and the Unix socket is removed by Close).
 	s.mu.Lock()
 	s.cancel()
 	for _, l := range s.listeners {
@@ -209,8 +209,8 @@ func (s *Server) handleConn(c *conn) {
 		if len(line) == 0 {
 			continue
 		}
-		// Cada requisição roda em paralelo: uma chamada lenta (image.get)
-		// não bloqueia as outras do mesmo cliente.
+		// Each request runs in parallel: a slow call (image.get) does not block
+		// the others from the same client.
 		go func() {
 			if resp := s.handleMessage(line); resp != nil {
 				if err := c.send(resp); err != nil {
@@ -221,9 +221,9 @@ func (s *Server) handleConn(c *conn) {
 	}
 }
 
-var errTooLong = errors.New("mensagem maior que o limite")
+var errTooLong = errors.New("message larger than the limit")
 
-// readLine lê até '\n' com limite de tamanho.
+// readLine reads up to '\n' with a size limit.
 func readLine(r *bufio.Reader) ([]byte, error) {
 	var buf []byte
 	for {
@@ -241,13 +241,13 @@ func readLine(r *bufio.Reader) ([]byte, error) {
 	}
 }
 
-// handleMessage processa uma linha e retorna a resposta (nil para
-// notificações do cliente). Lotes (arrays) não são suportados.
+// handleMessage processes a line and returns the response (nil for client
+// notifications). Batches (arrays) are not supported.
 func (s *Server) handleMessage(line []byte) *response {
 	var req request
 	if err := json.Unmarshal(line, &req); err != nil {
 		return &response{JSONRPC: "2.0", ID: json.RawMessage("null"),
-			Error: &Error{Code: CodeParse, Message: "JSON inválido: " + err.Error()}}
+			Error: &Error{Code: CodeParse, Message: "invalid JSON: " + err.Error()}}
 	}
 	id := req.ID
 	isNotification := len(id) == 0
@@ -256,7 +256,7 @@ func (s *Server) handleMessage(line []byte) *response {
 	}
 	if req.JSONRPC != "2.0" || req.Method == "" {
 		return &response{JSONRPC: "2.0", ID: id,
-			Error: &Error{Code: CodeInvalidRequest, Message: `requisição inválida (jsonrpc "2.0" e method são obrigatórios)`}}
+			Error: &Error{Code: CodeInvalidRequest, Message: `invalid request (jsonrpc "2.0" and method are required)`}}
 	}
 	result, err := s.call(req.Method, req.Params)
 	if isNotification {

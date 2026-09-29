@@ -9,14 +9,14 @@ import (
 	"time"
 )
 
-// Tipos de job.
+// Job kinds.
 const (
 	KindIndex   = "index"
 	KindInstall = "install"
 	KindUpdate  = "update"
 )
 
-// Estados de job.
+// Job states.
 const (
 	StateRunning  = "running"
 	StateDone     = "done"
@@ -24,9 +24,9 @@ const (
 	StateCanceled = "canceled"
 )
 
-var errCanceled = errors.New("cancelado")
+var errCanceled = errors.New("canceled")
 
-// Job é uma operação longa em andamento ou concluída.
+// Job is a long operation, running or finished.
 type Job struct {
 	ID       string    `json:"id"`
 	Kind     string    `json:"kind"`
@@ -44,7 +44,7 @@ type Job struct {
 	cancel context.CancelFunc
 }
 
-// progress é o que uma função de job reporta.
+// progress is what a job function reports.
 type progress struct {
 	Stage   string
 	Done    int64
@@ -52,7 +52,7 @@ type progress struct {
 	Message string
 }
 
-// jobs gerencia os jobs e publica notificações.
+// jobs manages the jobs and publishes notifications.
 type jobs struct {
 	mu     sync.Mutex
 	seq    int
@@ -60,10 +60,10 @@ type jobs struct {
 	order  []string
 	notify func(method string, params any)
 	wg     sync.WaitGroup
-	// minInterval limita a frequência de job.progress por job.
+	// minInterval limits how often job.progress is sent per job.
 	minInterval time.Duration
-	keep        int // jobs concluídos mantidos no histórico
-	// lastFinished é quando o último job terminou (conta como atividade).
+	keep        int // finished jobs kept in the history
+	// lastFinished is when the last job finished (counts as activity).
 	lastFinished time.Time
 }
 
@@ -71,8 +71,8 @@ func newJobs(notify func(string, any)) *jobs {
 	return &jobs{byID: map[string]*Job{}, notify: notify, minInterval: 100 * time.Millisecond, keep: 50}
 }
 
-// key identifica jobs que não podem rodar ao mesmo tempo: um índice por vez
-// e uma operação por app.
+// jobKey identifies jobs that cannot run at the same time: one index at a
+// time and one operation per app.
 func jobKey(kind, repo string) string {
 	if kind == KindIndex {
 		return KindIndex
@@ -80,8 +80,8 @@ func jobKey(kind, repo string) string {
 	return "app:" + strings.ToLower(repo)
 }
 
-// start inicia fn num job. Retorna ErrBusy se um job conflitante estiver
-// rodando. onFinish (opcional) roda depois da notificação final do job.
+// start runs fn in a job. Returns ErrBusy if a conflicting job is running.
+// onFinish (optional) runs after the job's final notification.
 func (js *jobs) start(parent context.Context, kind, repo string,
 	fn func(ctx context.Context, report func(progress)) (any, error), onFinish func(Job, error)) (*Job, error) {
 	js.mu.Lock()
@@ -112,7 +112,7 @@ func (js *jobs) start(parent context.Context, kind, repo string,
 			js.mu.Lock()
 			j.Stage, j.Done, j.Total, j.Message = p.Stage, p.Done, p.Total, p.Message
 			now := time.Now()
-			// Mudanças de etapa sempre saem; atualizações de bytes são limitadas.
+			// Stage changes always go out; byte updates are rate limited.
 			send := p.Stage != lastStage || now.Sub(last) >= js.minInterval || (p.Total > 0 && p.Done == p.Total)
 			if send {
 				last, lastStage = now, p.Stage
@@ -153,7 +153,7 @@ func (js *jobs) start(parent context.Context, kind, repo string,
 	return &snap, nil
 }
 
-// prune descarta jobs concluídos antigos (chamado com o lock).
+// prune drops old finished jobs (called with the lock held).
 func (js *jobs) prune() {
 	finished := 0
 	for _, id := range js.order {
@@ -176,7 +176,7 @@ func (js *jobs) prune() {
 	js.order = order
 }
 
-// running conta os jobs em andamento e diz quando o último terminou.
+// running counts the running jobs and reports when the last one finished.
 func (js *jobs) running() int {
 	n, _ := js.activity()
 	return n
@@ -193,7 +193,7 @@ func (js *jobs) activity() (running int, lastFinished time.Time) {
 	return running, js.lastFinished
 }
 
-// list retorna cópias dos jobs, mais antigos primeiro.
+// list returns copies of the jobs, oldest first.
 func (js *jobs) list() []Job {
 	js.mu.Lock()
 	defer js.mu.Unlock()
@@ -204,13 +204,13 @@ func (js *jobs) list() []Job {
 	return out
 }
 
-// cancel cancela um job em andamento.
+// cancel cancels a running job.
 func (js *jobs) cancel(id string) error {
 	js.mu.Lock()
 	defer js.mu.Unlock()
 	j, ok := js.byID[id]
 	if !ok {
-		return &Error{Code: CodeNotFound, Message: "job não encontrado: " + id}
+		return &Error{Code: CodeNotFound, Message: "job not found: " + id}
 	}
 	if j.State == StateRunning {
 		j.cancel()
@@ -218,7 +218,7 @@ func (js *jobs) cancel(id string) error {
 	return nil
 }
 
-// shutdown cancela tudo e espera os jobs terminarem.
+// shutdown cancels everything and waits for the jobs to finish.
 func (js *jobs) shutdown() {
 	js.mu.Lock()
 	for _, j := range js.byID {

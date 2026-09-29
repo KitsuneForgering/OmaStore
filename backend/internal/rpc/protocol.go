@@ -1,7 +1,7 @@
-// Package rpc implementa o servidor JSON-RPC 2.0 do OmaStore sobre um socket
-// Unix. Cada mensagem é um objeto JSON numa linha (NDJSON). Operações longas
-// (indexação, instalação) retornam um id de job e emitem notificações de
-// progresso pelo mesmo socket. O protocolo está documentado em docs/ipc.md.
+// Package rpc implements OmaStore's JSON-RPC 2.0 server over a Unix
+// socket. Each message is a JSON object on one line (NDJSON). Long operations
+// (indexing, installation) return a job id and emit progress notifications
+// over the same socket. The protocol is documented in docs/ipc.md.
 package rpc
 
 import (
@@ -14,10 +14,10 @@ import (
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
 )
 
-// Versão do protocolo, devolvida por daemon.hello.
+// Protocol version, returned by daemon.hello.
 const ProtocolVersion = 1
 
-// request é uma requisição ou notificação JSON-RPC.
+// request is a JSON-RPC request or notification.
 type request struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id,omitempty"`
@@ -25,7 +25,7 @@ type request struct {
 	Params  json.RawMessage `json:"params,omitempty"`
 }
 
-// response é uma resposta JSON-RPC.
+// response is a JSON-RPC response.
 type response struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
@@ -33,14 +33,14 @@ type response struct {
 	Error   *Error          `json:"error,omitempty"`
 }
 
-// notification é uma mensagem do servidor sem id.
+// notification is a server message without an id.
 type notification struct {
 	JSONRPC string `json:"jsonrpc"`
 	Method  string `json:"method"`
 	Params  any    `json:"params"`
 }
 
-// Error é um erro JSON-RPC.
+// Error is a JSON-RPC error.
 type Error struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
@@ -48,8 +48,8 @@ type Error struct {
 
 func (e *Error) Error() string { return fmt.Sprintf("rpc %d: %s", e.Code, e.Message) }
 
-// Códigos de erro. Os negativos de -32700 a -32600 são da especificação;
-// os de -32001 em diante são do OmaStore.
+// Error codes. The negative ones from -32700 to -32600 come from the
+// specification; the ones from -32001 on are OmaStore's.
 const (
 	CodeParse          = -32700
 	CodeInvalidRequest = -32600
@@ -68,14 +68,14 @@ const (
 	CodeCanceled       = -32009
 )
 
-// ErrBusy indica que já existe um job equivalente em andamento.
-var ErrBusy = errors.New("já existe uma operação em andamento")
+// ErrBusy means an equivalent job is already running.
+var ErrBusy = errors.New("an operation is already running")
 
 func errInvalidParams(format string, a ...any) *Error {
 	return &Error{Code: CodeInvalidParams, Message: fmt.Sprintf(format, a...)}
 }
 
-// toError converte erros do backend em códigos estáveis para o frontend.
+// toError converts backend errors into stable codes for the frontend.
 func toError(err error) *Error {
 	var e *Error
 	if errors.As(err, &e) {

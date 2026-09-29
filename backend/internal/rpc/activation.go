@@ -7,11 +7,11 @@ import (
 	"strconv"
 )
 
-// listenFDsStart é o primeiro descritor passado pelo systemd.
+// listenFDsStart is the first descriptor passed by systemd.
 const listenFDsStart = 3
 
-// ActivationListener retorna o socket recebido por socket activation do
-// systemd (LISTEN_PID/LISTEN_FDS), ou nil se o processo não foi ativado assim.
+// ActivationListener returns the socket received through systemd socket
+// activation (LISTEN_PID/LISTEN_FDS), or nil if the process was not activated that way.
 func ActivationListener() (net.Listener, error) {
 	pid, err := strconv.Atoi(os.Getenv("LISTEN_PID"))
 	if err != nil || pid != os.Getpid() {
@@ -22,9 +22,9 @@ func ActivationListener() (net.Listener, error) {
 		return nil, nil
 	}
 	if n > 1 {
-		return nil, fmt.Errorf("esperava 1 socket do systemd, recebi %d", n)
+		return nil, fmt.Errorf("expected 1 socket from systemd, got %d", n)
 	}
-	// Não repassar para processos filhos.
+	// Do not pass them on to child processes.
 	os.Unsetenv("LISTEN_PID")
 	os.Unsetenv("LISTEN_FDS")
 	os.Unsetenv("LISTEN_FDNAMES")
@@ -32,7 +32,7 @@ func ActivationListener() (net.Listener, error) {
 	defer f.Close()
 	l, err := net.FileListener(f)
 	if err != nil {
-		return nil, fmt.Errorf("socket do systemd: %w", err)
+		return nil, fmt.Errorf("systemd socket: %w", err)
 	}
 	return l, nil
 }
