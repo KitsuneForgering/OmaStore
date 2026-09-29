@@ -30,3 +30,12 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# OmaStore
+/frontend/build/
+/frontend/build-release/
+/bin/
+/dist/
+# Gerados: make pkgbuild-bin / makepkg --printsrcinfo
+/packaging/arch-bin/PKGBUILD
+/packaging/*/.SRCINFO
