@@ -1,5 +1,5 @@
-// Comando omastored: daemon do OmaStore. Atende o frontend por JSON-RPC 2.0
-// em $XDG_RUNTIME_DIR/omastore.sock (ver docs/ipc.md).
+// Command omastored: OmaStore's daemon. Serves the frontend over JSON-RPC 2.0
+// at $XDG_RUNTIME_DIR/omastore.sock (see docs/ipc.md).
 package main
 
 import (
@@ -25,10 +25,10 @@ func main() {
 }
 
 func run() error {
-	socket := flag.String("socket", "", "caminho do socket (default $XDG_RUNTIME_DIR/omastore.sock)")
+	socket := flag.String("socket", "", "socket path (default $XDG_RUNTIME_DIR/omastore.sock)")
 	verbose := flag.Bool("v", false, "log detalhado")
 	idleTimeout := flag.Duration("idle-timeout", -1,
-		"encerra após esse tempo sem clientes nem jobs (0 = nunca; padrão: 10m se iniciado pelo systemd, senão nunca)")
+		"exit after this long without clients or jobs (0 = never; default: 10m if started by systemd, otherwise never)")
 	flag.Parse()
 	level := ""
 	if *verbose {
@@ -61,8 +61,8 @@ func run() error {
 		defer os.Remove(path)
 	}
 
-	// Com socket activation o systemd reinicia o daemon na próxima conexão,
-	// então encerrar quando ocioso não tem custo para o usuário.
+	// With socket activation systemd restarts the daemon on the next connection,
+	// so exiting when idle costs the user nothing.
 	idle := *idleTimeout
 	if idle < 0 {
 		idle = 0
@@ -74,7 +74,7 @@ func run() error {
 	srv := rpc.NewServer(a, log)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(l) }()
-	log.Info("omastored pronto", "socket", addr(l), "idle-timeout", idle)
+	log.Info("omastored ready", "socket", addr(l), "idle-timeout", idle)
 
 	var idleC <-chan time.Time
 	if idle > 0 {
@@ -86,13 +86,13 @@ loop:
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("encerrando")
+			log.Info("shutting down")
 			break loop
 		case err = <-errc:
 			break loop
 		case <-idleC:
 			if d := srv.IdleFor(); d >= idle {
-				log.Info("ocioso; encerrando", "ocioso-ha", d.Round(time.Second))
+				log.Info("idle; shutting down", "idle-for", d.Round(time.Second))
 				break loop
 			}
 		}
@@ -101,8 +101,8 @@ loop:
 	return err
 }
 
-// defaultIdleTimeout é o tempo ocioso antes de encerrar quando iniciado
-// por socket activation.
+// defaultIdleTimeout is the idle time before exiting when started by
+// socket activation.
 const defaultIdleTimeout = 10 * time.Minute
 
 func addr(l net.Listener) string { return l.Addr().String() }

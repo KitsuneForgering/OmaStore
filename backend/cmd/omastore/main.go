@@ -1,5 +1,5 @@
-// Comando omastore: CLI de depuração do backend do OmaStore. Usa os mesmos
-// serviços do daemon, sem precisar da GUI.
+// Command omastore: OmaStore's debugging CLI. Uses the same services as
+// the daemon, without needing the GUI.
 package main
 
 import (
@@ -26,23 +26,23 @@ import (
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
 )
 
-const usage = `uso: omastore [-v] <comando> [opções]
+const usage = `usage: omastore [-v] <command> [options]
 
-comandos:
-  index [--force] [--prune] [--max N] [--no-batch] [--manifest arquivo] [owner/repo...]
-                                    indexa o catálogo (ou só os repos dados)
+commands:
+  index [--force] [--prune] [--max N] [--no-batch] [--manifest file] [owner/repo...]
+                                    index the catalog (or only the given repos)
   list [--category C] [--query Q] [--installed] [--all] [--json]
-  categories                        lista as categorias
-  show [--json] owner/repo          detalhes de um app
+  categories                        list the categories
+  show [--json] owner/repo          details of an app
   similar [--json] [--limit N] owner/repo
-                                    apps parecidos (busca: list --query)
-  lint-manifest [dir|arquivo]       valida um omastore.toml (padrão: diretório atual)
-  install owner/repo...             instala a última release
-  uninstall owner/repo...           remove um app instalado
-  update [owner/repo...]            atualiza os apps dados (ou todos os instalados)
-  update --check [--notify]         lista atualizações; --notify avisa pela área de trabalho
+                                    similar apps (search: list --query)
+  lint-manifest [dir|file]          validate an omastore.toml (default: current directory)
+  install owner/repo...             install the latest release
+  uninstall owner/repo...           remove an installed app
+  update [owner/repo...]            update the given apps (or every installed one)
+  update --check [--notify]         list updates; --notify shows a desktop notification
 
-variáveis: GITHUB_TOKEN (ou gh auth token), OMASTORE_LOG=debug|info|warn|error
+environment: GITHUB_TOKEN (or gh auth token), OMASTORE_LOG=debug|info|warn|error
 `
 
 func main() {
@@ -51,8 +51,8 @@ func main() {
 	os.Exit(run(ctx, os.Args[1:], os.Stdout, os.Stderr))
 }
 
-// errUsage sinaliza erro de uso (código de saída 2).
-var errUsage = errors.New("uso inválido")
+// errUsage signals a usage error (exit code 2).
+var errUsage = errors.New("invalid usage")
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	global := flag.NewFlagSet("omastore", flag.ContinueOnError)
@@ -84,7 +84,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		"uninstall":  cmdUninstall,
 		"update":     cmdUpdate,
 	}
-	// Comandos que não precisam do banco nem da rede.
+	// Commands that need neither the database nor the network.
 	if cmd == "lint-manifest" {
 		if err := cmdLintManifest(cmdArgs, stdout, stderr); err != nil {
 			if errors.Is(err, errUsage) {
@@ -102,7 +102,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			fmt.Fprint(stdout, usage)
 			return 0
 		}
-		fmt.Fprintf(stderr, "comando desconhecido: %q\n\n%s", cmd, usage)
+		fmt.Fprintf(stderr, "unknown command: %q\n\n%s", cmd, usage)
 		return 2
 	}
 
@@ -138,11 +138,11 @@ func parse(fs *flag.FlagSet, args []string) error {
 
 func cmdIndex(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
 	fs := newFlags("index", stderr)
-	force := fs.Bool("force", false, "reprocessa tudo, ignorando o cache")
-	prune := fs.Bool("prune", false, "remove do catálogo repos não mais encontrados")
-	maxSearch := fs.Int("max", 0, "máximo de resultados da busca por topic (default 300)")
-	noBatch := fs.Bool("no-batch", false, "não usar a consulta em lote (GraphQL), só a API REST")
-	manifestFile := fs.String("manifest", "", "usa este omastore.toml local no lugar do publicado (exige um único owner/repo)")
+	force := fs.Bool("force", false, "reprocess everything, ignoring the cache")
+	prune := fs.Bool("prune", false, "remove repos that are no longer found from the catalog")
+	maxSearch := fs.Int("max", 0, "maximum topic search results (default 300)")
+	noBatch := fs.Bool("no-batch", false, "do not use the batch query (GraphQL), only the REST API")
+	manifestFile := fs.String("manifest", "", "use this local omastore.toml instead of the published one (requires a single owner/repo)")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func cmdIndex(ctx context.Context, a *app.App, args []string, stdout, stderr io.
 	var overrides map[string]string
 	if *manifestFile != "" {
 		if fs.NArg() != 1 {
-			fmt.Fprintln(stderr, "--manifest exige exatamente um owner/repo")
+			fmt.Fprintln(stderr, "--manifest requires exactly one owner/repo")
 			return errUsage
 		}
 		data, err := os.ReadFile(*manifestFile)
@@ -177,7 +177,7 @@ func cmdIndex(ctx context.Context, a *app.App, args []string, stdout, stderr io.
 	if tty {
 		fmt.Fprintln(stderr)
 	}
-	fmt.Fprintf(stdout, "atualizados: %d, só stats: %d, inalterados: %d, removidos: %d, sem manifesto de app: %d, ignorados: %d, falhas: %d (%s, %d requisições)\n",
+	fmt.Fprintf(stdout, "updated: %d, stats only: %d, unchanged: %d, removed: %d, no app manifest: %d, skipped: %d, failed: %d (%s, %d requests)\n",
 		stats.Updated, stats.Refreshed, stats.Unchanged, stats.Removed, stats.NotApps, stats.Skipped, stats.Failed,
 		time.Since(start).Round(time.Millisecond), a.GitHub.Requests()-reqBefore)
 	return err
@@ -192,11 +192,11 @@ func writeJSON(w io.Writer, v any) error {
 func cmdList(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
 	fs := newFlags("list", stderr)
 	var f store.Filter
-	fs.StringVar(&f.Category, "category", "", "filtra por categoria")
+	fs.StringVar(&f.Category, "category", "", "filter by category")
 	fs.StringVar(&f.Query, "query", "", "busca por texto")
-	fs.BoolVar(&f.InstalledOnly, "installed", false, "só instalados")
-	fs.BoolVar(&f.All, "all", false, "inclui apps sem binário instalável")
-	asJSON := fs.Bool("json", false, "saída em JSON")
+	fs.BoolVar(&f.InstalledOnly, "installed", false, "installed only")
+	fs.BoolVar(&f.All, "all", false, "include apps without an installable binary")
+	asJSON := fs.Bool("json", false, "JSON output")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -212,7 +212,7 @@ func printItems(stdout io.Writer, items []store.ListItem, asJSON bool) error {
 		return writeJSON(stdout, items)
 	}
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "REPO\tNOME\tCATEGORIA\t★\tVERSÃO\tINSTALADO\tRESUMO")
+	fmt.Fprintln(tw, "REPO\tNAME\tCATEGORY\t★\tVERSION\tINSTALLED\tSUMMARY")
 	for _, it := range items {
 		inst := ""
 		if it.InstalledVersion != "" {
@@ -237,13 +237,13 @@ func clip(s string, n int) string {
 
 func cmdSimilar(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
 	fs := newFlags("similar", stderr)
-	asJSON := fs.Bool("json", false, "saída em JSON")
-	limit := fs.Int("limit", 8, "máximo de resultados")
+	asJSON := fs.Bool("json", false, "JSON output")
+	limit := fs.Int("limit", 8, "maximum results")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "uso: omastore similar [--json] [--limit N] owner/repo")
+		fmt.Fprintln(stderr, "usage: omastore similar [--json] [--limit N] owner/repo")
 		return errUsage
 	}
 	items, err := a.Similar(ctx, fs.Arg(0), *limit)
@@ -258,7 +258,7 @@ var errLint = errors.New("manifest has errors")
 func cmdLintManifest(args []string, stdout, stderr io.Writer) error {
 	target := "."
 	if len(args) > 1 {
-		fmt.Fprintln(stderr, "uso: omastore lint-manifest [dir|arquivo]")
+		fmt.Fprintln(stderr, "usage: omastore lint-manifest [dir|file]")
 		return errUsage
 	}
 	if len(args) == 1 {
@@ -276,9 +276,9 @@ func cmdLintManifest(args []string, stdout, stderr io.Writer) error {
 	m, problems, err := manifest.Parse(data, true)
 	if err != nil {
 		fmt.Fprintf(stdout, "error: (file): %v\n", err)
-		return fmt.Errorf("%w: 1 erro(s)", errLint)
+		return fmt.Errorf("%w: 1 error(s)", errLint)
 	}
-	// Com o diretório do repositório, confere se os arquivos existem.
+	// With the repository directory, check that the files exist.
 	if dir != "" && m != nil {
 		paths := append([]string{}, m.Screenshots...)
 		if m.Icon != "" {
@@ -289,7 +289,7 @@ func cmdLintManifest(args []string, stdout, stderr io.Writer) error {
 				continue
 			}
 			if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(p))); err != nil {
-				problems = append(problems, manifest.Problem{Field: p, Message: "arquivo não existe no repositório"})
+				problems = append(problems, manifest.Problem{Field: p, Message: "file does not exist in the repository"})
 			}
 		}
 	}
@@ -301,10 +301,10 @@ func cmdLintManifest(args []string, stdout, stderr io.Writer) error {
 		}
 	}
 	if errs > 0 {
-		return fmt.Errorf("%w: %d erro(s)", errLint, errs)
+		return fmt.Errorf("%w: %d error(s)", errLint, errs)
 	}
 	if !m.IsApp() {
-		return nil // o aviso sobre kind já foi impresso entre os problemas
+		return nil // the kind warning was already printed with the problems
 	}
 	if m.Empty() {
 		fmt.Fprintf(stdout, "ok: %s (empty: the repository joins the catalog and the rest is inferred)\n", file)
@@ -312,10 +312,10 @@ func cmdLintManifest(args []string, stdout, stderr io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "ok: %s\n", file)
 	if m.Name != "" {
-		fmt.Fprintf(stdout, "  nome:        %s\n", m.Name)
+		fmt.Fprintf(stdout, "  name:        %s\n", m.Name)
 	}
 	if c := m.MainCategory(); c != "" {
-		fmt.Fprintf(stdout, "  categoria:   %s\n", c)
+		fmt.Fprintf(stdout, "  category:    %s\n", c)
 	}
 	for _, arch := range []string{"amd64", "arm64"} {
 		if t, ok := m.Target(arch); ok {
@@ -338,12 +338,12 @@ func cmdCategories(ctx context.Context, a *app.App, args []string, stdout, stder
 
 func cmdShow(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
 	fs := newFlags("show", stderr)
-	asJSON := fs.Bool("json", false, "saída em JSON")
+	asJSON := fs.Bool("json", false, "JSON output")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "uso: omastore show [--json] owner/repo")
+		fmt.Fprintln(stderr, "usage: omastore show [--json] owner/repo")
 		return errUsage
 	}
 	d, err := a.Store.GetApp(ctx, fs.Arg(0))
@@ -355,32 +355,32 @@ func cmdShow(ctx context.Context, a *app.App, args []string, stdout, stderr io.W
 	}
 	fmt.Fprintf(stdout, "%s (%s)\n", d.Name, d.FullName)
 	fmt.Fprintf(stdout, "  %s\n\n", d.Summary)
-	fmt.Fprintf(stdout, "categoria:  %s\n", d.Category)
-	fmt.Fprintf(stdout, "stars:      %d\n", d.Repo.Stars)
-	fmt.Fprintf(stdout, "licença:    %s\n", d.Repo.License)
-	fmt.Fprintf(stdout, "topics:     %s\n", strings.Join(d.Repo.Topics, ", "))
-	fmt.Fprintf(stdout, "release:    %s\n", d.Repo.LatestTag)
-	fmt.Fprintf(stdout, "instalável: %v\n", d.Installable)
-	fmt.Fprintf(stdout, "ícone:      %s\n", d.IconURL)
+	fmt.Fprintf(stdout, "category:    %s\n", d.Category)
+	fmt.Fprintf(stdout, "stars:       %d\n", d.Repo.Stars)
+	fmt.Fprintf(stdout, "license:     %s\n", d.Repo.License)
+	fmt.Fprintf(stdout, "topics:      %s\n", strings.Join(d.Repo.Topics, ", "))
+	fmt.Fprintf(stdout, "release:     %s\n", d.Repo.LatestTag)
+	fmt.Fprintf(stdout, "installable: %v\n", d.Installable)
+	fmt.Fprintf(stdout, "icon:        %s\n", d.IconURL)
 	if d.Manifest != "" {
-		fmt.Fprintf(stdout, "manifesto:  omastore.toml\n")
+		fmt.Fprintf(stdout, "manifest:    omastore.toml\n")
 	}
 	for _, s := range d.Screenshots {
-		fmt.Fprintf(stdout, "screenshot: %s\n", s)
+		fmt.Fprintf(stdout, "screenshot:  %s\n", s)
 	}
 	for _, as := range d.Assets {
-		sum := "sem checksum"
+		sum := "no checksum"
 		switch {
 		case as.Digest != "":
 			sum = as.Digest
 		case as.ChecksumURL != "":
 			sum = "checksum: " + as.ChecksumURL
 		}
-		fmt.Fprintf(stdout, "asset:      %s [%s %s] %s\n", as.Name, as.Format, orDash(as.Arch), sum)
+		fmt.Fprintf(stdout, "asset:       %s [%s %s] %s\n", as.Name, as.Format, orDash(as.Arch), sum)
 	}
 	if d.Install != nil {
-		fmt.Fprintf(stdout, "instalado:  %s em %s\n", d.Install.Version, d.Install.InstalledAt.Local().Format(time.DateTime))
-		fmt.Fprintf(stdout, "executável: %s\n", d.Install.ExecPath)
+		fmt.Fprintf(stdout, "installed:   %s on %s\n", d.Install.Version, d.Install.InstalledAt.Local().Format(time.DateTime))
+		fmt.Fprintf(stdout, "executable:  %s\n", d.Install.ExecPath)
 	}
 	return nil
 }
@@ -392,7 +392,7 @@ func orDash(s string) string {
 	return s
 }
 
-// isTerminal diz se w é um terminal (para decidir entre \r e linhas novas).
+// isTerminal reports whether w is a terminal (to choose between \r and new lines).
 func isTerminal(w io.Writer) bool {
 	f, ok := w.(*os.File)
 	if !ok {
@@ -402,8 +402,8 @@ func isTerminal(w io.Writer) bool {
 	return err == nil && st.Mode()&os.ModeCharDevice != 0
 }
 
-// progressPrinter mostra o andamento de uma instalação: numa linha só em
-// terminais, ou uma linha por etapa quando a saída é redirecionada.
+// progressPrinter shows an installation's progress: on a single line in
+// terminals, or one line per stage when the output is redirected.
 func progressPrinter(w io.Writer, name string) func(install.Progress) {
 	tty := isTerminal(w)
 	last := ""
@@ -426,7 +426,7 @@ func progressPrinter(w io.Writer, name string) func(install.Progress) {
 	}
 }
 
-// endLine termina a linha de progresso em terminais.
+// endLine ends the progress line in terminals.
 func endLine(w io.Writer) {
 	if isTerminal(w) {
 		fmt.Fprintln(w)
@@ -445,7 +445,7 @@ func humanBytes(n int64) string {
 
 func needRepos(name string, args []string, stderr io.Writer) error {
 	if len(args) == 0 {
-		fmt.Fprintf(stderr, "uso: omastore %s owner/repo...\n", name)
+		fmt.Fprintf(stderr, "usage: omastore %s owner/repo...\n", name)
 		return errUsage
 	}
 	return nil
@@ -463,7 +463,7 @@ func cmdInstall(ctx context.Context, a *app.App, args []string, stdout, stderr i
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
 			continue
 		}
-		fmt.Fprintf(stdout, "%s %s instalado: %s\n", name, inst.Version, inst.ExecPath)
+		fmt.Fprintf(stdout, "%s %s installed: %s\n", name, inst.Version, inst.ExecPath)
 	}
 	return errors.Join(errs...)
 }
@@ -478,23 +478,23 @@ func cmdUninstall(ctx context.Context, a *app.App, args []string, stdout, stderr
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
 			continue
 		}
-		fmt.Fprintf(stdout, "%s removido\n", name)
+		fmt.Fprintf(stdout, "%s removed\n", name)
 	}
 	return errors.Join(errs...)
 }
 
-// newNotifier cria o notificador de desktop (substituído nos testes).
+// newNotifier creates the desktop notifier (replaced in tests).
 var newNotifier = func() notify.Notifier { return notify.DBus{AppName: "OmaStore", Icon: "omastore"} }
 
 func cmdUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
 	fs := newFlags("update", stderr)
-	check := fs.Bool("check", false, "só lista as atualizações disponíveis, sem instalar")
-	notifyFlag := fs.Bool("notify", false, "com --check: notificação desktop se houver atualizações novas")
+	check := fs.Bool("check", false, "only list the available updates, without installing")
+	notifyFlag := fs.Bool("notify", false, "with --check: desktop notification if there are new updates")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
 	if *notifyFlag && !*check {
-		fmt.Fprintln(stderr, "--notify só vale com --check")
+		fmt.Fprintln(stderr, "--notify only works with --check")
 		return errUsage
 	}
 	if *check {
@@ -510,7 +510,7 @@ func cmdUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io
 			names = append(names, in.FullName)
 		}
 		if len(names) == 0 {
-			fmt.Fprintln(stdout, "nenhum app instalado")
+			fmt.Fprintln(stdout, "no apps installed")
 			return nil
 		}
 	}
@@ -519,20 +519,20 @@ func cmdUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io
 		inst, err := a.Installer.Update(ctx, name, progressPrinter(stderr, name))
 		switch {
 		case errors.Is(err, install.ErrUpToDate):
-			fmt.Fprintf(stdout, "%s já está em %s\n", name, inst.Version)
+			fmt.Fprintf(stdout, "%s is already at %s\n", name, inst.Version)
 		case err != nil:
 			endLine(stderr)
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
 		default:
 			endLine(stderr)
-			fmt.Fprintf(stdout, "%s atualizado para %s\n", name, inst.Version)
+			fmt.Fprintf(stdout, "%s updated to %s\n", name, inst.Version)
 		}
 	}
 	return errors.Join(errs...)
 }
 
-// checkUpdates lista os apps instalados com versão nova no catálogo e, com
-// notify, avisa pela área de trabalho (uma vez por conjunto de versões).
+// checkUpdates lists the installed apps with a newer version in the catalog and,
+// with notify, shows a desktop notification (once per set of versions).
 func checkUpdates(ctx context.Context, a *app.App, notifyUser bool, stdout io.Writer) error {
 	items, err := a.Store.ListApps(ctx, store.Filter{InstalledOnly: true, All: true})
 	if err != nil {
@@ -545,9 +545,9 @@ func checkUpdates(ctx context.Context, a *app.App, notifyUser bool, stdout io.Wr
 		}
 	}
 	if len(ups) == 0 {
-		fmt.Fprintln(stdout, "tudo atualizado")
+		fmt.Fprintln(stdout, "everything is up to date")
 		if notifyUser {
-			// Zera o estado: a próxima atualização volta a ser avisada.
+			// Reset the state: the next update will be announced again.
 			os.Remove(filepath.Join(a.Paths.StateDir, "notified-updates"))
 		}
 		return nil
@@ -564,7 +564,7 @@ func checkUpdates(ctx context.Context, a *app.App, notifyUser bool, stdout io.Wr
 		return err
 	}
 	if !sent {
-		fmt.Fprintln(stdout, "(já notificado)")
+		fmt.Fprintln(stdout, "(already notified)")
 	}
 	return nil
 }
