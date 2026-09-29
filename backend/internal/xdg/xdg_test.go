@@ -8,7 +8,7 @@ import (
 func TestResolveDefaults(t *testing.T) {
 	t.Setenv("HOME", "/home/test")
 	t.Setenv("XDG_DATA_HOME", "")
-	t.Setenv("XDG_CACHE_HOME", "relativo/ignorado")
+	t.Setenv("XDG_CACHE_HOME", "relative/ignored")
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("XDG_RUNTIME_DIR", "/run/user/42")

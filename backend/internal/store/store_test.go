@@ -50,12 +50,12 @@ func TestMigrationFailureRollsBack(t *testing.T) {
 		"migrations/9002_bad.sql": {Data: []byte("CREATE TABLE b(x); SYNTAX ERROR;")},
 	}
 	if err := migrate(context.Background(), s.db, bad); err == nil {
-		t.Fatal("esperava erro")
+		t.Fatal("expected an error")
 	}
 	var n int
 	s.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name = 'b'`).Scan(&n)
 	if n != 0 {
-		t.Error("tabela b não deveria existir após rollback")
+		t.Error("table b should not exist after rollback")
 	}
 }
 
@@ -65,7 +65,7 @@ func TestDuplicateMigrationNumber(t *testing.T) {
 		"migrations/0001_b.sql": {Data: []byte("")},
 	}
 	if _, err := loadMigrations(fs); err == nil {
-		t.Fatal("esperava erro de número duplicado")
+		t.Fatal("expected a duplicate number error")
 	}
 }
 
@@ -104,7 +104,7 @@ func TestSaveIndexedReplacesAssets(t *testing.T) {
 	var n int
 	s.db.QueryRow(`SELECT COUNT(*) FROM assets`).Scan(&n)
 	if n != 1 {
-		t.Errorf("total de assets = %d, want 1", n)
+		t.Errorf("total assets = %d, want 1", n)
 	}
 }
 
@@ -112,7 +112,7 @@ func TestSaveIndexedMismatch(t *testing.T) {
 	s := openTest(t)
 	err := s.SaveIndexed(context.Background(), Repo{FullName: "a/b"}, App{FullName: "c/d"}, nil)
 	if err == nil {
-		t.Fatal("esperava erro")
+		t.Fatal("expected an error")
 	}
 }
 
@@ -136,7 +136,7 @@ func TestListApps(t *testing.T) {
 	}
 	g, _ := s.ListApps(ctx, Filter{Category: "Graphics"})
 	if len(g) != 1 || g[0].FullName != "a/photo" {
-		t.Errorf("categoria: %+v", g)
+		t.Errorf("category: %+v", g)
 	}
 	q, _ := s.ListApps(ctx, Filter{Query: "VM"})
 	if len(q) != 1 || q[0].FullName != "a/vm" {
@@ -144,11 +144,11 @@ func TestListApps(t *testing.T) {
 	}
 	pct, _ := s.ListApps(ctx, Filter{Query: "%"})
 	if len(pct) != 0 {
-		t.Errorf("%% deveria ser literal: %+v", pct)
+		t.Errorf("%% should be literal: %+v", pct)
 	}
 	lim, _ := s.ListApps(ctx, Filter{Limit: 1, Offset: 1})
 	if len(lim) != 1 || lim[0].FullName != "a/photo" {
-		t.Errorf("paginação: %+v", lim)
+		t.Errorf("pagination: %+v", lim)
 	}
 
 	cats, _ := s.Categories(ctx)
@@ -175,23 +175,23 @@ func TestInstalls(t *testing.T) {
 	}
 	inst, _ := s.ListApps(ctx, Filter{InstalledOnly: true})
 	if len(inst) != 1 || inst[0].InstalledVersion != "v1.0.0" {
-		t.Errorf("instalados: %+v", inst)
+		t.Errorf("installed: %+v", inst)
 	}
 	d, _ := s.GetApp(ctx, "a/vm")
 	if d.Install == nil {
-		t.Error("GetApp sem Install")
+		t.Error("GetApp without Install")
 	}
 
-	// A instalação sobrevive à remoção do repo do catálogo.
+	// The installation survives the repo being removed from the catalog.
 	if err := s.RemoveRepo(ctx, "a/vm"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.GetApp(ctx, "a/vm"); !errors.Is(err, ErrNotFound) {
-		t.Errorf("app deveria ter sido removido: %v", err)
+		t.Errorf("app should have been removed: %v", err)
 	}
 	list, _ := s.ListInstalls(ctx)
 	if len(list) != 1 {
-		t.Errorf("instalações: %+v", list)
+		t.Errorf("installations: %+v", list)
 	}
 	if err := s.DeleteInstall(ctx, "a/vm"); err != nil {
 		t.Fatal(err)
@@ -205,12 +205,12 @@ func TestUpdateStatsAndNames(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
 	seed(t, s, "a/b", 10, "Graphics", true)
-	if err := s.UpdateStats(ctx, "a/b", 99, "nova", []string{"x"}, `"e2"`, 99.5, time.Now()); err != nil {
+	if err := s.UpdateStats(ctx, "a/b", 99, "new", []string{"x"}, `"e2"`, 99.5, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	d, _ := s.GetApp(ctx, "a/b")
 	if d.Repo.Stars != 99 || d.Score != 99.5 || d.Repo.ETag != `"e2"` || d.Repo.HeadSHA != "abc" {
-		t.Errorf("detalhe = %+v", d.Repo)
+		t.Errorf("detail = %+v", d.Repo)
 	}
 	names, _ := s.RepoNames(ctx)
 	if len(names) != 1 || names[0] != "a/b" {
@@ -242,17 +242,17 @@ func TestSearchDocsAndStamp(t *testing.T) {
 	}
 	st1, _ := s.CatalogStamp(ctx)
 	if st1 == st0 {
-		t.Error("marca não mudou após gravar")
+		t.Error("stamp did not change after save")
 	}
 	s.UpdateStats(ctx, "a/photo", 9, "", nil, "", 9, time.Now().Add(time.Hour))
 	st2, _ := s.CatalogStamp(ctx)
 	if st2 == st1 {
-		t.Error("marca não mudou após atualizar stats")
+		t.Error("stamp did not change after updating stats")
 	}
 	s.RemoveRepo(ctx, "a/lib")
 	st3, _ := s.CatalogStamp(ctx)
 	if st3 == st2 {
-		t.Error("marca não mudou após remover")
+		t.Error("stamp did not change after remove")
 	}
 }
 

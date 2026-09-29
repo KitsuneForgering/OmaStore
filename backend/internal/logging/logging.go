@@ -1,4 +1,4 @@
-// Package logging configura o slog padrão do OmaStore.
+// Package logging configures OmaStore's default slog logger.
 package logging
 
 import (
@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// Setup instala um handler de texto em w com o nível dado por level
-// ("debug", "info", "warn", "error"). Se level for vazio, lê OMASTORE_LOG.
+// Setup installs a text handler on w at the level given by level
+// ("debug", "info", "warn", "error"). If level is empty, OMASTORE_LOG is read.
 func Setup(w io.Writer, level string) *slog.Logger {
 	if level == "" {
 		level = os.Getenv("OMASTORE_LOG")
@@ -19,7 +19,7 @@ func Setup(w io.Writer, level string) *slog.Logger {
 	return l
 }
 
-// ParseLevel converte um nome em slog.Level; o default é Info.
+// ParseLevel converts a name into a slog.Level; the default is Info.
 func ParseLevel(s string) slog.Level {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "debug":

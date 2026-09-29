@@ -1,4 +1,4 @@
--- Esquema inicial do OmaStore.
+-- Initial OmaStore schema.
 
 CREATE TABLE repos (
     full_name      TEXT PRIMARY KEY,           -- owner/repo
@@ -21,10 +21,10 @@ CREATE TABLE apps (
     summary     TEXT NOT NULL DEFAULT '',
     readme      TEXT NOT NULL DEFAULT '',
     icon_url    TEXT NOT NULL DEFAULT '',
-    screenshots TEXT NOT NULL DEFAULT '[]',    -- JSON array de URLs
+    screenshots TEXT NOT NULL DEFAULT '[]',    -- JSON array of URLs
     category    TEXT NOT NULL DEFAULT 'Utility',
     score       REAL NOT NULL DEFAULT 0,
-    installable INTEGER NOT NULL DEFAULT 0     -- 1 se há binário Linux na última release
+    installable INTEGER NOT NULL DEFAULT 0     -- 1 if the latest release has a Linux binary
 );
 
 CREATE INDEX apps_category_score ON apps(category, score DESC);
@@ -37,22 +37,22 @@ CREATE TABLE assets (
     name         TEXT NOT NULL,
     url          TEXT NOT NULL,
     size         INTEGER NOT NULL DEFAULT 0,
-    arch         TEXT NOT NULL DEFAULT '',     -- amd64, arm64 ou vazio
+    arch         TEXT NOT NULL DEFAULT '',     -- amd64, arm64 or empty
     format       TEXT NOT NULL DEFAULT '',     -- binary, tar.gz, tar.xz, zip, appimage, pkg.tar.zst
-    digest       TEXT NOT NULL DEFAULT '',     -- "sha256:<hex>" informado pela API do GitHub
-    checksum_url TEXT NOT NULL DEFAULT '',     -- asset de checksum que cobre este arquivo
+    digest       TEXT NOT NULL DEFAULT '',     -- "sha256:<hex>" reported by the GitHub API
+    checksum_url TEXT NOT NULL DEFAULT '',     -- checksum asset that covers this file
     UNIQUE (full_name, tag, name)
 );
 
 CREATE INDEX assets_repo ON assets(full_name, tag);
 
--- Sem FK para repos: uma instalação continua desinstalável mesmo que o repo
--- saia do catálogo.
+-- No FK to repos: an installation stays uninstallable even if the repo
+-- leaves the catalog.
 CREATE TABLE installs (
     full_name    TEXT PRIMARY KEY,
     version      TEXT NOT NULL,
     installed_at DATETIME NOT NULL,
     exec_path    TEXT NOT NULL DEFAULT '',
     desktop_path TEXT NOT NULL DEFAULT '',
-    files        TEXT NOT NULL DEFAULT '[]'    -- JSON array de caminhos criados
+    files        TEXT NOT NULL DEFAULT '[]'    -- JSON array of created paths
 );

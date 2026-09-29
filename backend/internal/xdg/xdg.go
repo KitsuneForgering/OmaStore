@@ -1,5 +1,5 @@
-// Package xdg resolve os diretórios base da XDG Base Directory Specification
-// usados pelo OmaStore, aplicando os defaults da especificação.
+// Package xdg resolves the XDG Base Directory Specification base directories
+// used by OmaStore, applying the defaults from the specification.
 package xdg
 
 import (
@@ -11,20 +11,20 @@ import (
 
 const appName = "omastore"
 
-// Home retorna o diretório home do usuário.
+// Home returns the user's home directory.
 func Home() (string, error) {
 	if h := os.Getenv("HOME"); h != "" {
 		return h, nil
 	}
 	h, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("resolver HOME: %w", err)
+		return "", fmt.Errorf("resolve HOME: %w", err)
 	}
 	return h, nil
 }
 
-// envDir retorna o valor de env se for um caminho absoluto; caso contrário,
-// $HOME/<fallback>. A especificação manda ignorar caminhos relativos.
+// envDir returns the value of env if it is an absolute path; otherwise,
+// $HOME/<fallback>. The specification says relative paths must be ignored.
 func envDir(env, fallback string) (string, error) {
 	if v := os.Getenv(env); v != "" && filepath.IsAbs(v) {
 		return v, nil
@@ -36,20 +36,20 @@ func envDir(env, fallback string) (string, error) {
 	return filepath.Join(h, fallback), nil
 }
 
-// DataHome retorna $XDG_DATA_HOME (default ~/.local/share).
+// DataHome returns $XDG_DATA_HOME (default ~/.local/share).
 func DataHome() (string, error) { return envDir("XDG_DATA_HOME", ".local/share") }
 
-// CacheHome retorna $XDG_CACHE_HOME (default ~/.cache).
+// CacheHome returns $XDG_CACHE_HOME (default ~/.cache).
 func CacheHome() (string, error) { return envDir("XDG_CACHE_HOME", ".cache") }
 
-// StateHome retorna $XDG_STATE_HOME (default ~/.local/state).
+// StateHome returns $XDG_STATE_HOME (default ~/.local/state).
 func StateHome() (string, error) { return envDir("XDG_STATE_HOME", ".local/state") }
 
-// ConfigHome retorna $XDG_CONFIG_HOME (default ~/.config).
+// ConfigHome returns $XDG_CONFIG_HOME (default ~/.config).
 func ConfigHome() (string, error) { return envDir("XDG_CONFIG_HOME", ".config") }
 
-// RuntimeDir retorna $XDG_RUNTIME_DIR. A especificação não define default;
-// usamos /run/user/<uid> quando existir e, por último, o diretório temporário.
+// RuntimeDir returns $XDG_RUNTIME_DIR. The specification defines no default;
+// we use /run/user/<uid> when it exists and, as a last resort, the temp directory.
 func RuntimeDir() string {
 	if v := os.Getenv("XDG_RUNTIME_DIR"); v != "" && filepath.IsAbs(v) {
 		return v
@@ -61,7 +61,7 @@ func RuntimeDir() string {
 	return os.TempDir()
 }
 
-// Paths agrupa todos os caminhos usados pelo OmaStore.
+// Paths groups every path used by OmaStore.
 type Paths struct {
 	Home         string // $HOME
 	DataDir      string // $XDG_DATA_HOME/omastore
@@ -78,7 +78,7 @@ type Paths struct {
 	OmarchyTheme string // $XDG_STATE_HOME/omarchy/current/theme
 }
 
-// Resolve calcula os caminhos a partir do ambiente atual.
+// Resolve computes the paths from the current environment.
 func Resolve() (Paths, error) {
 	home, err := Home()
 	if err != nil {
@@ -114,11 +114,11 @@ func Resolve() (Paths, error) {
 	return p, nil
 }
 
-// Ensure cria os diretórios próprios do OmaStore.
+// Ensure creates OmaStore's own directories.
 func (p Paths) Ensure() error {
 	for _, d := range []string{p.DataDir, p.CacheDir, p.AppsDir, p.ReposDir, p.ImagesDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
-			return fmt.Errorf("criar %s: %w", d, err)
+			return fmt.Errorf("create %s: %w", d, err)
 		}
 	}
 	return nil

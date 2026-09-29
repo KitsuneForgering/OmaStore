@@ -1,4 +1,4 @@
-// Package store guarda o índice e as instalações do OmaStore em SQLite.
+// Package store keeps OmaStore's index and installations in SQLite.
 package store
 
 import (
@@ -16,18 +16,18 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// ErrNotFound é retornado quando o registro pedido não existe.
-var ErrNotFound = errors.New("não encontrado")
+// ErrNotFound is returned when the requested record does not exist.
+var ErrNotFound = errors.New("not found")
 
-// Store é o acesso ao banco SQLite.
+// Store is the SQLite database access.
 type Store struct {
 	db *sql.DB
 }
 
-// Open abre (criando se necessário) o banco em path e aplica as migrações.
+// Open opens (creating it if needed) the database at path and applies the migrations.
 func Open(ctx context.Context, path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, fmt.Errorf("criar diretório do banco: %w", err)
+		return nil, fmt.Errorf("create database directory: %w", err)
 	}
 	q := url.Values{}
 	q.Set("_journal_mode", "WAL")
@@ -36,11 +36,11 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	q.Set("_txlock", "immediate")
 	db, err := sql.Open("sqlite3", "file:"+path+"?"+q.Encode())
 	if err != nil {
-		return nil, fmt.Errorf("abrir banco: %w", err)
+		return nil, fmt.Errorf("open database: %w", err)
 	}
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("abrir banco %s: %w", path, err)
+		return nil, fmt.Errorf("open database %s: %w", path, err)
 	}
 	if err := migrate(ctx, db, migrationsFS); err != nil {
 		db.Close()
@@ -49,10 +49,10 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-// Close fecha o banco.
+// Close closes the database.
 func (s *Store) Close() error { return s.db.Close() }
 
-// Repo são os metadados de um repositório do GitHub.
+// Repo is the metadata of a GitHub repository.
 type Repo struct {
 	FullName      string
 	Description   string
@@ -69,8 +69,8 @@ type Repo struct {
 	IndexVersion  int
 }
 
-// RepoState é o que a verificação de cache compara para decidir se um
-// repositório precisa ser reprocessado.
+// RepoState is what the cache check compares to decide whether a
+// repository needs to be reprocessed.
 type RepoState struct {
 	PushedAt     time.Time
 	HeadSHA      string
@@ -81,7 +81,7 @@ type RepoState struct {
 	Description  string
 }
 
-// App são os dados de exibição derivados de um repositório.
+// App is the display data derived from a repository.
 type App struct {
 	FullName    string
 	Name        string
@@ -92,11 +92,11 @@ type App struct {
 	Category    string
 	Score       float64
 	Installable bool
-	// Manifest é o omastore.toml validado, em JSON (ver internal/manifest).
+	// Manifest is the validated omastore.toml, as JSON (see internal/manifest).
 	Manifest string
 }
 
-// Asset é um arquivo de uma release.
+// Asset is a release file.
 type Asset struct {
 	Tag         string
 	Name        string
@@ -104,11 +104,11 @@ type Asset struct {
 	Size        int64
 	Arch        string
 	Format      string
-	Digest      string // "sha256:<hex>" quando a API informa
+	Digest      string // "sha256:<hex>" when the API provides it
 	ChecksumURL string
 }
 
-// Install é um app instalado.
+// Install is an installed app.
 type Install struct {
 	FullName    string
 	Version     string
@@ -118,7 +118,7 @@ type Install struct {
 	Files       []string
 }
 
-// AppDetail junta tudo o que se sabe sobre um app.
+// AppDetail gathers everything known about an app.
 type AppDetail struct {
 	App
 	Repo    Repo
@@ -126,7 +126,7 @@ type AppDetail struct {
 	Install *Install
 }
 
-// ListItem é uma linha do catálogo.
+// ListItem is a catalog row.
 type ListItem struct {
 	App
 	Stars            int
@@ -134,17 +134,17 @@ type ListItem struct {
 	InstalledVersion string
 }
 
-// Filter restringe ListApps.
+// Filter narrows ListApps.
 type Filter struct {
 	Category      string
-	Query         string // busca em nome, resumo e full_name
+	Query         string // searches name, summary and full_name
 	InstalledOnly bool
-	All           bool // inclui apps não instaláveis
+	All           bool // includes non-installable apps
 	Limit         int
 	Offset        int
 }
 
-// CategoryCount é uma categoria e quantos apps ela tem.
+// CategoryCount is a category and how many apps it has.
 type CategoryCount struct {
 	Category string
 	Count    int
@@ -180,7 +180,7 @@ func timeOf(n sql.NullTime) time.Time {
 	return n.Time
 }
 
-// RepoState retorna o estado gravado de um repositório, ou ErrNotFound.
+// RepoState returns the stored state of a repository, or ErrNotFound.
 func (s *Store) RepoState(ctx context.Context, fullName string) (RepoState, error) {
 	var st RepoState
 	var pushed sql.NullTime
@@ -192,33 +192,33 @@ func (s *Store) RepoState(ctx context.Context, fullName string) (RepoState, erro
 		return st, ErrNotFound
 	}
 	if err != nil {
-		return st, fmt.Errorf("ler estado de %s: %w", fullName, err)
+		return st, fmt.Errorf("read state of %s: %w", fullName, err)
 	}
 	st.PushedAt = timeOf(pushed)
 	return st, nil
 }
 
-// TouchRepo marca um repositório como verificado sem reprocessá-lo.
+// TouchRepo marks a repository as checked without reprocessing it.
 func (s *Store) TouchRepo(ctx context.Context, fullName string, at time.Time) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE repos SET indexed_at = ? WHERE full_name = ?`, at.UTC(), fullName)
 	if err != nil {
-		return fmt.Errorf("atualizar indexed_at de %s: %w", fullName, err)
+		return fmt.Errorf("update indexed_at of %s: %w", fullName, err)
 	}
 	return nil
 }
 
-// SaveIndexed grava repo, app e assets de uma vez, numa única transação.
-// Os assets antigos do repositório são substituídos.
+// SaveIndexed writes repo, app and assets at once, in a single transaction.
+// The repository's previous assets are replaced.
 func (s *Store) SaveIndexed(ctx context.Context, r Repo, a App, assets []Asset) (err error) {
 	if a.FullName == "" {
 		a.FullName = r.FullName
 	}
 	if a.FullName != r.FullName {
-		return fmt.Errorf("app %q não corresponde ao repo %q", a.FullName, r.FullName)
+		return fmt.Errorf("app %q does not match repo %q", a.FullName, r.FullName)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("iniciar transação: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		if err != nil {
@@ -238,7 +238,7 @@ func (s *Store) SaveIndexed(ctx context.Context, r Repo, a App, assets []Asset) 
 			indexed_at = excluded.indexed_at, index_version = excluded.index_version`,
 		r.FullName, r.Description, r.Stars, encodeList(r.Topics), r.License, r.HTMLURL, r.DefaultBranch,
 		nullTime(r.PushedAt), r.HeadSHA, r.LatestTag, r.ETag, nullTime(r.IndexedAt), r.IndexVersion); err != nil {
-		return fmt.Errorf("gravar repo %s: %w", r.FullName, err)
+		return fmt.Errorf("save repo %s: %w", r.FullName, err)
 	}
 
 	if _, err = tx.ExecContext(ctx, `
@@ -251,36 +251,36 @@ func (s *Store) SaveIndexed(ctx context.Context, r Repo, a App, assets []Asset) 
 			manifest = excluded.manifest`,
 		a.FullName, a.Name, a.Summary, a.Readme, a.IconURL, encodeList(a.Screenshots),
 		a.Category, a.Score, a.Installable, a.Manifest); err != nil {
-		return fmt.Errorf("gravar app %s: %w", a.FullName, err)
+		return fmt.Errorf("save app %s: %w", a.FullName, err)
 	}
 
 	if _, err = tx.ExecContext(ctx, `DELETE FROM assets WHERE full_name = ?`, r.FullName); err != nil {
-		return fmt.Errorf("limpar assets de %s: %w", r.FullName, err)
+		return fmt.Errorf("clear assets of %s: %w", r.FullName, err)
 	}
 	for _, as := range assets {
 		if _, err = tx.ExecContext(ctx, `
 			INSERT INTO assets (full_name, tag, name, url, size, arch, format, digest, checksum_url)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			r.FullName, as.Tag, as.Name, as.URL, as.Size, as.Arch, as.Format, as.Digest, as.ChecksumURL); err != nil {
-			return fmt.Errorf("gravar asset %s de %s: %w", as.Name, r.FullName, err)
+			return fmt.Errorf("save asset %s of %s: %w", as.Name, r.FullName, err)
 		}
 	}
 
 	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("commit de %s: %w", r.FullName, err)
+		return fmt.Errorf("commit %s: %w", r.FullName, err)
 	}
 	return nil
 }
 
-// RemoveRepo apaga um repositório (e, em cascata, app e assets) do catálogo.
+// RemoveRepo deletes a repository (and, by cascade, its app and assets) from the catalog.
 func (s *Store) RemoveRepo(ctx context.Context, fullName string) error {
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM repos WHERE full_name = ?`, fullName); err != nil {
-		return fmt.Errorf("remover %s: %w", fullName, err)
+		return fmt.Errorf("remove %s: %w", fullName, err)
 	}
 	return nil
 }
 
-// ListApps lista o catálogo ordenado por score (e nome como desempate).
+// ListApps lists the catalog ordered by score (with name as tiebreaker).
 func (s *Store) ListApps(ctx context.Context, f Filter) ([]ListItem, error) {
 	var where []string
 	var args []any
@@ -315,7 +315,7 @@ func (s *Store) ListApps(ctx context.Context, f Filter) ([]ListItem, error) {
 	}
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("listar apps: %w", err)
+		return nil, fmt.Errorf("list apps: %w", err)
 	}
 	defer rows.Close()
 	items := []ListItem{}
@@ -324,7 +324,7 @@ func (s *Store) ListApps(ctx context.Context, f Filter) ([]ListItem, error) {
 		var shots string
 		if err := rows.Scan(&it.FullName, &it.Name, &it.Summary, &it.IconURL, &shots, &it.Category,
 			&it.Score, &it.Installable, &it.Stars, &it.LatestTag, &it.InstalledVersion); err != nil {
-			return nil, fmt.Errorf("ler app: %w", err)
+			return nil, fmt.Errorf("read app: %w", err)
 		}
 		it.Screenshots = decodeList(shots)
 		items = append(items, it)
@@ -337,12 +337,12 @@ func escapeLike(s string) string {
 	return r.Replace(s)
 }
 
-// Categories lista as categorias com apps instaláveis.
+// Categories lists the categories that have installable apps.
 func (s *Store) Categories(ctx context.Context) ([]CategoryCount, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT category, COUNT(*) FROM apps WHERE installable = 1 GROUP BY category ORDER BY category`)
 	if err != nil {
-		return nil, fmt.Errorf("listar categorias: %w", err)
+		return nil, fmt.Errorf("list categories: %w", err)
 	}
 	defer rows.Close()
 	out := []CategoryCount{}
@@ -356,7 +356,7 @@ func (s *Store) Categories(ctx context.Context) ([]CategoryCount, error) {
 	return out, rows.Err()
 }
 
-// GetApp retorna o detalhe de um app, ou ErrNotFound.
+// GetApp returns an app's detail, or ErrNotFound.
 func (s *Store) GetApp(ctx context.Context, fullName string) (*AppDetail, error) {
 	var d AppDetail
 	var shots, topics string
@@ -374,7 +374,7 @@ func (s *Store) GetApp(ctx context.Context, fullName string) (*AppDetail, error)
 		return nil, ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("ler app %s: %w", fullName, err)
+		return nil, fmt.Errorf("read app %s: %w", fullName, err)
 	}
 	d.Screenshots = decodeList(shots)
 	d.Repo.FullName = d.FullName
@@ -396,13 +396,13 @@ func (s *Store) GetApp(ctx context.Context, fullName string) (*AppDetail, error)
 	return &d, nil
 }
 
-// Assets lista os assets de uma release.
+// Assets lists the assets of a release.
 func (s *Store) Assets(ctx context.Context, fullName, tag string) ([]Asset, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT tag, name, url, size, arch, format, digest, checksum_url
 		FROM assets WHERE full_name = ? AND tag = ? ORDER BY name`, fullName, tag)
 	if err != nil {
-		return nil, fmt.Errorf("listar assets de %s: %w", fullName, err)
+		return nil, fmt.Errorf("list assets of %s: %w", fullName, err)
 	}
 	defer rows.Close()
 	out := []Asset{}
@@ -416,7 +416,7 @@ func (s *Store) Assets(ctx context.Context, fullName, tag string) ([]Asset, erro
 	return out, rows.Err()
 }
 
-// SaveInstall registra (ou substitui) a instalação de um app.
+// SaveInstall records (or replaces) an app installation.
 func (s *Store) SaveInstall(ctx context.Context, in Install) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO installs (full_name, version, installed_at, exec_path, desktop_path, files)
@@ -426,12 +426,12 @@ func (s *Store) SaveInstall(ctx context.Context, in Install) error {
 			exec_path = excluded.exec_path, desktop_path = excluded.desktop_path, files = excluded.files`,
 		in.FullName, in.Version, in.InstalledAt.UTC(), in.ExecPath, in.DesktopPath, encodeList(in.Files))
 	if err != nil {
-		return fmt.Errorf("registrar instalação de %s: %w", in.FullName, err)
+		return fmt.Errorf("record installation of %s: %w", in.FullName, err)
 	}
 	return nil
 }
 
-// GetInstall retorna a instalação de um app, ou ErrNotFound.
+// GetInstall returns an app's installation, or ErrNotFound.
 func (s *Store) GetInstall(ctx context.Context, fullName string) (*Install, error) {
 	var in Install
 	var files string
@@ -443,19 +443,19 @@ func (s *Store) GetInstall(ctx context.Context, fullName string) (*Install, erro
 		return nil, ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("ler instalação de %s: %w", fullName, err)
+		return nil, fmt.Errorf("read installation of %s: %w", fullName, err)
 	}
 	in.Files = decodeList(files)
 	return &in, nil
 }
 
-// ListInstalls lista os apps instalados por nome.
+// ListInstalls lists the installed apps by name.
 func (s *Store) ListInstalls(ctx context.Context) ([]Install, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT full_name, version, installed_at, exec_path, desktop_path, files
 		FROM installs ORDER BY full_name`)
 	if err != nil {
-		return nil, fmt.Errorf("listar instalações: %w", err)
+		return nil, fmt.Errorf("list installations: %w", err)
 	}
 	defer rows.Close()
 	out := []Install{}
@@ -471,21 +471,21 @@ func (s *Store) ListInstalls(ctx context.Context) ([]Install, error) {
 	return out, rows.Err()
 }
 
-// DeleteInstall remove o registro de instalação de um app.
+// DeleteInstall removes an app's installation record.
 func (s *Store) DeleteInstall(ctx context.Context, fullName string) error {
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM installs WHERE full_name = ?`, fullName); err != nil {
-		return fmt.Errorf("remover instalação de %s: %w", fullName, err)
+		return fmt.Errorf("remove installation of %s: %w", fullName, err)
 	}
 	return nil
 }
 
-// UpdateStats atualiza os dados voláteis de um repositório (stars, descrição,
-// topics, ETag e score) sem reprocessá-lo.
+// UpdateStats updates a repository's volatile data (stars, description,
+// topics, ETag and score) without reprocessing it.
 func (s *Store) UpdateStats(ctx context.Context, fullName string, stars int, description string,
 	topics []string, etag string, score float64, at time.Time) (err error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("iniciar transação: %w", err)
+		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer func() {
 		if err != nil {
@@ -495,19 +495,19 @@ func (s *Store) UpdateStats(ctx context.Context, fullName string, stars int, des
 	if _, err = tx.ExecContext(ctx, `
 		UPDATE repos SET stars = ?, description = ?, topics = ?, etag = ?, indexed_at = ?
 		WHERE full_name = ?`, stars, description, encodeList(topics), etag, at.UTC(), fullName); err != nil {
-		return fmt.Errorf("atualizar repo %s: %w", fullName, err)
+		return fmt.Errorf("update repo %s: %w", fullName, err)
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE apps SET score = ? WHERE full_name = ?`, score, fullName); err != nil {
-		return fmt.Errorf("atualizar score de %s: %w", fullName, err)
+		return fmt.Errorf("update score of %s: %w", fullName, err)
 	}
 	return tx.Commit()
 }
 
-// RepoNames lista todos os repositórios do catálogo.
+// RepoNames lists every repository in the catalog.
 func (s *Store) RepoNames(ctx context.Context) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT full_name FROM repos ORDER BY full_name`)
 	if err != nil {
-		return nil, fmt.Errorf("listar repos: %w", err)
+		return nil, fmt.Errorf("list repos: %w", err)
 	}
 	defer rows.Close()
 	var out []string
@@ -521,7 +521,7 @@ func (s *Store) RepoNames(ctx context.Context) ([]string, error) {
 	return out, rows.Err()
 }
 
-// SearchDoc são os dados de um app usados pela busca.
+// SearchDoc is the app data used by search.
 type SearchDoc struct {
 	FullName string
 	Name     string
@@ -532,13 +532,13 @@ type SearchDoc struct {
 	Stars    int
 }
 
-// SearchDocs lista todos os apps (instaláveis ou não) com os campos da busca.
+// SearchDocs lists every app (installable or not) with the search fields.
 func (s *Store) SearchDocs(ctx context.Context) ([]SearchDoc, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT a.full_name, a.name, a.summary, a.readme, r.topics, a.category, r.stars
 		FROM apps a JOIN repos r ON r.full_name = a.full_name`)
 	if err != nil {
-		return nil, fmt.Errorf("ler documentos de busca: %w", err)
+		return nil, fmt.Errorf("read search documents: %w", err)
 	}
 	defer rows.Close()
 	var out []SearchDoc
@@ -554,15 +554,15 @@ func (s *Store) SearchDocs(ctx context.Context) ([]SearchDoc, error) {
 	return out, rows.Err()
 }
 
-// CatalogStamp muda sempre que o catálogo muda (repo gravado, atualizado ou
-// removido), inclusive por outro processo (ex.: a CLI com o daemon rodando).
+// CatalogStamp changes whenever the catalog changes (repo saved, updated or
+// removed), including by another process (e.g. the CLI while the daemon runs).
 func (s *Store) CatalogStamp(ctx context.Context) (string, error) {
 	var n int
 	var last sql.NullString
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*), MAX(indexed_at) FROM repos`).Scan(&n, &last)
 	if err != nil {
-		return "", fmt.Errorf("ler marca do catálogo: %w", err)
+		return "", fmt.Errorf("read catalog stamp: %w", err)
 	}
 	return fmt.Sprintf("%d|%s", n, last.String), nil
 }

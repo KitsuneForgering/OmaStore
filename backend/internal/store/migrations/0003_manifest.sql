@@ -1,2 +1,2 @@
--- Manifesto omastore.toml do repositório, já validado, em JSON ('' se não houver).
+-- The repository's omastore.toml manifest, already validated, as JSON ('' if absent).
 ALTER TABLE apps ADD COLUMN manifest TEXT NOT NULL DEFAULT '';
