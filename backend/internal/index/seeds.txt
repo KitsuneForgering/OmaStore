@@ -1,0 +1,9 @@
+# Repositórios semente, indexados mesmo sem o topic "omarchy".
+# Um "owner/repo" por linha; linhas vazias e comentários são ignorados.
+# "list:owner/repo" usa os links github.com/owner/repo do README de uma
+# lista curada como sementes.
+KitsuneSemCalda/OmaVM
+michaelmonetized/omadesign
+ZacharyZhang-NY/OmaPhoto
+pch/rawmakase
+list:aorumbayev/awesome-omarchy
