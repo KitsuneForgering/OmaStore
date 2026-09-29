@@ -61,7 +61,7 @@ func (x *extractor) safeJoin(name string) (string, error) {
 		for _, seg := range strings.Split(rel, string(filepath.Separator)) {
 			cur = filepath.Join(cur, seg)
 			if st, err := os.Lstat(cur); err == nil && st.Mode()&fs.ModeSymlink != 0 {
-				return "", fmt.Errorf("%w: %q atravessa symlink", ErrUnsafePath, name)
+				return "", fmt.Errorf("%w: %q goes through a symlink", ErrUnsafePath, name)
 			}
 		}
 	}
@@ -77,6 +77,71 @@ func (x *extractor) linkInside(linkPath, target string) bool {
 	resolved := filepath.Join(filepath.Dir(linkPath), filepath.FromSlash(target))
 	rel, err := filepath.Rel(x.dest, resolved)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// maxLinkHops bounds symlink resolution in realPath (loops, long chains).
+const maxLinkHops = 255
+
+// realPath resolves the absolute path p following every symlink, applying
+// ".." to the already-resolved directory, as the kernel does. Components that
+// do not exist are taken lexically.
+func realPath(p string) (string, error) {
+	queue := strings.Split(p, string(filepath.Separator))
+	cur, hops := string(filepath.Separator), 0
+	for len(queue) > 0 {
+		seg := queue[0]
+		queue = queue[1:]
+		switch seg {
+		case "", ".":
+			continue
+		case "..":
+			cur = filepath.Dir(cur)
+			continue
+		}
+		next := filepath.Join(cur, seg)
+		st, err := os.Lstat(next)
+		if err != nil || st.Mode()&fs.ModeSymlink == 0 {
+			cur = next
+			continue
+		}
+		if hops++; hops > maxLinkHops {
+			return "", fmt.Errorf("%w: too many symlinks resolving %q", ErrUnsafePath, p)
+		}
+		target, err := os.Readlink(next)
+		if err != nil {
+			return "", err
+		}
+		if filepath.IsAbs(target) {
+			cur = string(filepath.Separator)
+		}
+		queue = append(strings.Split(target, string(filepath.Separator)), queue...)
+	}
+	return cur, nil
+}
+
+// checkLinks makes sure every extracted symlink resolves inside dest. The
+// per-entry check in linkInside is lexical, so a chain like "s" → "." plus
+// "t" → "s/.." passes it (in any order) and only shows up here.
+func (x *extractor) checkLinks() error {
+	root, err := realPath(x.dest)
+	if err != nil {
+		return err
+	}
+	return filepath.WalkDir(x.dest, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.Type()&fs.ModeSymlink == 0 {
+			return err
+		}
+		resolved, err := realPath(p)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(root, resolved)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			rel, _ := filepath.Rel(x.dest, p)
+			return fmt.Errorf("%w: symlink %q leaves the destination", ErrUnsafePath, rel)
+		}
+		return nil
+	})
 }
 
 func (x *extractor) account(n int64) error {
@@ -302,7 +367,10 @@ func Extract(archive, format, dest, binName string) error {
 		}
 		return x.writeFile(p, f, 0o755)
 	case index.FormatZip:
-		return x.extractZip(archive)
+		if err := x.extractZip(archive); err != nil {
+			return err
+		}
+		return x.checkLinks()
 	}
 
 	f, err := open()
@@ -340,5 +408,8 @@ func Extract(archive, format, dest, binName string) error {
 	default:
 		return fmt.Errorf("unsupported format: %q", format)
 	}
-	return x.extractTar(r)
+	if err := x.extractTar(r); err != nil {
+		return err
+	}
+	return x.checkLinks()
 }

@@ -45,7 +45,7 @@ func (in *Installer) get(ctx context.Context, raw string) (*http.Response, error
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "omastore")
-	resp, err := in.http().Do(req)
+	resp, err := httpsOnly(in.http()).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("download %s: %w", raw, err)
 	}

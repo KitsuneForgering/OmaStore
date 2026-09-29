@@ -78,3 +78,22 @@ func TestGet(t *testing.T) {
 		}
 	}
 }
+
+// An https URL must not be downgraded to plain http by a redirect.
+func TestGetRefusesRedirectToHTTP(t *testing.T) {
+	var plainHits atomic.Int32
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		plainHits.Add(1)
+		w.Write(pngHeader)
+	}))
+	defer plain.Close()
+	srv := httptest.NewTLSServer(http.RedirectHandler(plain.URL+"/a.png", http.StatusFound))
+	defer srv.Close()
+	c := &Cache{Dir: t.TempDir(), HTTP: srv.Client()}
+	if p, err := c.Get(context.Background(), srv.URL+"/a.png"); err == nil {
+		t.Fatalf("got %q, want an error", p)
+	}
+	if plainHits.Load() != 0 {
+		t.Error("the plain http URL was requested")
+	}
+}

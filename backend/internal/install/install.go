@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/gitrepo"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/index"
@@ -86,6 +87,26 @@ func (in *Installer) http() *http.Client {
 		ResponseHeaderTimeout: 60 * time.Second,
 		TLSHandshakeTimeout:   15 * time.Second,
 	}}
+}
+
+// httpsOnly returns a copy of c that refuses redirects to anything but
+// https: checkURL only sees the first URL.
+func httpsOnly(c *http.Client) *http.Client {
+	cp := *c
+	next := c.CheckRedirect
+	cp.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if req.URL.Scheme != "https" {
+			return fmt.Errorf("redirect to %q is not https", req.URL.Redacted())
+		}
+		if next != nil {
+			return next(req, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return nil
+	}
+	return &cp
 }
 
 func (in *Installer) log() *slog.Logger {
@@ -258,6 +279,11 @@ func (in *Installer) Install(ctx context.Context, fullName string, progress func
 		return nil, fmt.Errorf("%s: %w", asset.Name, err)
 	}
 	execRel, _ := filepath.Rel(staging, execAbs)
+	// The path goes into the .desktop Exec key and the launcher, which are
+	// line based: a control character would break both.
+	if strings.ContainsFunc(execRel, func(r rune) bool { return unicode.IsControl(r) || r == '\u2028' || r == '\u2029' }) {
+		return nil, fmt.Errorf("%w: executable path %q has control characters", ErrUnsafePath, execRel)
+	}
 	if err := os.Chmod(execAbs, 0o755); err != nil {
 		return nil, err
 	}

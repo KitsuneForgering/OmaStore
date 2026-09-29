@@ -148,6 +148,10 @@ func TestExtractRejectsUnsafe(t *testing.T) {
 		"write via symlink": {{name: "d", typ: tar.TypeSymlink, link: "."}, {name: "d/x", body: "x"}},
 		"hardlink outside":  {{name: "h", typ: tar.TypeLink, link: "../../etc/passwd"}},
 		"backslash ..":      {{name: `..\evil`, body: "x"}},
+		// Lexically inside, but "s" is a symlink to "." so "s/.." is dest's parent.
+		"symlink chain": {{name: "s", typ: tar.TypeSymlink, link: "."}, {name: "t", typ: tar.TypeSymlink, link: "s/.."}},
+		// Same escape, with the link it goes through created afterwards.
+		"symlink chain, reversed": {{name: "t", typ: tar.TypeSymlink, link: "s/.."}, {name: "s", typ: tar.TypeSymlink, link: "."}},
 	}
 	for name, entries := range cases {
 		t.Run(name, func(t *testing.T) {

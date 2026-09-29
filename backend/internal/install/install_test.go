@@ -550,3 +550,39 @@ func TestInstallExecWithVersionPlaceholder(t *testing.T) {
 		t.Errorf("exec = %s", inst.ExecPath)
 	}
 }
+
+// An executable path with control characters cannot be written to the
+// .desktop Exec key nor read back from the launcher, so uninstalling would
+// leave the launcher behind. The installation must be refused.
+func TestInstallRejectsControlCharsInExecPath(t *testing.T) {
+	e := newEnv(t)
+	e.publish(t, "v1", tarGz(t, []entry{
+		{name: "omaphoto\n1/omaphoto", body: string(elfBin), mode: 0o755},
+	}), index.FormatTarGz, true)
+	_, err := e.in.Install(context.Background(), "acme/omaphoto", nil)
+	if !errors.Is(err, ErrUnsafePath) {
+		t.Fatalf("err = %v, want ErrUnsafePath", err)
+	}
+	assertClean(t, e)
+}
+
+// checkURL only sees the first URL: a redirect must not downgrade the
+// download to plain http (a release without a checksum is not verified).
+func TestDownloadRefusesRedirectToHTTP(t *testing.T) {
+	e := newEnv(t)
+	var plainHits atomic.Int32
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		plainHits.Add(1)
+		w.Write(elfBin)
+	}))
+	defer plain.Close()
+	srv := httptest.NewTLSServer(http.RedirectHandler(plain.URL+"/app", http.StatusFound))
+	defer srv.Close()
+	e.in.HTTP = srv.Client()
+	if _, err := e.in.fetchSmall(context.Background(), srv.URL+"/app"); err == nil {
+		t.Fatal("want an error")
+	}
+	if plainHits.Load() != 0 {
+		t.Error("the plain http URL was requested")
+	}
+}

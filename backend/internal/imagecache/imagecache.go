@@ -40,11 +40,26 @@ type call struct {
 	err  error
 }
 
+// client returns the HTTP client, refusing redirects to anything but https.
 func (c *Cache) client() *http.Client {
+	cp := http.Client{Timeout: 60 * time.Second}
 	if c.HTTP != nil {
-		return c.HTTP
+		cp = *c.HTTP
 	}
-	return &http.Client{Timeout: 60 * time.Second}
+	next := cp.CheckRedirect
+	cp.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if req.URL.Scheme != "https" {
+			return fmt.Errorf("redirect to %q is not https", req.URL.Redacted())
+		}
+		if next != nil {
+			return next(req, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return nil
+	}
+	return &cp
 }
 
 // extFor picks the extension from the detected type.
