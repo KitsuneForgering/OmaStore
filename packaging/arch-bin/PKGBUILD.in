@@ -1,0 +1,25 @@
+# Maintainer: KitsuneSemCalda <arthuramagalhaes1312@gmail.com>
+# Gerado por `make pkgbuild-bin VERSION=...` a partir de PKGBUILD.in; não edite o PKGBUILD à mão.
+pkgname=omastore-bin
+_pkgname=omastore
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Loja de aplicativos para o Omarchy: indexa apps do GitHub e instala binários de releases no $HOME (binário pré-compilado)'
+arch=('x86_64')
+url='https://github.com/KitsuneSemCalda/OmaStore'
+license=('MIT')
+depends=('glibc' 'gcc-libs' 'qt6-base' 'qt6-declarative' 'qt6-svg')
+optdepends=(
+  'github-cli: autenticação para evitar o rate limit do GitHub (gh auth login)'
+  'desktop-file-utils: atualizar o cache de .desktop após instalar apps'
+  'gtk-update-icon-cache: atualizar o cache de ícones após instalar apps'
+)
+provides=("$_pkgname")
+conflicts=("$_pkgname" "$_pkgname-git")
+options=('!strip' '!debug')
+source=("$url/releases/download/v$pkgver/$_pkgname-$pkgver-x86_64-linux.tar.gz")
+sha256sums=('@SHA256@')
+
+package() {
+  cp -a "$srcdir/usr" "$pkgdir/"
+}
