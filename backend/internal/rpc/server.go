@@ -113,7 +113,7 @@ func Listen(path string) (net.Listener, error) {
 	l, err := net.Listen("unix", path)
 	umask(old)
 	if err != nil {
-		return nil, fmt.Errorf("escutar em %s: %w", path, err)
+		return nil, fmt.Errorf("listen on %s: %w", path, err)
 	}
 	if err := os.Chmod(path, 0o600); err != nil {
 		l.Close()

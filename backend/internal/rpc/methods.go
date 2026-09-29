@@ -201,7 +201,7 @@ func (s *Server) call(method string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		if p.Limit < 0 || p.Offset < 0 {
-			return nil, errInvalidParams("limit/offset negativos")
+			return nil, errInvalidParams("negative limit/offset")
 		}
 		items, err := b.ListApps(ctx, store.Filter{Category: p.Category, Query: p.Query,
 			InstalledOnly: p.Installed, All: p.All, Limit: p.Limit, Offset: p.Offset})
