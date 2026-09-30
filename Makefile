@@ -117,13 +117,28 @@ install: ## Install into $(DESTDIR)$(PREFIX) (after make release)
 	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/omastore/LICENSE
 	install -Dm644 docs/ipc.md $(DESTDIR)$(PREFIX)/share/doc/omastore/ipc.md
 
-uninstall: ## Remove what install installed
+uninstall: ## Remove the system install, plus the user's install.sh install and cache
+	@# The per-user part (install.sh, ~/.local) runs as the invoking user, also under sudo.
+	@if [ -z "$(DESTDIR)" ]; then \
+		if [ "$$(id -u)" -ne 0 ]; then \
+			sh packaging/install.sh --uninstall; \
+		elif [ -n "$${SUDO_USER:-}" ] && [ "$$SUDO_USER" != root ]; then \
+			sudo -u "$$SUDO_USER" -H env XDG_RUNTIME_DIR=/run/user/$$(id -u "$$SUDO_USER") \
+				sh packaging/install.sh --uninstall; \
+		fi; \
+	fi
 	rm -f $(DESTDIR)$(PREFIX)/bin/omastore $(DESTDIR)$(PREFIX)/bin/omastored $(DESTDIR)$(PREFIX)/bin/omastore-gui
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/omastore.desktop
 	rm -f $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/omastore.svg
 	rm -f $(DESTDIR)$(PREFIX)/lib/systemd/user/omastored.service $(DESTDIR)$(PREFIX)/lib/systemd/user/omastored.socket
 	rm -f $(DESTDIR)$(PREFIX)/lib/systemd/user/omastore-index.service $(DESTDIR)$(PREFIX)/lib/systemd/user/omastore-index.timer
 	rm -rf $(DESTDIR)$(PREFIX)/share/licenses/omastore $(DESTDIR)$(PREFIX)/share/doc/omastore
+	@if [ -z "$(DESTDIR)" ]; then \
+		if command -v update-desktop-database >/dev/null 2>&1 && [ -d $(PREFIX)/share/applications ]; then \
+			update-desktop-database -q $(PREFIX)/share/applications 2>/dev/null || :; fi; \
+		if command -v gtk-update-icon-cache >/dev/null 2>&1 && [ -f $(PREFIX)/share/icons/hicolor/index.theme ]; then \
+			gtk-update-icon-cache -q -t -f $(PREFIX)/share/icons/hicolor 2>/dev/null || :; fi; \
+	fi
 
 # --- Distribution -----------------------------------------------------------
 

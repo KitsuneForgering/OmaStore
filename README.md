@@ -25,8 +25,9 @@ interface or the command line, without `sudo`.
   categories and search in one place.
 - **Install without touching the system:** apps live in your account, with menu
   shortcuts, and can be removed from the store.
-- **Know what you are downloading:** the store shows the release and verifies the
-  checksum of the downloaded file before installing.
+- **Know what you are downloading:** the store shows the release and checks its
+  published checksum when available. Without one, the interface asks before
+  installing; the CLI warns and continues.
 
 ## How it works
 
@@ -34,11 +35,17 @@ interface or the command line, without `sudo`.
   get in (plugins and themes are left out). They are found through GitHub
   code search, the `omarchy` topic and curated lists. To be
   installable, the latest release must have a Linux binary.
+- **App downloads:** the manifest selects a file by name from the repository's
+  latest stable GitHub release. OmaStore downloads the binary from that release,
+  not from a URL in the manifest or README. Icons and screenshots are fetched
+  separately from the repository or the HTTPS URLs declared for display.
 - **No reprocessing:** an SQLite database keeps the state of each
   repository; with conditional requests (ETag), a new indexing run only
   reprocesses what changed on GitHub.
 - **Safe installation:**
-  - the checksum is checked (the GitHub API `digest`, or `*.sha256`/`checksums.txt`);
+  - the GitHub API `digest` or a published `*.sha256`/`checksums.txt` is checked
+    when available; without one, the interface requires confirmation and the
+    CLI prints a warning;
   - extraction is protected against *path traversal* and malicious symlinks;
   - nothing from the package is executed during installation;
   - the installation is fully undone if something fails midway;
@@ -61,12 +68,29 @@ curl -fsSLO https://github.com/KitsuneSemCalda/OmaStore/releases/latest/download
 sh install.sh
 ```
 
+For a one-line install with `curl` failure propagated by Bash:
+
+```sh
+bash -o pipefail -c 'curl -fsSL https://github.com/KitsuneSemCalda/OmaStore/releases/latest/download/install.sh | bash'
+```
+
 The script downloads the latest stable release for Linux x86_64, checks the SHA-256
 published alongside the tarball and installs the three executables into a folder in your
 account, with shortcuts in `~/.local/bin` and in the menu. It requires `curl`, `tar`,
 `sha256sum` and the Qt 6 libraries (`qt6-base`, `qt6-declarative`, `qt6-svg`).
-To update, run the same script again. If you prefer to manage the
-application with pacman:
+The two-step commands let you inspect `install.sh` before running it.
+The SHA-256 check covers the release tarball; it does not verify `install.sh` itself.
+To update, run the same script again. To remove it (the catalog and the apps
+installed through OmaStore are kept):
+
+```sh
+sh install.sh --uninstall
+```
+
+`make uninstall` (with or without `sudo`) also runs this for the user who invoked
+it, besides removing a `make install` from `/usr/local`.
+
+If you prefer to manage the application with pacman:
 
 ```sh
 # download the PKGBUILD attached to the latest release and:
@@ -166,7 +190,12 @@ make help       # lists all targets
 ```
 
 The tests do not access the network: the GitHub API is simulated with `httptest` and the
-daemon with a fake server in `QLocalServer`.
+daemon with a fake server in `QLocalServer`. The Qt tests cover theme parsing,
+fallback colors and live reload. A UI test checks the detail page's layout at
+narrow and wide sizes, carousel navigation (buttons, thumbnails, arrow keys and
+switching apps) and that text and buttons use the theme colors, with one sample
+dark and one sample light theme. It does not cover every Omarchy theme or perform
+pixel-level screenshot comparisons; the screenshots above are examples of the interface.
 
 ## License
 
