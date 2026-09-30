@@ -390,6 +390,10 @@ Page {
                 }
             }
 
+            Body {
+                objectName: "claudeHint"
+                text: qsTr("Using Claude Code? OmaStore's installer adds its author skills to ~/.claude/skills: open your app's project and ask “get this app ready for OmaStore”.")
+            }
             Flow {
                 Layout.fillWidth: true
                 spacing: 24

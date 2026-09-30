@@ -39,3 +39,4 @@ go.work.sum
 # Gerados: make pkgbuild-bin / makepkg --printsrcinfo
 /packaging/arch-bin/PKGBUILD
 /packaging/*/.SRCINFO
+__pycache__/

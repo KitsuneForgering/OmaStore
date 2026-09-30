@@ -78,10 +78,16 @@ The script downloads the latest stable release for Linux x86_64, checks the SHA-
 published alongside the tarball and installs the three executables into a folder in your
 account, with shortcuts in `~/.local/bin` and in the menu. It requires `curl`, `tar`,
 `sha256sum` and the Qt 6 libraries (`qt6-base`, `qt6-declarative`, `qt6-svg`).
+If Claude Code is installed (`~/.claude` exists), the script also copies the
+[skills for app authors](skills/README.md) into `~/.claude/skills`, so Claude can
+write your `omastore.toml`, set up releases and audit your app with the store
+itself. Skills of the same name that you already have are left untouched; pass
+`--no-skills` to skip this step.
 The two-step commands let you inspect `install.sh` before running it.
 The SHA-256 check covers the release tarball; it does not verify `install.sh` itself.
-To update, run the same script again. To remove it (the catalog and the apps
-installed through OmaStore are kept):
+To update, run the same script again (the skills are updated too). To remove
+it, including the skills it copied (the catalog and the apps installed through
+OmaStore are kept):
 
 ```sh
 sh install.sh --uninstall

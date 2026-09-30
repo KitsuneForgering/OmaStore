@@ -19,6 +19,12 @@ done
 cp "$project/packaging/desktop/omastore.desktop" "$fixture/usr/share/applications/"
 cp "$project/packaging/desktop/omastore-mark.svg" \
   "$fixture/usr/share/icons/hicolor/scalable/apps/omastore.svg"
+for skill in omastore-check omastore-release; do
+  mkdir -p "$fixture/usr/share/omastore/skills/$skill/scripts"
+  printf -- '---\nname: %s\n---\n' "$skill" > "$fixture/usr/share/omastore/skills/$skill/SKILL.md"
+  printf '#!/bin/sh\n' > "$fixture/usr/share/omastore/skills/$skill/scripts/run.sh"
+  chmod +x "$fixture/usr/share/omastore/skills/$skill/scripts/run.sh"
+done
 tar -czf "$fixture/omastore-1.2.3-x86_64-linux.tar.gz" -C "$fixture" usr
 sha256sum "$fixture/omastore-1.2.3-x86_64-linux.tar.gz" | \
   sed 's| .*/|  |' > "$fixture/checksum"
@@ -50,12 +56,37 @@ fi
 sha256sum "$fixture/omastore-1.2.3-x86_64-linux.tar.gz" | \
   sed 's| .*/|  |' > "$fixture/checksum"
 cp "$fixture/checksum" "$fixture/omastore-1.2.3-x86_64-linux.tar.gz.sha256"
-sh "$project/packaging/install.sh"
+
+# Without Claude Code (~/.claude), the skills stay only next to the app.
+sh "$project/packaging/install.sh" > "$fixture/no-claude-log"
+root="$XDG_DATA_HOME/omastore/self"
+[ -f "$root/1.2.3/share/skills/omastore-check/SKILL.md" ]
+[ -x "$root/1.2.3/share/skills/omastore-check/scripts/run.sh" ]
+[ ! -e "$HOME/.claude" ]
+grep -F 'share/skills' "$fixture/no-claude-log" >/dev/null
+
+# With Claude Code, they are copied into ~/.claude/skills, except where the
+# user already has a skill of the same name.
+claude_skills="$HOME/.claude/skills"
+mkdir -p "$claude_skills/omastore-release"
+printf 'mine\n' > "$claude_skills/omastore-release/SKILL.md"
+sh "$project/packaging/install.sh" > "$fixture/skills-log" 2>&1
+[ -f "$claude_skills/omastore-check/SKILL.md" ]
+[ -f "$claude_skills/omastore-check/.omastore-managed" ]
+[ "$(cat "$claude_skills/omastore-release/SKILL.md")" = mine ]
+[ ! -e "$claude_skills/omastore-release/.omastore-managed" ]
+grep -F 'omastore-release left as is' "$fixture/skills-log" >/dev/null
+
+# --no-skills leaves ~/.claude alone; a normal run restores a deleted copy.
+rm -rf "$claude_skills/omastore-check"
+sh "$project/packaging/install.sh" --no-skills > /dev/null
+[ ! -e "$claude_skills/omastore-check" ]
 sh "$project/packaging/install.sh" > "$fixture/reinstall-log"
 bash -o pipefail -c 'cat "$1" | bash' _ "$project/packaging/install.sh" \
   > "$fixture/piped-log"
 sh "$project/packaging/install.sh" "$fixture/omastore-1.2.3-x86_64-linux.tar.gz" \
   > "$fixture/local-log"
+[ -f "$claude_skills/omastore-check/SKILL.md" ]
 [ -x "$HOME/.local/bin/omastore-gui" ]
 grep -F "Exec=\"$HOME/.local/bin/omastore-gui\"" \
   "$XDG_DATA_HOME/applications/omastore.desktop" >/dev/null
@@ -65,7 +96,6 @@ fi
 
 # --uninstall removes what install.sh created (and stops its daemon), but keeps
 # the catalog, the apps installed through OmaStore and files it does not own.
-root="$XDG_DATA_HOME/omastore/self"
 mkdir -p "$XDG_DATA_HOME/omastore/apps/acme__app" "$XDG_CACHE_HOME/omastore/repos"
 : > "$XDG_DATA_HOME/omastore/omastore.db"
 cp "$(command -v sleep)" "$root/1.2.3/bin/omastored"
@@ -112,7 +142,8 @@ if [ -e "$fixture/systemctl-calls" ]; then
 fi
 for p in "$HOME/.local/bin/omastored" "$HOME/.local/bin/omastore-gui" \
   "$XDG_DATA_HOME/applications/omastore.desktop" \
-  "$XDG_DATA_HOME/icons/hicolor/scalable/apps/omastore.svg" "$root" "$XDG_CACHE_HOME/omastore"; do
+  "$XDG_DATA_HOME/icons/hicolor/scalable/apps/omastore.svg" "$root" "$XDG_CACHE_HOME/omastore" \
+  "$claude_skills/omastore-check"; do
   if [ -e "$p" ] || [ -L "$p" ]; then
     echo "Left behind by --uninstall: $p" >&2
     exit 1
@@ -121,4 +152,5 @@ done
 [ -f "$HOME/.local/bin/omastore" ]
 [ -f "$XDG_DATA_HOME/omastore/omastore.db" ]
 [ -d "$XDG_DATA_HOME/omastore/apps/acme__app" ]
+[ "$(cat "$claude_skills/omastore-release/SKILL.md")" = mine ]
 sh "$project/packaging/install.sh" --uninstall > /dev/null

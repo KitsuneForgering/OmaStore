@@ -116,6 +116,11 @@ install: ## Install into $(DESTDIR)$(PREFIX) (after make release)
 	install -Dm644 packaging/systemd/omastore-index.timer   $(DESTDIR)$(PREFIX)/lib/systemd/user/omastore-index.timer
 	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/omastore/LICENSE
 	install -Dm644 docs/ipc.md $(DESTDIR)$(PREFIX)/share/doc/omastore/ipc.md
+	@# Claude Code skills for app authors; install.sh copies them into ~/.claude/skills.
+	cd skills && find omastore-* -type f ! -path '*/__pycache__/*' | LC_ALL=C sort | while IFS= read -r f; do \
+		case "$$f" in */scripts/*) mode=755 ;; *) mode=644 ;; esac; \
+		install -Dm$$mode "$$f" "$(DESTDIR)$(PREFIX)/share/omastore/skills/$$f" || exit 1; \
+	done
 
 uninstall: ## Remove the system install, plus the user's install.sh install and cache
 	@# The per-user part (install.sh, ~/.local) runs as the invoking user, also under sudo.
@@ -132,7 +137,7 @@ uninstall: ## Remove the system install, plus the user's install.sh install and 
 	rm -f $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/omastore.svg
 	rm -f $(DESTDIR)$(PREFIX)/lib/systemd/user/omastored.service $(DESTDIR)$(PREFIX)/lib/systemd/user/omastored.socket
 	rm -f $(DESTDIR)$(PREFIX)/lib/systemd/user/omastore-index.service $(DESTDIR)$(PREFIX)/lib/systemd/user/omastore-index.timer
-	rm -rf $(DESTDIR)$(PREFIX)/share/licenses/omastore $(DESTDIR)$(PREFIX)/share/doc/omastore
+	rm -rf $(DESTDIR)$(PREFIX)/share/licenses/omastore $(DESTDIR)$(PREFIX)/share/doc/omastore $(DESTDIR)$(PREFIX)/share/omastore
 	@if [ -z "$(DESTDIR)" ]; then \
 		if command -v update-desktop-database >/dev/null 2>&1 && [ -d $(PREFIX)/share/applications ]; then \
 			update-desktop-database -q $(PREFIX)/share/applications 2>/dev/null || :; fi; \

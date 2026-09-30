@@ -8,7 +8,8 @@ file may even be empty: its presence is the signal that you want the app in the 
 
 > Shortcut: the skills in [`skills/`](../skills/) do this with Claude Code:
 > `omastore-manifest` writes the manifest, `omastore-release` sets up the
-> releases and `omastore-check` audits everything.
+> releases and `omastore-check` audits everything. OmaStore's `install.sh`
+> already puts them in `~/.claude/skills` when Claude Code is installed.
 
 ## 1. Be found
 

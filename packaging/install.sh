@@ -3,6 +3,19 @@ set -eu
 
 repo=https://github.com/KitsuneSemCalda/OmaStore
 
+# --no-skills (anywhere in the arguments) leaves ~/.claude alone.
+skills=yes
+n=$#
+while [ "$n" -gt 0 ]; do
+  arg=$1
+  shift
+  n=$((n - 1))
+  case $arg in
+    --no-skills) skills=no ;;
+    *) set -- "$@" "$arg" ;;
+  esac
+done
+
 if [ "$(id -u)" -eq 0 ]; then
   echo 'Run without sudo: the installation goes into your account.' >&2
   exit 1
@@ -14,6 +27,20 @@ root="$data_home/omastore/self"
 bin="$HOME/.local/bin"
 desktop="$data_home/applications/omastore.desktop"
 icon="$data_home/icons/hicolor/scalable/apps/omastore.svg"
+# Claude Code skills for app authors (omastore-manifest, -release, -check).
+# Copies installed here carry $skill_marker; any other directory is the user's.
+claude_home=${CLAUDE_CONFIG_DIR:-"$HOME/.claude"}
+claude_skills="$claude_home/skills"
+skill_marker=.omastore-managed
+
+# Removes the skill copies this script made (never the user's own skills).
+remove_managed_skills() {
+  for dir in "$claude_skills"/omastore-*; do
+    if [ -d "$dir" ] && [ ! -L "$dir" ] && [ -f "$dir/$skill_marker" ]; then
+      rm -rf "$dir"
+    fi
+  done
+}
 
 # Refresh the menu and icon caches, when the tools exist.
 refresh_caches() {
@@ -27,7 +54,7 @@ refresh_caches() {
 
 # --uninstall stops OmaStore's processes and removes what this
 # script installed: the launchers that point into $root, the menu entry, the
-# icon, $root itself and the cache. The catalog database and the apps
+# icon, the Claude Code skills it copied, $root itself and the cache. The catalog database and the apps
 # installed through OmaStore are kept.
 if [ "${1:-}" = --uninstall ]; then
   [ "$#" -eq 1 ] || { echo "Usage: sh $0 --uninstall" >&2; exit 1; }
@@ -61,6 +88,7 @@ if [ "${1:-}" = --uninstall ]; then
   if [ -f "$root/.managed" ]; then
     rm -f "$desktop" "$icon"
   fi
+  remove_managed_skills
   rm -rf "$root" "$cache_home/omastore" "$cache_home/OmaStore"
   refresh_caches
   echo 'OmaStore removed. Your catalog and the apps installed through it were kept.'
@@ -99,7 +127,7 @@ elif [ "$#" -eq 1 ]; then
   cp "$1" "$tmp/$archive"
   cp "$1.sha256" "$tmp/$archive.sha256"
 else
-  echo "Usage: sh $0 [path/to/release-tarball | --uninstall]" >&2
+  echo "Usage: sh $0 [--no-skills] [path/to/release-tarball] | --uninstall" >&2
   exit 1
 fi
 digest=$(sed -n "s/^\([0-9a-fA-F]\{64\}\)  \{0,1\}$archive$/\1/p" "$tmp/$archive.sha256")
@@ -118,6 +146,16 @@ for name in omastore omastored omastore-gui; do
     echo "Binary missing from the release: $name" >&2; exit 1
   }
 done
+# Releases before the skills were packaged do not have them.
+has_skills=false
+if tar -tzf "$tmp/$archive" | grep -q '^usr/share/omastore/skills/omastore-[^/]*/SKILL\.md$'; then
+  tar -xzf "$tmp/$archive" -C "$tmp" --no-same-owner --no-same-permissions usr/share/omastore/skills
+  if [ -n "$(find "$tmp/usr/share/omastore/skills" ! -type d ! -type f)" ]; then
+    echo 'Unexpected link or special file among the skills.' >&2
+    exit 1
+  fi
+  has_skills=true
+fi
 
 for name in omastore omastored omastore-gui; do
   link="$bin/$name"
@@ -150,3 +188,29 @@ install -m644 "$tmp/omastore.desktop" "$desktop"
 install -m644 "$tmp/usr/share/icons/hicolor/scalable/apps/omastore.svg" "$icon"
 refresh_caches
 echo "OmaStore $version installed. Open it from the menu or run $bin/omastore-gui"
+
+if "$has_skills"; then
+  rm -rf "$root/$version/share/skills"
+  mkdir -p "$root/$version/share"
+  cp -R "$tmp/usr/share/omastore/skills" "$root/$version/share/skills"
+  # Only with Claude Code present (its directory exists) and not --no-skills.
+  if [ "$skills" = yes ] && [ -d "$claude_home" ]; then
+    remove_managed_skills # a skill dropped from a release does not linger
+    mkdir -p "$claude_skills"
+    done_skills=
+    for src in "$root/$version/share/skills"/omastore-*; do
+      name=${src##*/}
+      dest="$claude_skills/$name"
+      if [ -e "$dest" ] || [ -L "$dest" ]; then
+        echo "Skill $name left as is: $dest was not installed by OmaStore." >&2
+        continue
+      fi
+      cp -R "$src" "$dest"
+      : > "$dest/$skill_marker"
+      done_skills="$done_skills $name"
+    done
+    [ -z "$done_skills" ] || echo "Claude Code skills for app authors installed in $claude_skills:$done_skills"
+  elif [ "$skills" = yes ]; then
+    echo "Claude Code skills for app authors: $root/$version/share/skills (copy them into ~/.claude/skills)"
+  fi
+fi
