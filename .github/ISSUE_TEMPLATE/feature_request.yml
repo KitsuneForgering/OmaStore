@@ -1,0 +1,20 @@
+name: Feature request
+description: Suggest an improvement to the store.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do and why the store makes it hard today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: How you imagine it working. Larger proposals can also go to docs/ideas/ as a pull request.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
