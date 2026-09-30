@@ -37,6 +37,8 @@ commands:
   similar [--json] [--limit N] owner/repo
                                     similar apps (search: list --query)
   lint-manifest [dir|file]          validate an omastore.toml (default: current directory)
+  check [--manifest file] [--json] owner/repo
+                                    tell an app author what the store sees and what to fix
   install owner/repo...             install the latest release
   uninstall owner/repo...           remove an installed app
   update [owner/repo...]            update the given apps (or every installed one)
@@ -57,7 +59,7 @@ var errUsage = errors.New("invalid usage")
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	global := flag.NewFlagSet("omastore", flag.ContinueOnError)
 	global.SetOutput(stderr)
-	verbose := global.Bool("v", false, "log detalhado")
+	verbose := global.Bool("v", false, "verbose logging")
 	global.Usage = func() { fmt.Fprint(stderr, usage) }
 	if err := global.Parse(args); err != nil {
 		return 2
@@ -80,6 +82,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		"categories": cmdCategories,
 		"show":       cmdShow,
 		"similar":    cmdSimilar,
+		"check":      cmdCheck,
 		"install":    cmdInstall,
 		"uninstall":  cmdUninstall,
 		"update":     cmdUpdate,
@@ -116,6 +119,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if err := fn(ctx, a, cmdArgs, stdout, stderr); err != nil {
 		if errors.Is(err, errUsage) || errors.Is(err, flag.ErrHelp) {
 			return 2
+		}
+		if errors.Is(err, errIncompatible) {
+			return 1
 		}
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
@@ -181,6 +187,69 @@ func cmdIndex(ctx context.Context, a *app.App, args []string, stdout, stderr io.
 		stats.Updated, stats.Refreshed, stats.Unchanged, stats.Removed, stats.NotApps, stats.Skipped, stats.Failed,
 		time.Since(start).Round(time.Millisecond), a.GitHub.Requests()-reqBefore)
 	return err
+}
+
+func cmdCheck(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
+	fs := newFlags("check", stderr)
+	manifestFile := fs.String("manifest", "", "use this local omastore.toml instead of the published one")
+	asJSON := fs.Bool("json", false, "JSON output")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(stderr, "usage: omastore check [--manifest file] [--json] owner/repo")
+		return errUsage
+	}
+	var override *string
+	if *manifestFile != "" {
+		data, err := os.ReadFile(*manifestFile)
+		if err != nil {
+			return err
+		}
+		s := string(data)
+		override = &s
+	}
+	r, err := a.Check(ctx, fs.Arg(0), override)
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		if err := writeJSON(stdout, struct {
+			*index.Report
+			Compatible bool
+		}{r, r.Compatible()}); err != nil {
+			return err
+		}
+	} else {
+		printReport(stdout, r)
+	}
+	if !r.Compatible() {
+		return errIncompatible
+	}
+	return nil
+}
+
+// errIncompatible makes `omastore check` exit with 1 without an extra message:
+// the report already says what failed.
+var errIncompatible = errors.New("not compatible with OmaStore")
+
+func printReport(w io.Writer, r *index.Report) {
+	marks := map[string]string{index.CheckOK: "ok  ", index.CheckWarn: "warn", index.CheckFail: "FAIL"}
+	fmt.Fprintf(w, "OmaStore check: %s\n\n", r.Repo)
+	for _, c := range r.Checks {
+		fmt.Fprintf(w, "  %s  %-22s %s\n", marks[c.Status], c.Item, c.Detail)
+		if c.Fix != "" && c.Status != index.CheckOK {
+			fmt.Fprintf(w, "        %-22s -> %s\n", "", c.Fix)
+		}
+	}
+	if r.SuggestedManifest != "" {
+		fmt.Fprintf(w, "\nSuggested omastore.toml:\n\n%s", r.SuggestedManifest)
+	}
+	if r.Compatible() {
+		fmt.Fprintln(w, "\nResult: compatible with OmaStore")
+	} else {
+		fmt.Fprintln(w, "\nResult: not compatible with OmaStore yet")
+	}
 }
 
 func writeJSON(w io.Writer, v any) error {

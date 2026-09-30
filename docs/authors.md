@@ -175,6 +175,21 @@ Indexing is lenient, so that fields from future versions do not break anything.
 
 ## Testing before publishing
 
+The quickest way is the **Publish your app** page in OmaStore (or
+`omastore-gui --check you/myapp`): type the repository and it lists what passes,
+what fails and how to fix it, previews the catalog card and suggests an
+`omastore.toml` built from your latest release. Tick *Test an omastore.toml
+before pushing it* to try a local file. The same report is on the command line:
+
+```sh
+omastore check you/myapp                        # published manifest
+omastore check --manifest omastore.toml you/myapp   # local file, before pushing
+omastore check --json you/myapp                 # for CI; exit code 1 = not compatible
+```
+
+The check writes nothing to your catalog. To see the full path, including a
+real installation:
+
 ```sh
 omastore index you/myapp        # indexes only your repository
 omastore show you/myapp         # shows what was understood (assets, icon, category)

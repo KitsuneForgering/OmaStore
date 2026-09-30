@@ -26,6 +26,7 @@ type Backend interface {
 	Update(ctx context.Context, fullName string, progress func(install.Progress)) (*store.Install, error)
 	Uninstall(ctx context.Context, fullName string) error
 	Image(ctx context.Context, url string) (string, error)
+	Check(ctx context.Context, fullName string, manifest *string) (*index.Report, error)
 }
 
 // DTOs: the JSON format exposed to the frontend, stable and in camelCase,
@@ -88,6 +89,38 @@ type IndexResult struct {
 	Skipped   int `json:"skipped"`
 	NotApps   int `json:"notApps"`
 	Failed    int `json:"failed"`
+}
+
+// CheckItem is one line of a compatibility report.
+type CheckItem struct {
+	Status string `json:"status"` // "ok", "warning" or "fail"
+	Item   string `json:"item"`
+	Detail string `json:"detail"`
+	Fix    string `json:"fix"`
+}
+
+// CheckReport tells an app author what the store understands of a repository.
+type CheckReport struct {
+	Repo              string      `json:"repo"`
+	Compatible        bool        `json:"compatible"`
+	Name              string      `json:"name"`
+	Summary           string      `json:"summary"`
+	Category          string      `json:"category"`
+	IconURL           string      `json:"iconUrl"`
+	Screenshots       []string    `json:"screenshots"`
+	Tag               string      `json:"tag"`
+	Checks            []CheckItem `json:"checks"`
+	SuggestedManifest string      `json:"suggestedManifest"`
+}
+
+func toReport(r *index.Report) CheckReport {
+	out := CheckReport{Repo: r.Repo, Compatible: r.Compatible(), Name: r.Name, Summary: r.Summary,
+		Category: r.Category, IconURL: r.IconURL, Screenshots: nonNil(r.Screenshots), Tag: r.Tag,
+		Checks: []CheckItem{}, SuggestedManifest: r.SuggestedManifest}
+	for _, c := range r.Checks {
+		out.Checks = append(out.Checks, CheckItem{Status: c.Status, Item: c.Item, Detail: c.Detail, Fix: c.Fix})
+	}
+	return out
 }
 
 func toItem(it store.ListItem) AppItem {
@@ -158,6 +191,10 @@ type (
 	}
 	imageParams struct {
 		URL string `json:"url"`
+	}
+	checkParams struct {
+		Repo     string  `json:"repo"`
+		Manifest *string `json:"manifest"`
 	}
 )
 
@@ -346,6 +383,20 @@ func (s *Server) call(method string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return struct{}{}, s.jobs.cancel(p.Job)
+
+	case "author.check":
+		var p checkParams
+		if err := decode(raw, &p); err != nil {
+			return nil, err
+		}
+		if err := (repoParams{Repo: p.Repo}).validate(); err != nil {
+			return nil, err
+		}
+		r, err := b.Check(ctx, p.Repo, p.Manifest)
+		if err != nil {
+			return nil, err
+		}
+		return toReport(r), nil
 
 	case "image.get":
 		var p imageParams

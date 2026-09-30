@@ -38,6 +38,11 @@ func (a *App) Uninstall(ctx context.Context, fullName string) error {
 	return a.Installer.Uninstall(ctx, fullName)
 }
 
+// Check diagnoses a repository for its author without touching the catalog.
+func (a *App) Check(ctx context.Context, fullName string, manifest *string) (*index.Report, error) {
+	return a.Indexer.Check(ctx, fullName, manifest)
+}
+
 func (a *App) Image(ctx context.Context, url string) (string, error) {
 	return a.Images.Get(ctx, url)
 }

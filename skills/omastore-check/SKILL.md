@@ -49,6 +49,13 @@ written to the user's `~/.local` and no app binary is executed.
    OmaStore". Once the local manifest passes, remind the user to commit and
    push `omastore.toml`: the store only reads the file from the default branch.
 
+## Quick report
+
+`omastore check owner/repo [--manifest ./omastore.toml] [--json]` gives the same
+manifest/release/asset/checksum checks without a temporary HOME or a test
+install, plus a suggested `omastore.toml` built from the release. Use it for a
+fast first pass; use the script above when installation must be tested.
+
 ## Without the `omastore` CLI
 
 If OmaStore is not installed and the user does not want to install it, do a

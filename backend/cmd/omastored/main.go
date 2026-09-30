@@ -26,7 +26,7 @@ func main() {
 
 func run() error {
 	socket := flag.String("socket", "", "socket path (default $XDG_RUNTIME_DIR/omastore.sock)")
-	verbose := flag.Bool("v", false, "log detalhado")
+	verbose := flag.Bool("v", false, "verbose logging")
 	idleTimeout := flag.Duration("idle-timeout", -1,
 		"exit after this long without clients or jobs (0 = never; default: 10m if started by systemd, otherwise never)")
 	flag.Parse()

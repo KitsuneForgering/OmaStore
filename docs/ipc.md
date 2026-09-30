@@ -41,6 +41,7 @@ Missing `params` is the same as `{}`. Unknown fields in `params` are an error
 | `jobs.list` | — | `Job[]` (running ones and the last 50 finished) |
 | `jobs.cancel` | `{job}` | `{}` |
 | `image.get` | `{url}` | `{path}`: local path of the cached image |
+| `author.check` | `{repo, manifest?}` | `CheckReport` (synchronous; writes nothing to the catalog) |
 
 `repo` is always `"owner/repo"`. `all: true` includes apps without an installable binary.
 
@@ -56,6 +57,11 @@ same order.
   name, summary and category, with the README at a low weight.
 `image.get` only accepts `https://` and validates the content as an image; the frontend
 never accesses the network directly.
+
+`author.check` runs the indexing rules for one repository and tells its author
+what the store understands and what to fix. `manifest`, when present (even
+`""`), is used instead of the published `omastore.toml`, to test a file before
+pushing it. Costs a handful of GitHub requests; a rate limit is error `-32005`.
 
 ### Types
 
@@ -88,6 +94,14 @@ Job {
   started, finished?: string
 }
 IndexResult { updated, refreshed, unchanged, removed, skipped, notApps, failed }
+CheckReport {
+  repo: string                     // canonical name (follows renames)
+  compatible: boolean              // no check failed
+  name, summary, category, iconUrl, tag: string   // what the catalog would show
+  screenshots: string[]
+  checks: {status: "ok" | "warning" | "fail", item, detail, fix: string}[]
+  suggestedManifest: string        // starter omastore.toml; "" when assets are declared
+}
 ```
 
 ## Jobs and notifications

@@ -109,7 +109,7 @@ Schema changes go through numbered migrations in `backend/internal/store/migrati
 ```
 backend/
   cmd/omastored/        # daemon (IPC server)
-  cmd/omastore/         # debug CLI: index, list, show, install, uninstall, update
+  cmd/omastore/         # debug CLI: index, list, show, install, uninstall, update, check
   internal/app/         # wires the services (used by the CLI and the daemon)
   internal/github/      # go-github wrapper
   internal/gitrepo/     # shallow clones via go-git + icon/screenshot lookup

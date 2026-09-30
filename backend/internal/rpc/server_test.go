@@ -140,6 +140,18 @@ func (f *fakeBackend) Image(ctx context.Context, url string) (string, error) {
 	return "/cache/" + filepath.Base(url), nil
 }
 
+func (f *fakeBackend) Check(ctx context.Context, name string, m *string) (*index.Report, error) {
+	if name == "acme/limited" {
+		return nil, &github.RateLimitError{Reset: time.Now().Add(time.Hour)}
+	}
+	r := &index.Report{Repo: name, Name: "Photo", Checks: []index.Check{{Status: index.CheckOK, Item: "Release", Detail: "v1"}}}
+	if m == nil {
+		r.Checks = append(r.Checks, index.Check{Status: index.CheckFail, Item: "omastore.toml", Detail: "missing", Fix: "add it"})
+		r.SuggestedManifest = "kind = \"app\"\n"
+	}
+	return r, nil
+}
+
 // client is a test client that separates responses from notifications.
 type client struct {
 	t     *testing.T
@@ -590,5 +602,31 @@ func TestIdleFor(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	if d := s.IdleFor(); d < 10*time.Millisecond {
 		t.Errorf("without clients or jobs it should be idle: %v", d)
+	}
+}
+
+func TestAuthorCheck(t *testing.T) {
+	_, sock := startServer(t, newFake())
+	cl := dial(t, sock)
+
+	var r CheckReport
+	if e := cl.call("author.check", map[string]any{"repo": "acme/photo"}, &r); e != nil {
+		t.Fatal(e)
+	}
+	if r.Compatible || len(r.Checks) != 2 || r.Checks[1].Status != "fail" || r.Checks[1].Fix != "add it" ||
+		r.SuggestedManifest == "" || r.Screenshots == nil {
+		t.Errorf("report = %+v", r)
+	}
+	if e := cl.call("author.check", map[string]any{"repo": "acme/photo", "manifest": ""}, &r); e != nil {
+		t.Fatal(e)
+	}
+	if !r.Compatible {
+		t.Errorf("an (empty) local manifest was not passed through: %+v", r)
+	}
+	if e := cl.call("author.check", map[string]any{"repo": "nope"}, nil); e == nil || e.Code != CodeInvalidParams {
+		t.Errorf("invalid repo: %+v", e)
+	}
+	if e := cl.call("author.check", map[string]any{"repo": "acme/limited"}, nil); e == nil || e.Code != CodeRateLimited {
+		t.Errorf("rate limit: %+v", e)
 	}
 }
