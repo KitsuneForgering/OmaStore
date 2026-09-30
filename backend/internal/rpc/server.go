@@ -36,6 +36,8 @@ type Server struct {
 	ctx        context.Context // canceled on Shutdown
 	cancel     context.CancelFunc
 	connsWG    sync.WaitGroup
+	// catalogInterval limits how often a running index sends catalog.changed.
+	catalogInterval time.Duration
 }
 
 // NewServer creates a server on top of the backend.
@@ -44,7 +46,8 @@ func NewServer(b Backend, log *slog.Logger) *Server {
 		log = slog.Default()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &Server{backend: b, log: log, conns: map[*conn]struct{}{}, ctx: ctx, cancel: cancel, lastActive: time.Now()}
+	s := &Server{backend: b, log: log, conns: map[*conn]struct{}{}, ctx: ctx, cancel: cancel, lastActive: time.Now(),
+		catalogInterval: 2 * time.Second}
 	s.jobs = newJobs(s.broadcast)
 	return s
 }

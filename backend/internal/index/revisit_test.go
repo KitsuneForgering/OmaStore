@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -131,5 +132,46 @@ func TestIndexLockIsExclusive(t *testing.T) {
 	unlock()
 	if _, err := other.Run(context.Background(), Options{}); err != nil {
 		t.Errorf("after unlock: %v", err)
+	}
+}
+
+// slowManifestGH has a manifest search that answers only when its context ends.
+type slowManifestGH struct{ *fakeGH }
+
+func (f *slowManifestGH) SearchManifests(ctx context.Context, max int) ([]string, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// A discovery source that does not answer within DiscoveryTimeout is left
+// out: the run goes on with the other sources, but does not prune.
+func TestDiscoveryTimeoutIsPartial(t *testing.T) {
+	ix, gh, st := setup(t)
+	ctx := context.Background()
+	if _, err := ix.Run(ctx, Options{}); err != nil {
+		t.Fatal(err)
+	}
+
+	ix.GH = &slowManifestGH{fakeGH: gh}
+	ix.DiscoveryTimeout = 50 * time.Millisecond
+	ix.Prune = true
+	gh.search = []string{"acme/omalib"}
+	var stages []string
+	stats, err := ix.Run(ctx, Options{Progress: func(p Progress) {
+		if len(stages) == 0 || stages[len(stages)-1] != p.Stage {
+			stages = append(stages, p.Stage)
+		}
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Removed != 0 {
+		t.Errorf("stats = %+v", stats)
+	}
+	if _, err := st.GetApp(ctx, "acme/omaphoto"); err != nil {
+		t.Errorf("pruned after a timed-out discovery: %v", err)
+	}
+	if want := []string{StageDiscover, StageIndex}; !slices.Equal(stages, want) {
+		t.Errorf("stages = %v, want %v", stages, want)
 	}
 }

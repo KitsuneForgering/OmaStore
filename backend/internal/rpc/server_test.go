@@ -97,7 +97,8 @@ func (f *fakeBackend) wait(ctx context.Context) error {
 }
 
 func (f *fakeBackend) Index(ctx context.Context, opts index.Options) (index.Stats, error) {
-	opts.Progress(index.Progress{Total: 2, Done: 1, Current: "acme/photo"})
+	opts.Progress(index.Progress{Stage: index.StageIndex, Total: 2, Done: 1, Current: "acme/photo",
+		Stats: index.Stats{Updated: 1}})
 	if err := f.wait(ctx); err != nil {
 		return index.Stats{}, err
 	}
@@ -414,6 +415,28 @@ func TestInstallJobLifecycle(t *testing.T) {
 	if e := cl.call("install.uninstall", map[string]any{"repo": "acme/none"}, nil); e == nil || e.Code != CodeNotInstalled {
 		t.Errorf("uninstall missing: %v", e)
 	}
+}
+
+// Apps written by a running index reach the frontend before the index ends.
+func TestIndexSendsCatalogChangedWhileRunning(t *testing.T) {
+	f := newFake()
+	_, sock := startServer(t, f)
+	cl := dial(t, sock)
+
+	var idx Job
+	if e := cl.call("index.start", nil, &idx); e != nil {
+		t.Fatal(e)
+	}
+	cl.waitNote("catalog.changed", nil)
+	var js []Job
+	if e := cl.call("jobs.list", nil, &js); e != nil {
+		t.Fatal(e)
+	}
+	if len(js) != 1 || js[0].State != StateRunning || js[0].Stage != index.StageIndex {
+		t.Errorf("jobs = %+v, want the index running in stage %q", js, index.StageIndex)
+	}
+	close(f.release)
+	cl.waitNote("job.done", func(j Job) bool { return j.ID == idx.ID })
 }
 
 func TestJobErrorsAndCancel(t *testing.T) {

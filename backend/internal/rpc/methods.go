@@ -318,8 +318,16 @@ func (s *Server) call(method string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return s.jobs.start(s.ctx, KindIndex, "", func(ctx context.Context, report func(progress)) (any, error) {
+			// Apps show up while the index runs: catalog.changed goes out when
+			// repos were written, at most once per catalogInterval.
+			var changed int
+			var last time.Time
 			st, err := b.Index(ctx, index.Options{Force: p.Force, Only: p.Repos, Progress: func(ip index.Progress) {
-				report(progress{Stage: "index", Done: int64(ip.Done), Total: int64(ip.Total), Message: ip.Current})
+				report(progress{Stage: ip.Stage, Done: int64(ip.Done), Total: int64(ip.Total), Message: ip.Current})
+				if n := ip.Updated + ip.Removed; n > changed && time.Since(last) >= s.catalogInterval {
+					changed, last = n, time.Now()
+					s.broadcast("catalog.changed", struct{}{})
+				}
 			}})
 			return IndexResult{Updated: st.Updated, Refreshed: st.Refreshed, Unchanged: st.Unchanged,
 				Removed: st.Removed, Skipped: st.Skipped, NotApps: st.NotApps, Failed: st.Failed}, err

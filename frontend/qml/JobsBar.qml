@@ -44,7 +44,9 @@ Rectangle {
             }
             Text {
                 color: theme.muted
-                text: stage
+                text: kind !== "index" ? stage
+                      : stage === "discover" ? qsTr("searching")
+                      : stage === "state" ? qsTr("checking") : ""
             }
             Button {
                 text: qsTr("Cancel")

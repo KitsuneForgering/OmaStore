@@ -87,6 +87,7 @@ Job {
   id, kind: "index" | "install" | "update", repo?: string
   state: "running" | "done" | "failed" | "canceled"
   stage?: string                   // install: download, verify, extract, integrate, done
+                                   // index: discover (total 0), state, index
   done, total: number              // bytes (install) or repos (index)
   message?: string                 // index: current repo
   error?: {code, message}
@@ -114,7 +115,7 @@ Long operations return a `Job` immediately and continue through notifications:
 | `job.progress` | stage change or progress (at most ~10/s per job) |
 | `job.done` | finished successfully (`result` filled in) |
 | `job.failed` | failed or was canceled (`state` says which; `error` filled in) |
-| `catalog.changed` | after an index finishes, after a successful install/update/removal, or when another process (the CLI, the index timer) changed the database — checked every ~15 s; params `{}` or `{repo}` |
+| `catalog.changed` | while an index runs (when it wrote repos, at most every ~2 s) and after it finishes, after a successful install/update/removal, or when another process (the CLI, the index timer) changed the database — checked every ~15 s; params `{}` or `{repo}` |
 
 Concurrency: **one index at a time** (also across processes: an index started
 while `omastore index` runs fails with `-32002`) and **one operation per app** (installing,

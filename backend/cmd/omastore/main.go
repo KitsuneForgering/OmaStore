@@ -148,6 +148,7 @@ func cmdIndex(ctx context.Context, a *app.App, args []string, stdout, stderr io.
 	prune := fs.Bool("prune", false, "remove repos that are no longer found from the catalog")
 	maxSearch := fs.Int("max", 0, "maximum topic search results (default 300)")
 	noBatch := fs.Bool("no-batch", false, "do not use the batch query (GraphQL), only the REST API")
+	searchTimeout := fs.Duration("search-timeout", 0, "how long discovery waits for the searches and curated lists (default 2m)")
 	manifestFile := fs.String("manifest", "", "use this local omastore.toml instead of the published one (requires a single owner/repo)")
 	if err := parse(fs, args); err != nil {
 		return err
@@ -155,6 +156,7 @@ func cmdIndex(ctx context.Context, a *app.App, args []string, stdout, stderr io.
 	a.Indexer.Prune = *prune
 	a.Indexer.MaxSearch = *maxSearch
 	a.Indexer.NoBatch = *noBatch
+	a.Indexer.DiscoveryTimeout = *searchTimeout
 	var overrides map[string]string
 	if *manifestFile != "" {
 		if fs.NArg() != 1 {
@@ -175,7 +177,15 @@ func cmdIndex(ctx context.Context, a *app.App, args []string, stdout, stderr io.
 		Only:             fs.Args(),
 		ManifestOverride: overrides,
 		Progress: func(p index.Progress) {
-			if tty {
+			if !tty {
+				return
+			}
+			switch p.Stage {
+			case index.StageDiscover:
+				fmt.Fprintf(stderr, "\r%-60s", "discovering repositories...")
+			case index.StageState:
+				fmt.Fprintf(stderr, "\r%-60.60s", fmt.Sprintf("fetching the state of %d repositories...", p.Total))
+			default:
 				fmt.Fprintf(stderr, "\r[%d/%d] %-50.50s", p.Done, p.Total, p.Current)
 			}
 		},

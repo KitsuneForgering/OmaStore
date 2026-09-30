@@ -69,8 +69,13 @@ type Indexer struct {
 	LockPath string
 	// NoBatch turns off the batch query (GraphQL) and uses only the REST API.
 	NoBatch bool
-	Log     *slog.Logger
-	Now     func() time.Time
+	// DiscoveryTimeout limits how long discovery waits for its sources
+	// (searches and curated lists), which run in parallel (default 2 min).
+	// A source that does not answer in time is left out and the list counts
+	// as partial.
+	DiscoveryTimeout time.Duration
+	Log              *slog.Logger
+	Now              func() time.Time
 	// GOARCH decides what counts as installable (default runtime.GOARCH).
 	GOARCH string
 }
@@ -85,13 +90,14 @@ type Options struct {
 	// (owner/repo → content) instead of the published file. It lets the
 	// author see the result before publishing the manifest.
 	ManifestOverride map[string]string
-	// Progress, if set, receives the progress after each repository. The
-	// calls are serialized; the callback must not block.
+	// Progress, if set, receives the progress when a stage starts and after
+	// each repository. The calls are serialized; the callback must not block.
 	Progress func(Progress)
 }
 
 // Progress is an indexing run's progress.
 type Progress struct {
+	Stage   string // StageDiscover, StageState or StageIndex
 	Total   int
 	Done    int
 	Current string
@@ -110,6 +116,15 @@ type Stats struct {
 	NotApps int
 	Failed  int
 }
+
+const defaultDiscoveryTimeout = 2 * time.Minute
+
+// Stages of a run, reported in Progress.Stage.
+const (
+	StageDiscover = "discover" // searching for repositories (Total is 0)
+	StageState    = "state"    // fetching the state of every repository at once
+	StageIndex    = "index"    // processing each repository
+)
 
 // Result of processing a repository.
 type outcome int
@@ -151,8 +166,10 @@ func (ix *Indexer) Discover(ctx context.Context) ([]string, error) {
 }
 
 // discover is Discover that also reports whether a source failed softly (an
-// unreadable curated list or a failed manifest search): the list is then
-// partial and must not be used to prune the catalog.
+// unreadable curated list, a failed manifest search or a source that did not
+// answer within DiscoveryTimeout): the list is then partial and must not be
+// used to prune the catalog. The sources are queried in parallel; the result
+// keeps their order (seeds, manifest search, topics).
 func (ix *Indexer) discover(ctx context.Context) (names []string, partial bool, err error) {
 	topics := ix.Topics
 	if len(topics) == 0 {
@@ -166,56 +183,89 @@ func (ix *Indexer) discover(ctx context.Context) (names []string, partial bool, 
 	if max <= 0 {
 		max = 300
 	}
-	seen := map[string]bool{}
-	var out []string
-	add := func(n string) {
-		k := strings.ToLower(n)
-		if !seen[k] {
-			seen[k] = true
-			out = append(out, n)
-		}
+	timeout := ix.DiscoveryTimeout
+	if timeout <= 0 {
+		timeout = defaultDiscoveryTimeout
 	}
+
+	// A slot holds either fixed names (a seed) or a source to query. Soft
+	// sources only make the list partial when they fail; a failed hard source
+	// (a topic search) aborts the run. A rate limit always aborts.
+	type slot struct {
+		label string
+		fetch func(context.Context) ([]string, error)
+		soft  bool
+		names []string
+		err   error
+	}
+	var slots []*slot
 	for _, s := range seeds {
 		if list, ok := strings.CutPrefix(s, "list:"); ok {
-			repos, err := ix.fromList(ctx, list)
-			if err != nil {
-				var rl *github.RateLimitError
-				if errors.As(err, &rl) {
-					return nil, false, err
-				}
-				ix.log().Warn("unreadable curated list", "list", list, "err", err)
-				partial = true
-			}
-			for _, r := range repos {
-				add(r)
-			}
+			slots = append(slots, &slot{label: "curated list " + list, soft: true,
+				fetch: func(ctx context.Context) ([]string, error) { return ix.fromList(ctx, list) }})
 			continue
 		}
-		add(s)
+		slots = append(slots, &slot{names: []string{s}})
 	}
 	// Repositories with omastore.toml at the root, even without the topic.
 	if ms, ok := ix.GH.(ManifestSearcher); ok {
-		names, err := ms.SearchManifests(ctx, max)
-		var rl *github.RateLimitError
-		switch {
-		case errors.As(err, &rl):
-			return nil, false, err
-		case errors.Is(err, github.ErrNoToken):
-		case err != nil:
-			ix.log().Warn("manifest search failed", "err", err)
-			partial = true
-		}
-		for _, n := range names {
-			add(n)
-		}
+		slots = append(slots, &slot{label: "manifest search", soft: true,
+			fetch: func(ctx context.Context) ([]string, error) { return ms.SearchManifests(ctx, max) }})
 	}
 	for _, t := range topics {
-		names, err := ix.GH.SearchByTopic(ctx, t, max)
-		if err != nil {
-			return nil, false, err
+		slots = append(slots, &slot{label: "topic " + t,
+			fetch: func(ctx context.Context) ([]string, error) { return ix.GH.SearchByTopic(ctx, t, max) }})
+	}
+
+	dctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	var wg sync.WaitGroup
+	for _, sl := range slots {
+		if sl.fetch == nil {
+			continue
 		}
-		for _, n := range names {
-			add(n)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sl.names, sl.err = sl.fetch(dctx)
+			var rl *github.RateLimitError
+			if errors.As(sl.err, &rl) {
+				cancel() // the other sources would hit the same limit
+			}
+		}()
+	}
+	wg.Wait()
+
+	for _, sl := range slots {
+		var rl *github.RateLimitError
+		if errors.As(sl.err, &rl) {
+			return nil, false, sl.err
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	timedOut := errors.Is(dctx.Err(), context.DeadlineExceeded)
+	seen := map[string]bool{}
+	var out []string
+	for _, sl := range slots {
+		switch {
+		case sl.err == nil:
+		case errors.Is(sl.err, github.ErrNoToken):
+		case timedOut:
+			ix.log().Warn("discovery source timed out", "source", sl.label, "timeout", timeout)
+			partial = true
+		case sl.soft:
+			ix.log().Warn("discovery source failed", "source", sl.label, "err", sl.err)
+			partial = true
+		default:
+			return nil, false, fmt.Errorf("%s: %w", sl.label, sl.err)
+		}
+		for _, n := range sl.names {
+			if k := strings.ToLower(n); !seen[k] {
+				seen[k] = true
+				out = append(out, n)
+			}
 		}
 	}
 	return out, partial, nil
@@ -280,7 +330,13 @@ func (ix *Indexer) Run(ctx context.Context, opts Options) (Stats, error) {
 	// not run or was partial.
 	var discovered []string
 	canPrune := false
+	report := func(p Progress) {
+		if opts.Progress != nil {
+			opts.Progress(p)
+		}
+	}
 	if len(names) == 0 {
+		report(Progress{Stage: StageDiscover})
 		found, partial, err := ix.discover(ctx)
 		if err != nil {
 			return Stats{}, fmt.Errorf("discovery: %w", err)
@@ -302,6 +358,7 @@ func (ix *Indexer) Run(ctx context.Context, opts Options) (Stats, error) {
 	// REST requests per repository.
 	var snaps map[string]*github.Snapshot
 	if b, ok := ix.GH.(Batcher); ok && !ix.NoBatch {
+		report(Progress{Stage: StageState, Total: len(names)})
 		var err error
 		snaps, err = b.Snapshots(ctx, names)
 		ix.log().Debug("batch state fetched", "repos", len(snaps), "err", err)
@@ -327,7 +384,7 @@ func (ix *Indexer) Run(ctx context.Context, opts Options) (Stats, error) {
 
 	var (
 		mu   sync.Mutex
-		prog = Progress{Total: len(names)}
+		prog = Progress{Stage: StageIndex, Total: len(names)}
 		// resolved are the canonical names the API answered for renamed or
 		// transferred repositories; prune must keep them too.
 		resolved []string
@@ -376,9 +433,7 @@ func (ix *Indexer) Run(ctx context.Context, opts Options) (Stats, error) {
 					prog.Unchanged++
 				}
 				// Called under the lock: callbacks run serially, in increasing Done order.
-				if opts.Progress != nil {
-					opts.Progress(prog)
-				}
+				report(prog)
 				mu.Unlock()
 			}
 		}()
