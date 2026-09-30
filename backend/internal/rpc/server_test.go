@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -651,5 +652,84 @@ func TestAuthorCheck(t *testing.T) {
 	}
 	if e := cl.call("author.check", map[string]any{"repo": "acme/limited"}, nil); e == nil || e.Code != CodeRateLimited {
 		t.Errorf("rate limit: %+v", e)
+	}
+}
+
+// A client that stops reading must not hold back notifications (sent from
+// inside the indexer) nor the other clients: once its queue fills up, it is
+// disconnected.
+func TestSlowClientDoesNotBlockBroadcast(t *testing.T) {
+	s, sock := startServer(t, newFake())
+	stuck, err := net.Dial("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stuck.Close()
+	good, err := net.Dial("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer good.Close()
+	var got atomic.Int64
+	lines := make(chan int, 1)
+	go func() {
+		sc := bufio.NewScanner(good)
+		n := 0
+		for sc.Scan() {
+			n++
+			got.Store(int64(n))
+			if strings.Contains(sc.Text(), `"last"`) {
+				lines <- n
+				return
+			}
+		}
+	}()
+	for deadline := time.Now().Add(2 * time.Second); ; {
+		s.mu.Lock()
+		n := len(s.conns)
+		s.mu.Unlock()
+		if n == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d connections", n)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// Far more than the socket buffer plus the queue. The good client is
+	// waited for between batches, so only the stuck one falls behind.
+	const total, batch = 20000, 200
+	var spent time.Duration
+	for i := 0; i < total; i += batch {
+		start := time.Now()
+		for j := i; j < i+batch; j++ {
+			s.broadcast("catalog.changed", map[string]int{"i": j})
+		}
+		spent += time.Since(start)
+		for deadline := time.Now().Add(5 * time.Second); got.Load() < int64(i+batch); {
+			if time.Now().After(deadline) {
+				t.Fatalf("good client stuck at %d of %d", got.Load(), i+batch)
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+	s.broadcast("catalog.changed", map[string]string{"last": "yes"})
+	if spent > 2*time.Second {
+		t.Errorf("broadcast took %s", spent)
+	}
+	select {
+	case n := <-lines:
+		if n != total+1 {
+			t.Errorf("good client got %d messages, want %d", n, total+1)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("good client did not get the last message")
+	}
+	s.mu.Lock()
+	n := len(s.conns)
+	s.mu.Unlock()
+	if n != 1 {
+		t.Errorf("%d connections; the stuck client should have been dropped", n)
 	}
 }

@@ -52,7 +52,7 @@ func TestListAppsRankedSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || got[0].FullName != "a/cal" {
-		t.Errorf("busca = %v", names(got))
+		t.Errorf("search = %v", names(got))
 	}
 	all, _ := a.ListApps(ctx, store.Filter{Query: "calendar", All: true})
 	if len(all) != 2 {

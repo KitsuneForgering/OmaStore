@@ -17,7 +17,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/ulikunitz/xz"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/index"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/asset"
 )
 
 // Extraction limits, against decompression bombs.
@@ -355,7 +355,7 @@ func Extract(archive, format, dest, binName string) error {
 	open := func() (*os.File, error) { return os.Open(archive) }
 
 	switch format {
-	case index.FormatBinary, index.FormatAppImage:
+	case asset.FormatBinary, asset.FormatAppImage:
 		f, err := open()
 		if err != nil {
 			return err
@@ -366,7 +366,7 @@ func Extract(archive, format, dest, binName string) error {
 			return fmt.Errorf("%w: binary name %q", ErrUnsafePath, binName)
 		}
 		return x.writeFile(p, f, 0o755)
-	case index.FormatZip:
+	case asset.FormatZip:
 		if err := x.extractZip(archive); err != nil {
 			return err
 		}
@@ -380,29 +380,29 @@ func Extract(archive, format, dest, binName string) error {
 	defer f.Close()
 	var r io.Reader
 	switch format {
-	case index.FormatTarGz:
+	case asset.FormatTarGz:
 		gz, err := gzip.NewReader(f)
 		if err != nil {
 			return fmt.Errorf("open gzip: %w", err)
 		}
 		defer gz.Close()
 		r = gz
-	case index.FormatTarXz:
+	case asset.FormatTarXz:
 		xr, err := xz.NewReader(f)
 		if err != nil {
 			return fmt.Errorf("open xz: %w", err)
 		}
 		r = xr
-	case index.FormatTarBz2:
+	case asset.FormatTarBz2:
 		r = bzip2.NewReader(f)
-	case index.FormatTarZst, index.FormatPkg:
+	case asset.FormatTarZst, asset.FormatPkg:
 		zr, err := zstd.NewReader(f)
 		if err != nil {
 			return fmt.Errorf("open zstd: %w", err)
 		}
 		defer zr.Close()
 		r = zr
-		if format == index.FormatPkg {
+		if format == asset.FormatPkg {
 			x.filter = pkgFilter
 		}
 	default:

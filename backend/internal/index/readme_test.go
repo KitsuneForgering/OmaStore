@@ -41,7 +41,7 @@ func TestRewriteReadme(t *testing.T) {
 		`[logo]: https://raw.githubusercontent.com/acme/omaphoto/abc123/assets/logo.svg`,
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("faltou %q", want)
+			t.Errorf("missing %q", want)
 		}
 	}
 	if strings.Contains(out, "comment -->") {

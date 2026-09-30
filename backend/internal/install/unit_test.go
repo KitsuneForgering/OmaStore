@@ -48,7 +48,7 @@ func TestDesktopEscaping(t *testing.T) {
 		"Terminal=true\n",
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("faltou %q em:\n%s", want, out)
+			t.Errorf("missing %q in:\n%s", want, out)
 		}
 	}
 	if q := quoteExecArg("/simple/path"); q != "/simple/path" {

@@ -97,10 +97,15 @@ Rules:
 
 ## Database schema (summary)
 
-- `repos` — `full_name` (PK), description, stars, topics, `pushed_at`, `head_sha`, `latest_tag`, `etag`, `indexed_at`.
+- `repos` — `full_name` (PK), description, stars, topics, `pushed_at`, `head_sha`, `latest_tag`, `etag`,
+  `indexed_at` (last checked), `changed_at` (last change; drives `catalog.changed` and the search index).
 - `apps` — display data derived from the repo: name, summary, README, icon, category, score.
 - `assets` — release assets per repo/tag (name, url, arch, format, checksum).
 - `installs` — installed app, version, date, list of created files.
+- `not_apps` — repositories recently found without an app `omastore.toml`; skipped without requests for 7 days.
+
+Repository names are case-insensitive, as on GitHub: lookups by a name the user typed use `COLLATE NOCASE`
+and return the stored spelling; names are validated in one place (`internal/repoid`).
 
 Schema changes go through numbered migrations in `backend/internal/store/migrations/`; never edit a migration that has already been published.
 
@@ -110,10 +115,13 @@ Schema changes go through numbered migrations in `backend/internal/store/migrati
 backend/
   cmd/omastored/        # daemon (IPC server)
   cmd/omastore/         # debug CLI: index, list, show, install, uninstall, update, check
-  internal/app/         # wires the services (used by the CLI and the daemon)
+  internal/app/         # wires the services; the single entry point for the CLI and the daemon
   internal/github/      # go-github wrapper
   internal/gitrepo/     # shallow clones via go-git + icon/screenshot lookup
   internal/index/       # discovery, extraction, classification (index.Version)
+  internal/asset/       # release file format/architecture/checksum rules (index and install)
+  internal/repoid/      # owner/repo validation shared by every entry point
+  internal/flock/       # cross-process file locks (index, per-app install)
   internal/manifest/    # the app's omastore.toml (strict validation in lint)
   internal/store/       # SQLite + migrations
   internal/install/     # download, verification, extraction, launcher, .desktop

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -52,25 +53,93 @@ func NewServer(b Backend, log *slog.Logger) *Server {
 	return s
 }
 
-// conn is a connected client.
+// Outgoing messages: how many can wait for a client that is not reading, and
+// how long a single write may take.
+const (
+	sendQueue    = 1024
+	writeTimeout = 5 * time.Second
+)
+
+var errSlowClient = errors.New("client is not reading its messages")
+
+// conn is a connected client. Its messages go through a queue written by its
+// own goroutine, so sending never blocks: job progress is reported from
+// inside the indexer, which must not wait for a client.
 type conn struct {
-	c   net.Conn
-	wmu sync.Mutex
+	c       net.Conn
+	out     chan []byte
+	done    chan struct{}
+	once    sync.Once
+	pending atomic.Int64 // queued messages not written yet
 }
 
-// send writes a message on one line. A slow client does not block the
-// others: the write has a deadline.
+func newConn(nc net.Conn) *conn {
+	c := &conn{c: nc, out: make(chan []byte, sendQueue), done: make(chan struct{})}
+	go c.writeLoop()
+	return c
+}
+
+// send queues a message, written on one line. A client whose queue is full
+// stopped reading: it is disconnected instead of holding back the sender.
 func (c *conn) send(v any) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
 	b = append(b, '\n')
-	c.wmu.Lock()
-	defer c.wmu.Unlock()
-	c.c.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	_, err = c.c.Write(b)
-	return err
+	select {
+	case <-c.done:
+		return net.ErrClosed
+	default:
+	}
+	c.pending.Add(1)
+	select {
+	case c.out <- b:
+		return nil
+	default:
+		c.pending.Add(-1)
+		c.close()
+		return errSlowClient
+	}
+}
+
+func (c *conn) writeLoop() {
+	for {
+		select {
+		case <-c.done:
+			return
+		case b := <-c.out:
+			c.c.SetWriteDeadline(time.Now().Add(writeTimeout))
+			_, err := c.c.Write(b)
+			c.pending.Add(-1)
+			if err != nil {
+				c.close()
+				return
+			}
+		}
+	}
+}
+
+// close drops the queued messages and closes the connection.
+func (c *conn) close() {
+	c.once.Do(func() {
+		close(c.done)
+		c.c.Close()
+	})
+}
+
+// finish closes the connection after the queued messages are written (for
+// at most writeTimeout).
+func (c *conn) finish() {
+	deadline := time.Now().Add(writeTimeout)
+	for c.pending.Load() > 0 && time.Now().Before(deadline) {
+		select {
+		case <-c.done:
+			return
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	c.close()
 }
 
 // broadcast sends a notification to every client.
@@ -85,7 +154,6 @@ func (s *Server) broadcast(method string, params any) {
 	for _, c := range conns {
 		if err := c.send(msg); err != nil {
 			s.log.Debug("failed to notify client", "err", err)
-			c.c.Close()
 		}
 	}
 }
@@ -143,7 +211,7 @@ func (s *Server) Serve(l net.Listener) error {
 			}
 			return err
 		}
-		c := &conn{c: nc}
+		c := newConn(nc)
 		s.mu.Lock()
 		s.conns[c] = struct{}{}
 		s.mu.Unlock()
@@ -155,7 +223,7 @@ func (s *Server) Serve(l net.Listener) error {
 			delete(s.conns, c)
 			s.lastActive = time.Now()
 			s.mu.Unlock()
-			nc.Close()
+			c.finish()
 		}()
 	}
 }
@@ -229,7 +297,12 @@ func (s *Server) Shutdown() {
 	s.jobs.shutdown()
 	s.mu.Lock()
 	for c := range s.conns {
-		c.c.Close()
+		// Stop reading, so handleConn returns and finish writes the last
+		// notifications (the jobs' final state) before closing.
+		if cr, ok := c.c.(interface{ CloseRead() error }); ok && cr.CloseRead() == nil {
+			continue
+		}
+		c.close()
 	}
 	s.mu.Unlock()
 	s.connsWG.Wait()
@@ -255,7 +328,7 @@ func (s *Server) handleConn(c *conn) {
 		go func() {
 			if resp := s.handleMessage(line); resp != nil {
 				if err := c.send(resp); err != nil {
-					c.c.Close()
+					c.close()
 				}
 			}
 		}()
