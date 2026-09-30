@@ -7,6 +7,7 @@ Rectangle {
     color: theme.surface
 
     property string section: "discover"
+    property bool detailActive: false
     signal sectionSelected(string section)
     signal categorySelected(string category)
 
@@ -43,20 +44,20 @@ Rectangle {
 
         Text {
             text: "OmaStore"
-            color: theme.accent
-            font.pixelSize: 22
+            color: root.detailActive ? theme.muted : theme.accent
+            font.pixelSize: root.detailActive ? 20 : 22
             font.bold: true
             Layout.bottomMargin: 12
         }
 
         NavItem {
             text: qsTr("Discover")
-            selected: root.section === "discover" && backend.catalog.category === ""
+            selected: !root.detailActive && root.section === "discover" && backend.catalog.category === ""
             onClicked: { backend.catalog.category = ""; root.sectionSelected("discover") }
         }
         NavItem {
             text: qsTr("Installed")
-            selected: root.section === "installed"
+            selected: !root.detailActive && root.section === "installed"
             badge: backend.updatesAvailable > 0 ? qsTr("%n update(s)", "", backend.updatesAvailable) : ""
             onClicked: root.sectionSelected("installed")
         }
@@ -78,13 +79,14 @@ Rectangle {
                 width: ListView.view.width
                 text: modelData.name
                 badge: modelData.count
-                selected: root.section === "discover" && backend.catalog.category === modelData.name
+                selected: !root.detailActive && root.section === "discover" && backend.catalog.category === modelData.name
                 onClicked: root.categorySelected(modelData.name)
             }
         }
 
         Button {
             Layout.fillWidth: true
+            visible: !root.detailActive
             readonly property var job: { backend.jobs.revision; return backend.jobs.indexJob() }
             enabled: backend.connected && !job.id
             text: job.id ? qsTr("Refreshing catalog…") : qsTr("Refresh catalog")

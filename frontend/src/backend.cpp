@@ -225,7 +225,7 @@ void Backend::cancelJob(const QString &jobId)
 
 QString Backend::readmeForDisplay(const QString &markdown) const
 {
-    return Markdown::stripImages(markdown);
+    return Markdown::forDisplay(markdown);
 }
 
 // On the first run the catalog is empty: index automatically.

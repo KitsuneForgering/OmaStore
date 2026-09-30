@@ -55,7 +55,8 @@ ApplicationWindow {
 
         SideBar {
             Layout.fillHeight: true
-            Layout.preferredWidth: 220
+            Layout.preferredWidth: stack.depth > 1 ? 176 : 220
+            detailActive: stack.depth > 1
             section: window.section
             onSectionSelected: (s) => { window.section = s; window.back() }
             onCategorySelected: (c) => { window.section = "discover"; backend.catalog.category = c; window.back() }

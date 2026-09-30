@@ -91,13 +91,35 @@ ask the user for confirmation.
 
 ## 4. Icon and screenshots
 
+- Publish a stable GitHub release first. Until one exists, OmaStore does not
+  fetch the README or repository images, so the app has no preview.
 - **Icon:** an `icon.svg`/`icon.png` at the root, in `assets/`, `icons/`,
   `resources/` or `data/`. Names such as `<repo>.svg`, `logo.svg` and
   `app-icon.png` also work, as does the `icons/hicolor/<size>/apps/` layout. SVG is
   preferred; a PNG of at least 256×256 is resized for the theme.
 - **Screenshots:** the README images (badges are ignored) and files in
   folders or with names containing `screenshot`, `preview` or `demo`. Up to 8 are
-  shown.
+  shown in the app page's carousel. README images are not repeated inside the
+  displayed README text.
+
+For predictable results, commit the images and name them in the manifest:
+
+```text
+myapp/
+  omastore.toml
+  assets/icon.svg
+  screenshots/main.png
+```
+
+```toml
+icon = "assets/icon.svg"
+screenshots = ["screenshots/main.png"]
+```
+
+Declared screenshots replace the automatically found ones. They may be paths
+relative to the repository or `https://` URLs. Each image must be a supported
+PNG, JPEG, WebP, GIF or SVG and no larger than 15 MiB; otherwise it cannot be
+displayed. The carousel keeps the image's aspect ratio.
 
 ## 5. Description
 
