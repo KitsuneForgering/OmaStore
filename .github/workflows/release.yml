@@ -33,8 +33,14 @@ jobs:
 
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      # Unprivileged user: install.sh refuses to run as root (test-installer) and makepkg too.
+      - name: Build user
+        run: |
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+
       - name: Backend tests
-        run: make check
+        run: su builder -c "make check"
 
       - name: Reproducible tarball
         run: make dist VERSION="$VERSION"
@@ -49,7 +55,6 @@ jobs:
 
       - name: omastore-bin PKGBUILD
         run: |
-          useradd -m builder
           chown -R builder "$GITHUB_WORKSPACE"
           su builder -c "make pkgbuild-bin VERSION=$VERSION"
 
