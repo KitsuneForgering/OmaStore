@@ -199,7 +199,7 @@ result), with no external service or LLM.
 
 ## Maintenance fixes — source code triage
 
-- [ ] **High — reliable uninstallation:** `install.removeRegistered` only logs failures, but `Uninstall` deletes the database record even when a file was not removed (`backend/internal/install/install.go`). Distinguish a missing file, a file changed by third parties and an I/O failure; keep the pending paths in the database to allow a retry. On update, also handle failures when cleaning up files from the previous version.
+- [x] **High — reliable uninstallation:** `install.removeRegistered` only logs failures, but `Uninstall` deletes the database record even when a file was not removed (`backend/internal/install/install.go`). Distinguish a missing file, a file changed by third parties and an I/O failure; keep the pending paths in the database to allow a retry. On update, also handle failures when cleaning up files from the previous version.
 - [ ] **Medium — stale responses in the interface:** `Backend::reloadDetail` and `loadSimilar` discard responses for another repository, but accept stale responses for the same repository (`frontend/src/backend.cpp`). Use a per-request generation id and test out-of-order responses, as `CatalogModel` already does.
 - [ ] **Medium — checksum state name:** `AssetInfo.verified` only means a digest or checksum file is available before the download (`backend/internal/rpc/methods.go`, `frontend/qml/DetailPage.qml`). Rename the field and the displayed text so they do not suggest a completed verification; keep provenance as a separate state in Phase 15 and update `docs/ipc.md`.
 - [ ] **Medium — repository identity:** `github.SplitFullName`, `rpc.repoParams.validate` and `install.splitName` accept different sets of `owner/repo` names. Use a single validation before API calls and local path operations; cover invalid and valid names in shared tests.
@@ -208,7 +208,7 @@ result), with no external service or LLM.
 - [ ] **Low — first indexing:** `Backend::maybeIndexOnFirstRun` marks the query as done before the response (`frontend/src/backend.cpp`). Allow a retry after a transient error so a fresh installation is not left with an empty catalog until the user acts.
 - [ ] **Low — errors in the indexer tests:** replace the `stats, _ = ix.Run(...)` calls in `backend/internal/index/index_test.go` with explicit error checks; an indexing failure should not show up only as an unexpected statistic.
 
-## Phase 15 — Apps with a manifest only + author skills
+## Phase 15b — Apps with a manifest only + author skills
 
 - [x] `omastore.toml` mandatory: without it the repo is not added (and is removed, if it was there); an empty file counts as opt-in
 - [x] `kind` field (`app` default); `plugin`/`theme`/others are not indexed; `lint-manifest` warns
@@ -217,6 +217,17 @@ result), with no external service or LLM.
 - [x] Bug: `index.Version` did not force reprocessing when the discovered name differed from the stored one (capitalization/rename) — the force flag is recomputed after resolving the name; regression test
 - [x] Real catalog: 0 apps until authors adopt the manifest (explanatory message in the interface)
 - [x] Skills in `skills/`: `omastore-manifest`, `omastore-release`, `omastore-check`
+
+## Maintenance fixes — project analysis
+
+- [x] Every run also checks the repositories already stored: an app that removes its manifest or leaves discovery (deleted, renamed, private) leaves the catalog without `--prune`
+- [x] Renamed repository discovered only under the new name: no duplicate entry, and the installation moves to the new name (`store.RenameInstall`) so updates keep working
+- [x] `--prune` is skipped when a discovery source failed (partial list)
+- [x] Index lock across processes (`$XDG_DATA_HOME/omastore/index.lock`): the timer and the daemon never index together
+- [x] The daemon tells the frontend (`catalog.changed`) about changes made by the CLI/timer
+- [x] Image cache pruned on daemon start (unused for 30 days, 200 MB cap); lookup without `Glob`
+- [x] Installer: one HTTP client (connection reuse) and downloads that abort after 60 s without data
+- [ ] Frontend: friendly text for `-32010` (incomplete uninstall); today the backend message is shown
 
 ## Future ideas
 

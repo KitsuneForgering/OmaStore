@@ -14,16 +14,22 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Download limits.
 var (
 	maxDownloadBytes int64 = 2 << 30
 	maxSmallBytes    int64 = 5 << 20 // checksums and icons
+	// downloadIdleTimeout aborts a download that receives no bytes for this
+	// long (a stalled connection would otherwise hang until canceled).
+	downloadIdleTimeout = 60 * time.Second
 )
 
 // ErrChecksum means the downloaded file does not match the published checksum.
 var ErrChecksum = errors.New("checksum mismatch")
+
+var errStalled = errors.New("download stalled")
 
 func checkURL(raw string) error {
 	u, err := url.Parse(raw)
@@ -58,9 +64,22 @@ func (in *Installer) get(ctx context.Context, raw string) (*http.Response, error
 
 // download writes raw to dst and returns the sha256 and sha512 of the content.
 func (in *Installer) download(ctx context.Context, raw, dst string, progress func(done, total int64)) (sum256, sum512 string, err error) {
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	idle := time.AfterFunc(downloadIdleTimeout, func() {
+		cancel(fmt.Errorf("%w: no data for %s", errStalled, downloadIdleTimeout))
+	})
+	defer idle.Stop()
+	stalled := func(err error) error {
+		if cause := context.Cause(ctx); errors.Is(cause, errStalled) {
+			return fmt.Errorf("download %s: %w", raw, cause)
+		}
+		return err
+	}
+
 	resp, err := in.get(ctx, raw)
 	if err != nil {
-		return "", "", err
+		return "", "", stalled(err)
 	}
 	defer resp.Body.Close()
 	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
@@ -76,6 +95,7 @@ func (in *Installer) download(ctx context.Context, raw, dst string, progress fun
 	buf := make([]byte, 64<<10)
 	for {
 		n, rerr := resp.Body.Read(buf)
+		idle.Reset(downloadIdleTimeout)
 		if n > 0 {
 			done += int64(n)
 			if done > maxDownloadBytes {
@@ -92,7 +112,7 @@ func (in *Installer) download(ctx context.Context, raw, dst string, progress fun
 			break
 		}
 		if rerr != nil {
-			return "", "", fmt.Errorf("download %s: %w", raw, rerr)
+			return "", "", stalled(fmt.Errorf("download %s: %w", raw, rerr))
 		}
 	}
 	if total > 0 && done != total {

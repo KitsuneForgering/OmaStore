@@ -45,6 +45,12 @@ func run() error {
 	}
 	defer a.Close()
 
+	if n, err := a.Images.Prune(imageMaxAge, imageMaxBytes); err != nil {
+		log.Warn("image cache not pruned", "err", err)
+	} else if n > 0 {
+		log.Info("image cache pruned", "removed", n)
+	}
+
 	l, err := rpc.ActivationListener()
 	if err != nil {
 		return err
@@ -72,6 +78,7 @@ func run() error {
 	}
 
 	srv := rpc.NewServer(a, log)
+	go srv.WatchChanges(changePollInterval)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(l) }()
 	log.Info("omastored ready", "socket", addr(l), "idle-timeout", idle)
@@ -100,6 +107,16 @@ loop:
 	srv.Shutdown()
 	return err
 }
+
+// changePollInterval is how often the daemon checks for changes made by
+// other processes (the CLI or the index timer) to tell the frontend.
+const changePollInterval = 15 * time.Second
+
+// Image cache limits, applied when the daemon starts.
+const (
+	imageMaxAge         = 30 * 24 * time.Hour
+	imageMaxBytes int64 = 200 << 20
+)
 
 // defaultIdleTimeout is the idle time before exiting when started by
 // socket activation.

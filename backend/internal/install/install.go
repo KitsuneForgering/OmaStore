@@ -36,6 +36,9 @@ var (
 	ErrUpToDate       = errors.New("app is already at the latest version")
 	ErrConflict       = errors.New("file already exists and does not belong to OmaStore")
 	ErrOutsideHome    = errors.New("path outside $HOME")
+	// ErrIncomplete means some registered files could not be removed; they
+	// stay recorded so a later attempt can remove them.
+	ErrIncomplete = errors.New("some files could not be removed")
 )
 
 // Installer installs and removes apps.
@@ -50,6 +53,9 @@ type Installer struct {
 	Log   *slog.Logger
 
 	locks sync.Map // full_name → *sync.Mutex
+
+	defaultHTTP     *http.Client
+	defaultHTTPOnce sync.Once
 }
 
 // Progress is an installation's progress.
@@ -82,11 +88,16 @@ func (in *Installer) http() *http.Client {
 	if in.HTTP != nil {
 		return in.HTTP
 	}
-	return &http.Client{Transport: &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		ResponseHeaderTimeout: 60 * time.Second,
-		TLSHandshakeTimeout:   15 * time.Second,
-	}}
+	// One client for every download, so connections are reused.
+	in.defaultHTTPOnce.Do(func() {
+		in.defaultHTTP = &http.Client{Transport: &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			ResponseHeaderTimeout: 60 * time.Second,
+			TLSHandshakeTimeout:   15 * time.Second,
+			IdleConnTimeout:       90 * time.Second,
+		}}
+	})
+	return in.defaultHTTP
 }
 
 // httpsOnly returns a copy of c that refuses redirects to anything but
@@ -304,15 +315,24 @@ func (in *Installer) Install(ctx context.Context, fullName string, progress func
 	}
 
 	// Remove what the previous installation created and the new one no longer
-	// uses (e.g. the old version directory).
+	// uses (e.g. the old version directory). What cannot be removed stays
+	// recorded in the new installation, so uninstalling or the next update
+	// tries again.
 	if prev != nil {
 		keep := map[string]bool{}
 		for _, f := range inst.Files {
 			keep[f] = true
 		}
+		var pending []string
 		for _, f := range prev.Files {
-			if !keep[f] {
-				in.removeRegistered(f)
+			if !keep[f] && in.removeRegistered(f) != nil {
+				pending = append(pending, f)
+			}
+		}
+		if len(pending) > 0 {
+			inst.Files = append(inst.Files, pending...)
+			if err := in.Store.SaveInstall(ctx, *inst); err != nil {
+				in.log().Warn("could not record leftover files", "repo", fullName, "files", pending, "err", err)
 			}
 		}
 	}
@@ -578,7 +598,9 @@ func (in *Installer) Update(ctx context.Context, fullName string, progress func(
 	return in.Install(ctx, fullName, progress)
 }
 
-// Uninstall removes only the paths registered in the database.
+// Uninstall removes only the paths registered in the database. If some of
+// them cannot be removed, the record is kept with just those paths and the
+// error wraps ErrIncomplete, so uninstalling again retries them.
 func (in *Installer) Uninstall(ctx context.Context, fullName string) error {
 	defer in.lock(fullName)()
 	inst, err := in.Store.GetInstall(ctx, fullName)
@@ -588,47 +610,70 @@ func (in *Installer) Uninstall(ctx context.Context, fullName string) error {
 	if err != nil {
 		return err
 	}
+	var pending []string
+	var errs []error
 	for i := len(inst.Files) - 1; i >= 0; i-- {
-		in.removeRegistered(inst.Files[i])
+		if err := in.removeRegistered(inst.Files[i]); err != nil {
+			pending = append(pending, inst.Files[i])
+			errs = append(errs, err)
+		}
 	}
-	if owner, repo, err := splitName(inst.FullName); err == nil {
-		os.Remove(filepath.Join(in.Paths.AppsDir, owner+"__"+repo)) // only if empty
+	defer in.runHooks(ctx)
+	if len(pending) > 0 {
+		inst.Files = pending
+		if err := in.Store.SaveInstall(ctx, *inst); err != nil {
+			return err
+		}
+		return fmt.Errorf("%s: %w: %w", inst.FullName, ErrIncomplete, errors.Join(errs...))
 	}
-	if err := in.Store.DeleteInstall(ctx, inst.FullName); err != nil {
-		return err
-	}
-	in.runHooks(ctx)
-	return nil
+	return in.Store.DeleteInstall(ctx, inst.FullName)
 }
 
 // removeRegistered removes a registered path, with safeguards: it must be in
 // one of the managed directories; in ~/.local/bin only our launchers are removed;
-// whole directories are only deleted inside apps/.
-func (in *Installer) removeRegistered(p string) {
+// whole directories are only deleted inside apps/. It returns an error only
+// when the path is still ours and could not be removed; a path that is gone,
+// was replaced by someone else or is outside the managed directories is no
+// longer OmaStore's to remove.
+func (in *Installer) removeRegistered(p string) error {
 	p = filepath.Clean(p)
 	st, err := os.Lstat(p)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
-		return
+		return err
 	}
 	switch {
 	case within(in.Paths.AppsDir, p) && p != filepath.Clean(in.Paths.AppsDir):
 		err = os.RemoveAll(p)
+		if err == nil {
+			// The app directory goes too once its last version is gone
+			// (os.Remove only removes empty directories).
+			if dir := filepath.Dir(p); dir != filepath.Clean(in.Paths.AppsDir) {
+				os.Remove(dir)
+			}
+		}
 	case filepath.Dir(p) == filepath.Clean(in.Paths.BinDir):
 		if !isOurLink(p, in.Paths.AppsDir) {
 			in.log().Warn("no longer an OmaStore launcher; kept", "path", p)
-			return
+			return nil
 		}
 		err = os.Remove(p)
 	case (within(in.Paths.Applications, p) || within(in.Paths.Icons, p)) && st.Mode().IsRegular() &&
 		strings.HasPrefix(path.Base(filepath.ToSlash(p)), "omastore-"):
 		err = os.Remove(p)
+	case within(in.Paths.Applications, p) || within(in.Paths.Icons, p):
+		in.log().Warn("no longer an OmaStore file; kept", "path", p)
+		return nil
 	default:
 		in.log().Warn("registered path outside the managed directories; ignored", "path", p)
-		return
+		return nil
 	}
 	if err != nil {
 		in.log().Warn("failed to remove", "path", p, "err", err)
 	}
+	return err
 }
 
 // System tools used by the hooks. Absolute paths: we never resolve them

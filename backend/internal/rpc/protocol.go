@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/github"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/index"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/install"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
 )
@@ -66,6 +67,7 @@ const (
 	CodeUpToDate       = -32007
 	CodeChecksum       = -32008
 	CodeCanceled       = -32009
+	CodeIncomplete     = -32010
 )
 
 // ErrBusy means an equivalent job is already running.
@@ -86,7 +88,7 @@ func toError(err error) *Error {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		code = CodeNotFound
-	case errors.Is(err, ErrBusy):
+	case errors.Is(err, ErrBusy), errors.Is(err, index.ErrBusy):
 		code = CodeBusy
 	case errors.Is(err, install.ErrConflict):
 		code = CodeConflict
@@ -102,6 +104,8 @@ func toError(err error) *Error {
 		code = CodeChecksum
 	case errors.Is(err, errCanceled):
 		code = CodeCanceled
+	case errors.Is(err, install.ErrIncomplete):
+		code = CodeIncomplete
 	}
 	return &Error{Code: code, Message: err.Error()}
 }

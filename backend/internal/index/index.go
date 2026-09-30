@@ -62,7 +62,11 @@ type Indexer struct {
 	MaxSearch int
 	Workers   int // default 4
 	// Prune removes repositories that are no longer discovered from the catalog.
+	// It is skipped when a discovery source failed.
 	Prune bool
+	// LockPath, if set, is a file locked during Run so that two processes
+	// (daemon and CLI/timer) do not index at the same time.
+	LockPath string
 	// NoBatch turns off the batch query (GraphQL) and uses only the REST API.
 	NoBatch bool
 	Log     *slog.Logger
@@ -142,6 +146,14 @@ func (ix *Indexer) goarch() string {
 
 // Discover returns the duplicate-free union of the topic searches and the seeds.
 func (ix *Indexer) Discover(ctx context.Context) ([]string, error) {
+	names, _, err := ix.discover(ctx)
+	return names, err
+}
+
+// discover is Discover that also reports whether a source failed softly (an
+// unreadable curated list or a failed manifest search): the list is then
+// partial and must not be used to prune the catalog.
+func (ix *Indexer) discover(ctx context.Context) (names []string, partial bool, err error) {
 	topics := ix.Topics
 	if len(topics) == 0 {
 		topics = []string{"omarchy"}
@@ -169,9 +181,10 @@ func (ix *Indexer) Discover(ctx context.Context) ([]string, error) {
 			if err != nil {
 				var rl *github.RateLimitError
 				if errors.As(err, &rl) {
-					return nil, err
+					return nil, false, err
 				}
 				ix.log().Warn("unreadable curated list", "list", list, "err", err)
+				partial = true
 			}
 			for _, r := range repos {
 				add(r)
@@ -186,10 +199,11 @@ func (ix *Indexer) Discover(ctx context.Context) ([]string, error) {
 		var rl *github.RateLimitError
 		switch {
 		case errors.As(err, &rl):
-			return nil, err
+			return nil, false, err
 		case errors.Is(err, github.ErrNoToken):
 		case err != nil:
 			ix.log().Warn("manifest search failed", "err", err)
+			partial = true
 		}
 		for _, n := range names {
 			add(n)
@@ -198,13 +212,13 @@ func (ix *Indexer) Discover(ctx context.Context) ([]string, error) {
 	for _, t := range topics {
 		names, err := ix.GH.SearchByTopic(ctx, t, max)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		for _, n := range names {
 			add(n)
 		}
 	}
-	return out, nil
+	return out, partial, nil
 }
 
 // maxFromList limits how many repositories a curated list can bring in.
@@ -250,17 +264,36 @@ func RepoLinks(text, self string, max int) []string {
 	return out
 }
 
-// Run runs a full indexing.
+// Run runs a full indexing. Without opts.Only, it processes what discovery
+// found plus every repository already stored: a stored repository that is no
+// longer discovered (manifest removed, repository deleted or renamed) is still
+// checked, and leaves the catalog through the normal rules.
 func (ix *Indexer) Run(ctx context.Context, opts Options) (Stats, error) {
+	unlock, err := ix.lock()
+	if err != nil {
+		return Stats{}, err
+	}
+	defer unlock()
+
 	names := opts.Only
-	discovered := false
+	// discovered is what this run found; canPrune is false when discovery did
+	// not run or was partial.
+	var discovered []string
+	canPrune := false
 	if len(names) == 0 {
-		var err error
-		names, err = ix.Discover(ctx)
+		found, partial, err := ix.discover(ctx)
 		if err != nil {
 			return Stats{}, fmt.Errorf("discovery: %w", err)
 		}
-		discovered = true
+		discovered, canPrune = found, !partial
+		if partial && ix.Prune {
+			ix.log().Warn("discovery was partial; not pruning")
+		}
+		stored, err := ix.Store.RepoNames(ctx)
+		if err != nil {
+			return Stats{}, err
+		}
+		names = union(found, stored)
 	}
 
 	ix.log().Debug("discovery done", "repos", len(names))
@@ -367,14 +400,29 @@ feed:
 	if err := ctx.Err(); err != nil {
 		return prog.Stats, err
 	}
-	if ix.Prune && discovered {
-		n, err := ix.prune(ctx, append(names, resolved...))
+	if ix.Prune && canPrune {
+		n, err := ix.prune(ctx, append(discovered, resolved...))
 		prog.Removed += n
 		if err != nil {
 			return prog.Stats, err
 		}
 	}
 	return prog.Stats, nil
+}
+
+// union returns a followed by the names of b not in a, ignoring case.
+func union(a, b []string) []string {
+	seen := make(map[string]bool, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, list := range [][]string{a, b} {
+		for _, n := range list {
+			if k := strings.ToLower(n); !seen[k] {
+				seen[k] = true
+				out = append(out, n)
+			}
+		}
+	}
+	return out
 }
 
 // prune removes from the catalog what was not discovered in this run.
@@ -472,6 +520,11 @@ func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *g
 			if err := ix.Store.RemoveRepo(ctx, name); err != nil {
 				return 0, err
 			}
+		}
+		// An installation recorded under the old name follows the repository,
+		// so it can still be updated.
+		if err := ix.Store.RenameInstall(ctx, name, repo.FullName); err != nil {
+			ix.log().Warn("installation not moved to the new name", "from", name, "to", repo.FullName, "err", err)
 		}
 		name = repo.FullName
 		*canonical = name

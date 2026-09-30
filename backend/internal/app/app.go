@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/github"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/gitrepo"
@@ -57,7 +58,7 @@ func Open(ctx context.Context, log *slog.Logger) (*App, error) {
 	inst, err := install.New(st, paths)
 	if err != nil {
 		st.Close()
-		return nil, fmt.Errorf("instalador: %w", err)
+		return nil, fmt.Errorf("installer: %w", err)
 	}
 	inst.Log = log
 	return &App{
@@ -65,10 +66,11 @@ func Open(ctx context.Context, log *slog.Logger) (*App, error) {
 		Store:  st,
 		GitHub: gh,
 		Indexer: &index.Indexer{
-			GH:    gh,
-			Store: st,
-			Repos: &gitrepo.Cache{Dir: paths.ReposDir},
-			Log:   log,
+			GH:       gh,
+			Store:    st,
+			Repos:    &gitrepo.Cache{Dir: paths.ReposDir},
+			LockPath: filepath.Join(paths.DataDir, "index.lock"),
+			Log:      log,
 		},
 		Installer: inst,
 		Images:    &imagecache.Cache{Dir: paths.ImagesDir},

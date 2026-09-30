@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -100,15 +101,78 @@ func key(u string) string {
 	return hex.EncodeToString(s[:])
 }
 
-// cached looks for an already downloaded file for the URL.
+// extensions are the ones extFor produces.
+var extensions = []string{".png", ".jpg", ".gif", ".webp", ".svg"}
+
+// cached looks for an already downloaded file for the URL. A hit refreshes the
+// file's mtime, which Prune uses as the last-use time.
 func (c *Cache) cached(k string) string {
-	matches, _ := filepath.Glob(filepath.Join(c.Dir, k+".*"))
-	for _, m := range matches {
-		if !strings.Contains(filepath.Base(m), ".tmp") {
-			return m
+	for _, ext := range extensions {
+		p := filepath.Join(c.Dir, k+ext)
+		if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() {
+			now := time.Now()
+			os.Chtimes(p, now, now)
+			return p
 		}
 	}
 	return ""
+}
+
+// Prune removes images not used for maxAge and then, oldest first, as many as
+// needed to keep the cache under maxBytes. Image URLs are pinned to a commit,
+// so without pruning every new commit of an app would leave its old images
+// behind forever. Returns how many files were removed.
+func (c *Cache) Prune(maxAge time.Duration, maxBytes int64) (int, error) {
+	entries, err := os.ReadDir(c.Dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	type file struct {
+		path string
+		size int64
+		mod  time.Time
+	}
+	var files []file
+	var total int64
+	cutoff := time.Now().Add(-maxAge)
+	removed := 0
+	for _, e := range entries {
+		if !e.Type().IsRegular() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		p := filepath.Join(c.Dir, e.Name())
+		// Temporary files of a download in progress are recent; old ones are
+		// leftovers of a crash.
+		if info.ModTime().Before(cutoff) {
+			if os.Remove(p) == nil {
+				removed++
+			}
+			continue
+		}
+		if strings.Contains(e.Name(), ".tmp") {
+			continue
+		}
+		files = append(files, file{p, info.Size(), info.ModTime()})
+		total += info.Size()
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].mod.Before(files[j].mod) })
+	for _, f := range files {
+		if total <= maxBytes {
+			break
+		}
+		if os.Remove(f.path) == nil {
+			total -= f.size
+			removed++
+		}
+	}
+	return removed, nil
 }
 
 // Get returns the local path of the image at rawURL, downloading it if needed.

@@ -267,3 +267,43 @@ func TestManifestRoundTrip(t *testing.T) {
 		t.Errorf("manifest = %q", d.Manifest)
 	}
 }
+
+func TestRenameInstall(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	s.SaveInstall(ctx, Install{FullName: "old/app", Version: "v1", InstalledAt: time.Now(), Files: []string{"/a"}})
+	if err := s.RenameInstall(ctx, "old/app", "new/app"); err != nil {
+		t.Fatal(err)
+	}
+	if in, err := s.GetInstall(ctx, "new/app"); err != nil || in.Files[0] != "/a" {
+		t.Errorf("new/app: %+v %v", in, err)
+	}
+	if _, err := s.GetInstall(ctx, "old/app"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("old/app still recorded: %v", err)
+	}
+	// The target already has its own installation: nothing moves.
+	s.SaveInstall(ctx, Install{FullName: "x/app", Version: "v9", InstalledAt: time.Now()})
+	if err := s.RenameInstall(ctx, "x/app", "new/app"); err != nil {
+		t.Fatal(err)
+	}
+	if in, _ := s.GetInstall(ctx, "new/app"); in.Version != "v1" {
+		t.Errorf("existing installation overwritten: %+v", in)
+	}
+	// Nothing recorded under the old name: no-op.
+	if err := s.RenameInstall(ctx, "none/app", "other/app"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInstallsStampChanges(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	a, _ := s.InstallsStamp(ctx)
+	s.SaveInstall(ctx, Install{FullName: "a/b", Version: "v1", InstalledAt: time.Now()})
+	b, _ := s.InstallsStamp(ctx)
+	s.DeleteInstall(ctx, "a/b")
+	c, _ := s.InstallsStamp(ctx)
+	if a == b || b == c {
+		t.Errorf("stamps %q %q %q", a, b, c)
+	}
+}

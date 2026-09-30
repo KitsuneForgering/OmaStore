@@ -100,9 +100,10 @@ Long operations return a `Job` immediately and continue through notifications:
 | `job.progress` | stage change or progress (at most ~10/s per job) |
 | `job.done` | finished successfully (`result` filled in) |
 | `job.failed` | failed or was canceled (`state` says which; `error` filled in) |
-| `catalog.changed` | after an index finishes or after a successful install/update/removal; params `{}` or `{repo}` |
+| `catalog.changed` | after an index finishes, after a successful install/update/removal, or when another process (the CLI, the index timer) changed the database — checked every ~15 s; params `{}` or `{repo}` |
 
-Concurrency: **one index at a time** and **one operation per app** (installing,
+Concurrency: **one index at a time** (also across processes: an index started
+while `omastore index` runs fails with `-32002`) and **one operation per app** (installing,
 updating and uninstalling the same repo are mutually exclusive); conflicts
 return `-32002`. Different apps install in parallel.
 
@@ -129,6 +130,7 @@ up to the cancellation (e.g. repos already indexed).
 | -32007 | app is already at the latest version |
 | -32008 | checksum mismatch |
 | -32009 | canceled |
+| -32010 | uninstall incomplete: some files could not be removed; the installation stays recorded with only those files, so uninstalling again retries them |
 
 ## Running
 

@@ -63,8 +63,10 @@ func (f *fakeGH) SearchByTopic(ctx context.Context, topic string, max int) ([]st
 	return f.search, nil
 }
 
+// etagOf depends on the response body, which includes the full name (so a
+// renamed repository never answers 304 to the old ETag).
 func etagOf(r *fakeRepo) string {
-	return `"` + r.repo.PushedAt.String() + "|" + string(rune('0'+r.repo.Stars%10)) + `"`
+	return `"` + r.repo.FullName + "|" + r.repo.PushedAt.String() + "|" + string(rune('0'+r.repo.Stars%10)) + `"`
 }
 
 func (f *fakeGH) GetRepo(ctx context.Context, name, etag string) (*github.Repo, string, bool, error) {

@@ -173,6 +173,44 @@ func (s *Server) IdleFor() time.Duration {
 	return time.Since(since)
 }
 
+// Stamper is implemented by backends that can tell when the database changed,
+// including changes made by another process.
+type Stamper interface {
+	ChangeStamp(ctx context.Context) (string, error)
+}
+
+// WatchChanges polls the backend's change stamp every interval until Shutdown
+// and sends catalog.changed when something else (e.g. `omastore index` run by
+// the timer) changed the database. While a job runs, the job's own
+// notification covers it. Does nothing if the backend is not a Stamper.
+func (s *Server) WatchChanges(interval time.Duration) {
+	st, ok := s.backend.(Stamper)
+	if !ok {
+		return
+	}
+	last, _ := st.ChangeStamp(s.ctx)
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-t.C:
+		}
+		stamp, err := st.ChangeStamp(s.ctx)
+		if err != nil || stamp == last {
+			continue
+		}
+		last = stamp
+		s.mu.Lock()
+		clients := len(s.conns)
+		s.mu.Unlock()
+		if clients > 0 && s.jobs.running() == 0 {
+			s.broadcast("catalog.changed", struct{}{})
+		}
+	}
+}
+
 // Shutdown stops accepting connections, cancels the jobs, waits for them to
 // finish and closes the connections.
 func (s *Server) Shutdown() {

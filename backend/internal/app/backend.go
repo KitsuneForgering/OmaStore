@@ -41,3 +41,17 @@ func (a *App) Uninstall(ctx context.Context, fullName string) error {
 func (a *App) Image(ctx context.Context, url string) (string, error) {
 	return a.Images.Get(ctx, url)
 }
+
+// ChangeStamp changes whenever the catalog or the installations change, even
+// when another process (the CLI or the index timer) made the change.
+func (a *App) ChangeStamp(ctx context.Context) (string, error) {
+	c, err := a.Store.CatalogStamp(ctx)
+	if err != nil {
+		return "", err
+	}
+	i, err := a.Store.InstallsStamp(ctx)
+	if err != nil {
+		return "", err
+	}
+	return c + "#" + i, nil
+}

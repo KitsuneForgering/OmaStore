@@ -62,8 +62,10 @@ Two processes with separate responsibilities:
 ## Indexing pipeline
 
 1. **Discovery** — code search for `filename:omastore.toml`, topic search (`topic:omarchy`),
-   seeds and curated lists (`list:owner/repo` in `seeds.txt`). Without an app `omastore.toml`, the repository
+   seeds and curated lists (`list:owner/repo` in `seeds.txt`), **plus every repository already stored**, so one
+   that is no longer discovered is still checked. Without an app `omastore.toml`, the repository
    does not get in (and is removed, if it was there). Without a release with a Linux binary, it gets in but is not installable.
+   `--prune` is skipped when a discovery source failed (a partial list would delete healthy repos).
 2. **Cache check** — for each repository, compare `pushed_at`, the HEAD commit SHA and the latest
    release tag with what is in SQLite. **If nothing changed, do not reprocess.** That is why the
    database exists; never remove this check for convenience. As a consequence, **when changing
@@ -90,7 +92,8 @@ Rules:
 - Guard against path traversal when extracting files (zip slip) and against symlinks leaving the destination directory.
 - Escape every field coming from the repository before writing it into the `.desktop`.
 - Nothing is installed outside the user's `$HOME`; no `sudo`.
-- Uninstalling removes only the paths registered in the database.
+- Uninstalling removes only the paths registered in the database. A path that could not be removed stays
+  registered (uninstall returns `ErrIncomplete`), never silently forgotten.
 
 ## Database schema (summary)
 

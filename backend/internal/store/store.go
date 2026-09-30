@@ -471,6 +471,19 @@ func (s *Store) ListInstalls(ctx context.Context) ([]Install, error) {
 	return out, rows.Err()
 }
 
+// RenameInstall moves the installation recorded under from to to (a renamed
+// or transferred repository). It does nothing if from is not installed or if
+// to already has its own installation.
+func (s *Store) RenameInstall(ctx context.Context, from, to string) error {
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE installs SET full_name = ?
+		WHERE full_name = ? AND NOT EXISTS (SELECT 1 FROM installs WHERE full_name = ?)`,
+		to, from, to); err != nil {
+		return fmt.Errorf("rename installation %s → %s: %w", from, to, err)
+	}
+	return nil
+}
+
 // DeleteInstall removes an app's installation record.
 func (s *Store) DeleteInstall(ctx context.Context, fullName string) error {
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM installs WHERE full_name = ?`, fullName); err != nil {
@@ -563,6 +576,19 @@ func (s *Store) CatalogStamp(ctx context.Context) (string, error) {
 		`SELECT COUNT(*), MAX(indexed_at) FROM repos`).Scan(&n, &last)
 	if err != nil {
 		return "", fmt.Errorf("read catalog stamp: %w", err)
+	}
+	return fmt.Sprintf("%d|%s", n, last.String), nil
+}
+
+// InstallsStamp changes whenever an installation is recorded, updated or
+// removed, including by another process.
+func (s *Store) InstallsStamp(ctx context.Context) (string, error) {
+	var n int
+	var last sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*), MAX(installed_at) FROM installs`).Scan(&n, &last)
+	if err != nil {
+		return "", fmt.Errorf("read installs stamp: %w", err)
 	}
 	return fmt.Sprintf("%d|%s", n, last.String), nil
 }
