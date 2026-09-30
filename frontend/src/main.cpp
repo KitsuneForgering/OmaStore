@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
     QCommandLineParser args;
     args.setApplicationDescription(QStringLiteral("App store for Omarchy"));
     args.addHelpOption();
-    const QCommandLineOption openOpt(QStringLiteral("open"), QStringLiteral("Abre o app owner/repo."),
+    const QCommandLineOption openOpt(QStringLiteral("open"), QStringLiteral("Opens the app owner/repo."),
                                      QStringLiteral("repo"));
     const QCommandLineOption shotOpt(QStringLiteral("screenshot"),
                                      QStringLiteral("Saves the window to <file> and exits (development)."),
@@ -32,7 +32,10 @@ int main(int argc, char *argv[])
     const QCommandLineOption delayOpt(QStringLiteral("screenshot-delay"),
                                       QStringLiteral("Delay before the screenshot, in ms."), QStringLiteral("ms"),
                                       QStringLiteral("3000"));
-    args.addOptions({openOpt, shotOpt, delayOpt});
+    const QCommandLineOption checkOpt(QStringLiteral("check"),
+                                      QStringLiteral("Opens the page for app authors and checks owner/repo."),
+                                      QStringLiteral("repo"));
+    args.addOptions({openOpt, checkOpt, shotOpt, delayOpt});
     args.process(app);
 
     RpcClient rpc;
@@ -55,6 +58,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
     engine.rootContext()->setContextProperty(QStringLiteral("theme"), &theme);
     engine.rootContext()->setContextProperty(QStringLiteral("startupRepo"), args.value(openOpt));
+    engine.rootContext()->setContextProperty(QStringLiteral("startupCheck"), args.value(checkOpt));
 
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);

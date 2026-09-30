@@ -142,7 +142,9 @@ Interface: open **OmaStore** from the menu or run `omastore-gui`.
 | `Ctrl+R` | refresh the catalog |
 | arrows + `Enter` | navigate and open an app |
 
-`omastore-gui --open owner/repo` opens an app's page directly.
+`omastore-gui --open owner/repo` opens an app's page directly;
+`omastore-gui --check owner/repo` opens the page for app authors and checks
+that repository.
 
 Command line (same backend, no interface):
 
@@ -154,6 +156,7 @@ omastore install pch/rawmakase
 omastore update                 # updates all installed apps
 omastore update --check         # only lists what has a new version
 omastore uninstall pch/rawmakase
+omastore check pch/rawmakase    # for authors: what the store sees and what to fix
 ```
 
 ## Architecture
@@ -173,8 +176,15 @@ omastore-gui (C++/Qt Quick)  ── JSON-RPC 2.0 / Unix socket ──▶  omasto
 
 ## For app authors
 
-Want your app in the store? See [`docs/authors.md`](docs/authors.md): the
-`omarchy` topic, asset names, icon, screenshots and checksums.
+Want your app in the store? Open **Publish your app** in the sidebar (or run
+`omastore check owner/repo`): it shows how the store sees your repository, what
+blocks it and a ready-to-commit `omastore.toml` built from your release. Nothing is
+installed and your catalog is not changed.
+
+![Checking a repository in OmaStore](docs/screenshots/publish.png)
+
+The full rules (asset names, icon, screenshots, checksums) are in
+[`docs/authors.md`](docs/authors.md).
 
 ## Development
 

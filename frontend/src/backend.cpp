@@ -5,8 +5,13 @@
 #include "markdown.h"
 #include "rpcclient.h"
 
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QRegularExpression>
+
+#include <utility>
 
 namespace {
 QString repoOf(const QVariantMap &job)
@@ -31,6 +36,8 @@ Backend::Backend(RpcClient *rpc, QObject *parent)
             if (!m_detailRepo.isEmpty())
                 loadSimilar(m_detailRepo); // detail opened before connecting (e.g. --open)
             maybeIndexOnFirstRun();
+            if (!m_pendingCheck.isEmpty())
+                sendAuthorCheck(std::exchange(m_pendingCheck, {}));
         }
     });
     connect(rpc, &RpcClient::notification, this, [this](const QString &method, const QJsonValue &params) {
@@ -47,6 +54,15 @@ Backend::Backend(RpcClient *rpc, QObject *parent)
         const QString state = job.value(QStringLiteral("state")).toString();
         const QString kind = job.value(QStringLiteral("kind")).toString();
         const QVariantMap error = job.value(QStringLiteral("error")).toMap();
+        if (kind == QLatin1String("index")) {
+            const QString why = state == QLatin1String("failed")
+                ? friendlyError(error.value(QStringLiteral("code")).toInt(), error.value(QStringLiteral("message")).toString())
+                : QString();
+            if (why != m_indexError) {
+                m_indexError = why;
+                emit indexErrorChanged();
+            }
+        }
         if (state == QLatin1String("done")) {
             if (kind == QLatin1String("install"))
                 emit notice(tr("%1 installed").arg(repoOf(job)));
@@ -92,6 +108,9 @@ QString Backend::friendlyError(int code, const QString &message)
         return tr("The downloaded file does not match the published checksum. Nothing was installed.");
     case -32009:
         return tr("Operation canceled.");
+    case -32010:
+        return tr("Some files could not be removed. They stay recorded, so removing the app again will retry.\n%1")
+            .arg(message);
     }
     return message;
 }
@@ -228,7 +247,8 @@ QString Backend::readmeForDisplay(const QString &markdown) const
     return Markdown::forDisplay(markdown);
 }
 
-// On the first run the catalog is empty: index automatically.
+// On the first run the catalog is empty: index automatically. A failed
+// query is asked again on the next connection.
 void Backend::maybeIndexOnFirstRun()
 {
     if (m_checkedEmpty)
@@ -236,7 +256,87 @@ void Backend::maybeIndexOnFirstRun()
     m_checkedEmpty = true;
     m_rpc->call(QStringLiteral("catalog.list"), {{QStringLiteral("limit"), 1}, {QStringLiteral("all"), true}},
                 [this](const QJsonValue &result, const RpcError &err) {
-        if (err.ok() && result.toArray().isEmpty())
+        if (!err.ok()) {
+            m_checkedEmpty = false;
+            return;
+        }
+        if (result.toArray().isEmpty())
             refreshIndex(false);
     });
+}
+
+QString Backend::normalizeRepo(const QString &input)
+{
+    QString s = input.trimmed();
+    static const QRegularExpression prefix(QStringLiteral("^(?:https?://)?(?:www\\.)?github\\.com/"),
+                                           QRegularExpression::CaseInsensitiveOption);
+    s.remove(prefix);
+    const QStringList parts = s.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    if (parts.size() < 2)
+        return {};
+    QString repo = parts.at(1);
+    if (repo.endsWith(QLatin1String(".git")))
+        repo.chop(4);
+    static const QRegularExpression owner(QStringLiteral("^[A-Za-z0-9][A-Za-z0-9-]*$"));
+    static const QRegularExpression name(QStringLiteral("^[A-Za-z0-9._-]+$"));
+    if (!owner.match(parts.at(0)).hasMatch() || !name.match(repo).hasMatch() || repo == QLatin1String(".")
+        || repo == QLatin1String(".."))
+        return {};
+    return parts.at(0) + QLatin1Char('/') + repo;
+}
+
+void Backend::checkRepo(const QString &input, const QString &manifest)
+{
+    ++m_authorCheckSeq;
+    m_authorCheck.clear();
+    const QString repo = normalizeRepo(input);
+    if (repo.isEmpty()) {
+        m_authorCheckBusy = false;
+        m_authorCheckError = tr("Type the repository as owner/repo or paste its GitHub URL.");
+        emit authorCheckChanged();
+        return;
+    }
+    m_authorCheckBusy = true;
+    m_authorCheckError.clear();
+    emit authorCheckChanged();
+    QJsonObject params{{QStringLiteral("repo"), repo}};
+    if (!manifest.trimmed().isEmpty())
+        params.insert(QStringLiteral("manifest"), manifest);
+    if (!m_rpc->isConnected()) {
+        m_pendingCheck = params; // e.g. omastore-gui --check: sent once connected
+        return;
+    }
+    sendAuthorCheck(params);
+}
+
+void Backend::sendAuthorCheck(const QJsonObject &params)
+{
+    const int seq = m_authorCheckSeq;
+    m_rpc->call(QStringLiteral("author.check"), params, [this, seq](const QJsonValue &result, const RpcError &err) {
+        if (seq != m_authorCheckSeq)
+            return; // a newer check replaced this one
+        m_authorCheckBusy = false;
+        if (err.ok())
+            m_authorCheck = result.toObject().toVariantMap();
+        else
+            m_authorCheckError = friendlyError(err.code, err.message);
+        emit authorCheckChanged();
+    });
+}
+
+void Backend::clearAuthorCheck()
+{
+    ++m_authorCheckSeq;
+    m_pendingCheck = {};
+    m_authorCheck.clear();
+    m_authorCheckBusy = false;
+    m_authorCheckError.clear();
+    emit authorCheckChanged();
+}
+
+void Backend::copyText(const QString &text)
+{
+    if (qobject_cast<QGuiApplication *>(QCoreApplication::instance()))
+        QGuiApplication::clipboard()->setText(text);
+    emit notice(tr("Copied to the clipboard"));
 }

@@ -215,6 +215,74 @@ private slots:
         QTRY_COMPARE(position->property("text").toString(), QStringLiteral("1 / 3"));
         QCOMPARE(carousel->property("currentIndex").toInt(), 0);
     }
+
+    // A fresh store (empty catalog) invites authors in; the publish page
+    // checks a repository and shows the report with a manifest to copy.
+    void emptyCatalogLeadsAuthorsToPublish()
+    {
+        Theme theme({QStringLiteral("/nonexistent")});
+        FakeDaemon daemon;
+        daemon.handler = [](const QString &method, const QJsonObject &params) -> QJsonObject {
+            if (method == "author.check") {
+                return {{"result", QJsonObject{
+                    {"repo", params.value("repo")}, {"compatible", false}, {"name", "Demo"},
+                    {"summary", "A demo"}, {"category", "Utility"}, {"iconUrl", ""}, {"tag", "v1.0.0"},
+                    {"screenshots", QJsonArray{}},
+                    {"checks", QJsonArray{
+                        QJsonObject{{"status", "fail"}, {"item", "omastore.toml"}, {"detail", "missing"}, {"fix", "add it"}},
+                        QJsonObject{{"status", "ok"}, {"item", "Release"}, {"detail", "v1.0.0"}, {"fix", ""}}}},
+                    {"suggestedManifest", "kind = \"app\"\n"}}}};
+            }
+            if (method == "index.start")
+                return {{"result", QJsonObject{{"id", "j1"}, {"state", "running"}}}};
+            return {{"result", QJsonArray{}}};
+        };
+        QVERIFY(daemon.listen());
+        RpcClient rpc(daemon.path());
+        rpc.setAutoStart(false);
+        Backend backend(&rpc);
+
+        QQmlEngine engine;
+        engine.addImageProvider("omastore", new StubImages);
+        engine.rootContext()->setContextProperty("backend", &backend);
+        engine.rootContext()->setContextProperty("theme", &theme);
+        engine.rootContext()->setContextProperty("startupRepo", QString());
+        engine.rootContext()->setContextProperty("startupCheck", QString());
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(OMASTORE_QML_DIR "/Main.qml")));
+        QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+        std::unique_ptr<QObject> object(component.create());
+        QVERIFY2(object != nullptr, qPrintable(component.errorString()));
+        auto *window = qobject_cast<QQuickWindow *>(object.get());
+        QVERIFY(window);
+        QVERIFY(QTest::qWaitForWindowExposed(window));
+        rpc.start();
+        QTRY_VERIFY(backend.connected());
+
+        auto *invite = window->findChild<QQuickItem *>("authorInvite");
+        auto *title = window->findChild<QQuickItem *>("emptyTitle");
+        QVERIFY(invite && title);
+        // The first run starts an index; the invite shows once no job is running.
+        QTRY_COMPARE(daemon.count("index.start"), 1);
+        daemon.notify("job.done", QJsonObject{{"id", "j1"}, {"kind", "index"}, {"state", "done"}});
+        QTRY_VERIFY(invite->isVisible());
+        QCOMPARE(title->property("text").toString(), QStringLiteral("The catalog is just getting started"));
+
+        QVERIFY(QMetaObject::invokeMethod(object.get(), "openPublish", Q_ARG(QVariant, QVariant(QStringLiteral("https://github.com/demo/app")))));
+        auto *content = window->findChild<QQuickItem *>("publishContent");
+        auto *report = window->findChild<QQuickItem *>("checkReport");
+        auto *verdict = window->findChild<QQuickItem *>("checkVerdict");
+        auto *manifest = window->findChild<QQuickItem *>("suggestedManifest");
+        QVERIFY(content && report && verdict && manifest);
+        QTRY_VERIFY(content->isVisible());
+        QVERIFY(!invite->isVisible());
+        QTRY_VERIFY(report->isVisible());
+        QCOMPARE(daemon.received.last().value("params").toObject().value("repo").toString(), QStringLiteral("demo/app"));
+        QCOMPARE(verdict->property("text").toString(), QStringLiteral("demo/app is not in the store yet"));
+        QVERIFY(manifest->isVisible());
+        QCOMPARE(manifest->property("text").toString(), QStringLiteral("kind = \"app\"\n"));
+        QVERIFY(content->width() <= 880);
+        QVERIFY(content->mapToItem(window->contentItem(), QPointF{}).x() + content->width() <= window->width());
+    }
 };
 
 QTEST_MAIN(TestUi)

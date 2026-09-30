@@ -27,13 +27,20 @@ ApplicationWindow {
         linkVisited: theme.accent
     }
 
-    // "discover" or "installed"
+    // "discover", "installed" or "publish"
     property string section: "discover"
 
     function openApp(repo) {
         backend.openDetail(repo)
         if (stack.depth === 1)
             stack.push(detailPage)
+    }
+    // Publish page for app authors, optionally checking a repository.
+    function openPublish(repo) {
+        window.section = "publish"
+        window.back()
+        if (repo)
+            publishPage.start(repo)
     }
     function back() {
         if (stack.depth > 1) {
@@ -42,10 +49,15 @@ ApplicationWindow {
         }
     }
 
-    Component.onCompleted: if (startupRepo !== "") openApp(startupRepo)
+    Component.onCompleted: {
+        if (startupCheck !== "")
+            openPublish(startupCheck)
+        else if (startupRepo !== "")
+            openApp(startupRepo)
+    }
 
-    Shortcut { sequence: "/"; onActivated: catalogPage.focusSearch() }
-    Shortcut { sequences: [StandardKey.Find]; onActivated: catalogPage.focusSearch() }
+    Shortcut { sequence: "/"; enabled: window.section !== "publish"; onActivated: catalogPage.focusSearch() }
+    Shortcut { sequences: [StandardKey.Find]; enabled: window.section !== "publish"; onActivated: catalogPage.focusSearch() }
     Shortcut { sequence: "Esc"; onActivated: window.back() }
     Shortcut { sequences: [StandardKey.Refresh, "Ctrl+R"]; onActivated: backend.refreshIndex(false) }
 
@@ -71,7 +83,7 @@ ApplicationWindow {
                 id: stack
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                initialItem: catalogPage
+                initialItem: home
             }
 
             JobsBar {
@@ -80,12 +92,25 @@ ApplicationWindow {
         }
     }
 
-    CatalogPage {
-        id: catalogPage
+    // The stack's first page: the catalog or, for app authors, the publish page.
+    Item {
+        id: home
         visible: false
-        model: window.section === "installed" ? backend.installed : backend.catalog
-        installedView: window.section === "installed"
-        onAppActivated: (repo) => window.openApp(repo)
+        CatalogPage {
+            id: catalogPage
+            anchors.fill: parent
+            visible: window.section !== "publish"
+            model: window.section === "installed" ? backend.installed : backend.catalog
+            installedView: window.section === "installed"
+            onAppActivated: (repo) => window.openApp(repo)
+            onPublishRequested: window.openPublish("")
+            onDiscoverRequested: { window.section = "discover"; backend.catalog.category = "" }
+        }
+        PublishPage {
+            id: publishPage
+            anchors.fill: parent
+            visible: window.section === "publish"
+        }
     }
 
     Component {
@@ -93,6 +118,7 @@ ApplicationWindow {
         DetailPage {
             onBackRequested: window.back()
             onAppActivated: (repo) => { backend.openDetail(repo); flickToTop() }
+            onPublishRequested: (repo) => window.openPublish(repo)
         }
     }
 

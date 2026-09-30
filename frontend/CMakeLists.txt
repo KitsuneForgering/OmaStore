@@ -39,6 +39,7 @@ qt_add_qml_module(omastore-gui
         qml/JobsBar.qml
         qml/SideBar.qml
         qml/PrimaryButton.qml
+        qml/PublishPage.qml
 )
 
 target_link_libraries(omastore-gui PRIVATE omastore-core Qt6::QuickControls2)

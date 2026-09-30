@@ -6,6 +6,7 @@ Page {
     id: page
     signal backRequested()
     signal appActivated(string repo)
+    signal publishRequested(string repo)
 
     readonly property var app: backend.detail
     readonly property string repo: app.repo || ""
@@ -148,7 +149,7 @@ Page {
                     Layout.fillWidth: true
                     Layout.preferredWidth: hero.columns === 2 ? hero.width * 0.6 - 10 : hero.width
                     spacing: 10
-                    visible: page.app.screenshots && page.app.screenshots.length > 0
+                    visible: !!page.app.screenshots && page.app.screenshots.length > 0
 
                     SwipeView {
                         id: previewCarousel
@@ -345,6 +346,33 @@ Page {
                         text: qsTr("⚠ no checksum")
                         color: theme.warning
                         font.pixelSize: 11
+                    }
+                    Text {
+                        objectName: "notInstallableHint"
+                        Layout.fillWidth: true
+                        visible: !!page.app.repo && !page.app.installable && !page.installed
+                        text: qsTr("The latest release has no Linux binary for this computer.")
+                        color: theme.muted
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
+                    }
+                    Text {
+                        objectName: "authorCheckLink"
+                        Layout.fillWidth: true
+                        visible: !!page.app.repo
+                        text: page.app.installable ? qsTr("Is this your app? Check how it looks to the store →")
+                                                   : qsTr("Is this your app? See what is missing →")
+                        color: theme.accent
+                        font.pixelSize: 12
+                        font.underline: authorArea.containsMouse
+                        wrapMode: Text.Wrap
+                        MouseArea {
+                            id: authorArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: page.publishRequested(page.app.repo)
+                        }
                     }
                 }
             }

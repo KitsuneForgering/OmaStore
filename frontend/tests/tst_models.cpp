@@ -45,6 +45,9 @@ void serveCatalog(FakeDaemon &d, QJsonArray *all)
             return {{"result", app(p.value("repo").toString(), "Graphics")}};
         if (m == "jobs.list")
             return {{"result", QJsonArray{}}};
+        if (m == "author.check")
+            return {{"result", QJsonObject{{"repo", p.value("repo")}, {"compatible", p.contains("manifest")},
+                                           {"checks", QJsonArray{}}, {"suggestedManifest", ""}}}};
         if (m == "index.start" || m == "install.start")
             return {{"result", QJsonObject{{"id", "job-1"}, {"state", "running"}}}};
         return {{"error", QJsonObject{{"code", -32601}, {"message", "?"}}}};
@@ -230,8 +233,61 @@ private slots:
         QTRY_COMPARE(b.similar().size(), 1);
     }
 
+    void normalizeRepo()
+    {
+        QCOMPARE(Backend::normalizeRepo(" pch/rawmakase "), QStringLiteral("pch/rawmakase"));
+        QCOMPARE(Backend::normalizeRepo("https://github.com/pch/rawmakase"), QStringLiteral("pch/rawmakase"));
+        QCOMPARE(Backend::normalizeRepo("github.com/pch/rawmakase.git"), QStringLiteral("pch/rawmakase"));
+        QCOMPARE(Backend::normalizeRepo("https://github.com/pch/rawmakase/tree/main/src"), QStringLiteral("pch/rawmakase"));
+        QCOMPARE(Backend::normalizeRepo("rawmakase"), QString());
+        QCOMPARE(Backend::normalizeRepo("pch/.."), QString());
+        QCOMPARE(Backend::normalizeRepo("bad owner/x"), QString());
+    }
+
+    void authorCheckAndIndexError()
+    {
+        FakeDaemon d;
+        QJsonArray all{app("a/photo", "Graphics")};
+        serveCatalog(d, &all);
+        QVERIFY(d.listen());
+        RpcClient rpc(d.path());
+        rpc.setAutoStart(false);
+        Backend b(&rpc);
+        // Asked before connecting (omastore-gui --check): sent on connect.
+        b.checkRepo("acme/early");
+        QVERIFY(b.authorCheckBusy());
+        rpc.start();
+        QTRY_VERIFY(b.connected());
+        QTRY_COMPARE(b.authorCheck().value("repo").toString(), QStringLiteral("acme/early"));
+
+        b.checkRepo("nope");
+        QVERIFY(!b.authorCheckError().isEmpty());
+        QCOMPARE(d.count("author.check"), 1); // only acme/early
+
+        b.checkRepo("https://github.com/acme/photo");
+        QVERIFY(b.authorCheckBusy());
+        QTRY_VERIFY(!b.authorCheckBusy());
+        QCOMPARE(b.authorCheck().value("repo").toString(), QStringLiteral("acme/photo"));
+        QVERIFY(!b.authorCheck().value("compatible").toBool()); // no manifest sent
+        QVERIFY(b.authorCheckError().isEmpty());
+
+        b.checkRepo("acme/photo", "kind = \"app\"");
+        QTRY_VERIFY(b.authorCheck().value("compatible").toBool());
+        b.clearAuthorCheck();
+        QVERIFY(b.authorCheck().isEmpty());
+
+        // A failed index is remembered (friendly text) until one succeeds.
+        const QJsonObject failed{{"id", "j9"}, {"kind", "index"}, {"state", "failed"},
+                                 {"error", QJsonObject{{"code", -32005}, {"message", "limit"}}}};
+        d.notify("job.failed", failed);
+        QTRY_VERIFY(b.indexError().contains("gh auth login"));
+        d.notify("job.done", QJsonObject{{"id", "j10"}, {"kind", "index"}, {"state", "done"}});
+        QTRY_VERIFY(b.indexError().isEmpty());
+    }
+
     void friendlyErrors()
     {
+        QVERIFY(Backend::friendlyError(-32010, "x").contains("retry"));
         QVERIFY(Backend::friendlyError(-32005, "x").contains("gh auth login"));
         QVERIFY(Backend::friendlyError(-32008, "x").contains("checksum"));
         QCOMPARE(Backend::friendlyError(-32603, "falhou"), QStringLiteral("falhou"));

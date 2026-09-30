@@ -205,7 +205,7 @@ result), with no external service or LLM.
 - [ ] **Medium — repository identity:** `github.SplitFullName`, `rpc.repoParams.validate` and `install.splitName` accept different sets of `owner/repo` names. Use a single validation before API calls and local path operations; cover invalid and valid names in shared tests.
 - [ ] **Medium — format boundary:** `install` imports `index` only for constants, architecture classification and format preference (`backend/internal/install/{install,extract}.go`). Move these asset concepts into a neutral module used by both, without making the installer depend on the indexing pipeline.
 - [ ] **Medium — single entry point for use cases:** the CLI calls `Indexer` and `Installer` directly and changes indexer options, while the daemon uses `app.App` methods (`backend/cmd/omastore/main.go`, `backend/internal/app/backend.go`). Pass options per call and route both interfaces through the same application methods, especially before adding the Phase 15 policy.
-- [ ] **Low — first indexing:** `Backend::maybeIndexOnFirstRun` marks the query as done before the response (`frontend/src/backend.cpp`). Allow a retry after a transient error so a fresh installation is not left with an empty catalog until the user acts.
+- [x] **Low — first indexing:** `Backend::maybeIndexOnFirstRun` marks the query as done before the response (`frontend/src/backend.cpp`). Allow a retry after a transient error so a fresh installation is not left with an empty catalog until the user acts.
 - [ ] **Low — errors in the indexer tests:** replace the `stats, _ = ix.Run(...)` calls in `backend/internal/index/index_test.go` with explicit error checks; an indexing failure should not show up only as an unexpected statistic.
 
 ## Phase 15b — Apps with a manifest only + author skills
@@ -227,7 +227,22 @@ result), with no external service or LLM.
 - [x] The daemon tells the frontend (`catalog.changed`) about changes made by the CLI/timer
 - [x] Image cache pruned on daemon start (unused for 30 days, 200 MB cap); lookup without `Glob`
 - [x] Installer: one HTTP client (connection reuse) and downloads that abort after 60 s without data
-- [ ] Frontend: friendly text for `-32010` (incomplete uninstall); today the backend message is shown
+- [x] Frontend: friendly text for `-32010` (incomplete uninstall); today the backend message is shown
+
+## Phase 16 — Two audiences: people who use Omarchy and people who make apps
+
+The catalog starts empty until authors adopt `omastore.toml` (0 repositories on
+GitHub had one on 2026-09-29), so the interface must bring authors in and not
+leave users at a blank screen.
+
+- [x] REST indexing checks `omastore.toml` before HEAD and the release: a repository without one costs 2 requests instead of 4 (anonymous access: 60/h)
+- [x] `index.Check` / `author.check` / `omastore check`: per-repository report (ok/warning/fail with the fix), catalog card preview and a suggested `omastore.toml` from the release; writes nothing
+- [x] **Publish your app** page (sidebar): checker, local manifest test, three steps, links to the guide and the skills; `omastore-gui --check owner/repo`
+- [x] Empty catalog explains how apps join, shows why the last refresh failed (rate limit → `gh auth login`) and invites authors to the publish page
+- [x] App page: "Is this your app?" link to the checker; explanation when the release has no binary for this machine
+- [ ] Published catalog snapshot (built by a scheduled workflow, attested) so a first run without a GitHub token shows the catalog with ~1 request
+- [ ] Open PRs with the suggested manifest in the apps that were installable before Phase 15b; target: 5 apps from 3 authors
+- [ ] Phase 15 ordering: show provenance as a badge and a warning first; require it only once the catalog has enough apps (or as a user setting)
 
 ## Future ideas
 

@@ -84,8 +84,25 @@ Rectangle {
             }
         }
 
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 1
+            Layout.topMargin: 6
+            Layout.bottomMargin: 6
+            color: theme.selection
+        }
+        NavItem {
+            objectName: "publishNav"
+            text: qsTr("Publish your app")
+            selected: !root.detailActive && root.section === "publish"
+            onClicked: root.sectionSelected("publish")
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("For developers: get your app into OmaStore")
+        }
+
         Button {
             Layout.fillWidth: true
+            Layout.topMargin: 6
             visible: !root.detailActive
             readonly property var job: { backend.jobs.revision; return backend.jobs.indexJob() }
             enabled: backend.connected && !job.id

@@ -7,6 +7,8 @@ Page {
     required property var model
     property bool installedView: false
     signal appActivated(string repo)
+    signal publishRequested()
+    signal discoverRequested()
 
     function focusSearch() {
         search.forceActiveFocus()
@@ -93,38 +95,126 @@ Page {
 
     // Empty states.
     ColumnLayout {
+        id: empty
+        objectName: "emptyState"
         anchors.centerIn: parent
+        width: Math.min(parent.width - 64, 640)
         visible: grid.count === 0
-        spacing: 12
+        spacing: 16
         readonly property var job: { backend.jobs.revision; return backend.jobs.indexJob() }
+        readonly property bool waiting: !backend.connected || !!job.id || page.model.loading
+        // A fresh catalog: nothing indexed, no search, not the installed list.
+        readonly property bool welcome: !waiting && !page.installedView && page.model.query === ""
+                                        && page.model.category === "" && page.model.error === ""
 
         BusyIndicator {
             Layout.alignment: Qt.AlignHCenter
-            running: parent.visible && (page.model.loading || !!parent.job.id || !backend.connected)
+            visible: empty.waiting
+            running: parent.visible && empty.waiting
         }
         Text {
-            Layout.alignment: Qt.AlignHCenter
+            objectName: "emptyTitle"
+            Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
-            color: theme.muted
+            wrapMode: Text.Wrap
+            color: theme.foreground
+            font.pixelSize: 20
+            font.bold: true
             text: {
                 if (!backend.connected)
                     return qsTr("Connecting to omastored…")
-                if (parent.job.id)
-                    return qsTr("Indexing the catalog… %1/%2\n%3").arg(parent.job.done).arg(parent.job.total).arg(parent.job.message || "")
+                if (empty.job.id)
+                    return qsTr("Looking for apps on GitHub…")
+                if (page.installedView)
+                    return qsTr("No apps installed yet")
+                if (page.model.query !== "")
+                    return qsTr("Nothing found for “%1”").arg(page.model.query)
+                if (page.model.error !== "")
+                    return qsTr("The catalog could not be loaded")
+                return qsTr("The catalog is just getting started")
+            }
+        }
+        Text {
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
+            color: theme.muted
+            text: {
+                if (!backend.connected)
+                    return ""
+                if (empty.job.id)
+                    return qsTr("%1 of %2 repositories checked\n%3").arg(empty.job.done).arg(empty.job.total).arg(empty.job.message || "")
                 if (page.model.error !== "")
                     return page.model.error
                 if (page.installedView)
-                    return qsTr("No apps installed yet.")
+                    return qsTr("Apps you install from Discover show up here, with their updates.")
                 if (page.model.query !== "")
-                    return qsTr("Nothing found for “%1”.").arg(page.model.query)
-                return qsTr("No compatible apps yet.\nApps join the store when their repository publishes an omastore.toml.")
+                    return qsTr("Try another word, or a description of what the app does.")
+                return qsTr("Apps join OmaStore when their authors add an omastore.toml to their GitHub repository. New apps show up here after each catalog refresh.")
             }
         }
-        Button {
+        Text {
+            objectName: "indexError"
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
+            visible: !empty.waiting && backend.indexError !== "" && !page.installedView
+            text: qsTr("Last refresh failed: %1").arg(backend.indexError)
+            color: theme.danger
+        }
+        RowLayout {
             Layout.alignment: Qt.AlignHCenter
-            visible: backend.connected && !parent.job.id && !page.installedView && page.model.query === ""
-            text: qsTr("Refresh catalog")
-            onClicked: backend.refreshIndex(false)
+            spacing: 12
+            visible: !empty.waiting
+            PrimaryButton {
+                visible: page.installedView
+                text: qsTr("Discover apps")
+                onClicked: page.discoverRequested()
+            }
+            Button {
+                visible: !page.installedView && page.model.query === ""
+                text: qsTr("Refresh catalog")
+                onClicked: backend.refreshIndex(false)
+            }
+        }
+
+        // For people who make apps: the way in.
+        Rectangle {
+            objectName: "authorInvite"
+            Layout.fillWidth: true
+            Layout.topMargin: 8
+            visible: empty.welcome
+            implicitHeight: invite.implicitHeight + 32
+            radius: 8
+            color: theme.surface
+            border.color: theme.selection
+            RowLayout {
+                id: invite
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 16
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Do you make an app for Omarchy?")
+                        color: theme.foreground
+                        font.bold: true
+                        wrapMode: Text.Wrap
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Check your repository and get a ready-to-commit omastore.toml.")
+                        color: theme.muted
+                        wrapMode: Text.Wrap
+                    }
+                }
+                PrimaryButton {
+                    text: qsTr("Publish your app")
+                    onClicked: page.publishRequested()
+                }
+            }
         }
     }
 }
