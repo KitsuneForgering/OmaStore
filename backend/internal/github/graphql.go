@@ -158,9 +158,11 @@ type gqlResponse struct {
 	Errors []gqlError                 `json:"errors"`
 }
 
-// Snapshots fetches the state of many repositories in batches (one request
-// per 50). The map has one entry per requested name; the value is nil when
-// the repository does not exist. Without a token, returns ErrNoToken.
+// Snapshots fetches the state of many repositories in batches. The map has
+// one entry per requested name; the value is nil when the repository does not
+// exist, and the entry is absent when GraphQL reported another error for that
+// repository (the caller should use REST for it). Without a token, returns
+// ErrNoToken.
 func (c *Client) Snapshots(ctx context.Context, names []string) (map[string]*Snapshot, error) {
 	if !c.authenticated {
 		return nil, ErrNoToken
@@ -244,20 +246,27 @@ func (c *Client) snapshotBatch(ctx context.Context, names []string, out map[stri
 	}
 
 	notFound := map[string]bool{}
+	// failed are aliases with another per-repository error (e.g. FORBIDDEN for
+	// a blocked repository): they are left out of the map, so the indexer
+	// uses the REST API for them instead of failing the whole batch.
+	failed := map[string]bool{}
 	for _, e := range resp.Errors {
-		switch e.Type {
-		case "NOT_FOUND":
-			if len(e.Path) > 0 {
-				notFound[e.Path[0]] = true
-			}
-		case "RATE_LIMITED":
+		switch {
+		case e.Type == "RATE_LIMITED":
 			return &RateLimitError{Reset: time.Now().Add(time.Hour), Err: errors.New(e.Message)}
+		case e.Type == "NOT_FOUND" && len(e.Path) > 0:
+			notFound[e.Path[0]] = true
+		case len(e.Path) > 0 && strings.HasPrefix(e.Path[0], "r"):
+			failed[e.Path[0]] = true
 		default:
 			return fmt.Errorf("GraphQL error (%s): %s", e.Type, e.Message)
 		}
 	}
 	for i, n := range names {
 		alias := fmt.Sprintf("r%d", i)
+		if failed[alias] {
+			continue
+		}
 		raw, ok := resp.Data[alias]
 		if !ok || string(raw) == "null" {
 			if !ok && !notFound[alias] {

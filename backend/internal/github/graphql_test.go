@@ -228,3 +228,30 @@ func TestSearchManifests(t *testing.T) {
 		t.Errorf("no token: %v", err)
 	}
 }
+
+// An error for one repository (e.g. blocked: FORBIDDEN) must not fail the
+// whole batch: that repository is left out of the map, so the indexer falls
+// back to REST for it alone. An error without a path still fails the batch.
+func TestSnapshotsPerRepoErrorSkipsOnlyThatRepo(t *testing.T) {
+	c, _ := gqlServer(t, func(w http.ResponseWriter, req gqlReq) {
+		writeJSON(w, []byte(`{"data": {"r0": `+gqlRepoJSON+`, "r1": null},
+			"errors": [{"type": "FORBIDDEN", "path": ["r1"], "message": "Repository access blocked"}]}`))
+	})
+	got, err := c.Snapshots(context.Background(), []string{"pch/rawmakase", "blocked/repo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["pch/rawmakase"] == nil {
+		t.Error("the healthy repository is missing")
+	}
+	if s, ok := got["blocked/repo"]; ok {
+		t.Errorf("blocked repo should be left out (REST fallback), got %+v", s)
+	}
+
+	c2, _ := gqlServer(t, func(w http.ResponseWriter, req gqlReq) {
+		writeJSON(w, []byte(`{"data": null, "errors": [{"type": "INTERNAL", "message": "boom"}]}`))
+	})
+	if _, err := c2.Snapshots(context.Background(), []string{"a/b"}); err == nil {
+		t.Error("an error without a path should fail the batch")
+	}
+}
