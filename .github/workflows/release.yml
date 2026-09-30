@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write      # publish the release
+  id-token: write      # provenance attestation
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    env:
+      # The tag comes in through an environment variable, never interpolated into the script.
+      VERSION: ${{ github.ref_name }}
+    steps:
+      - name: Validate the tag
+        run: |
+          if ! printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "invalid tag: $VERSION" >&2
+            exit 1
+          fi
+
+      - name: Dependencies
+        run: pacman -Syu --noconfirm --needed base-devel git go cmake ninja qt6-base qt6-declarative qt6-svg
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Backend tests
+        run: make check
+
+      - name: Reproducible tarball
+        run: make dist VERSION="$VERSION"
+
+      - name: Frontend tests (release build)
+        run: QT_QPA_PLATFORM=offscreen ctest --test-dir frontend/build-release --output-on-failure
+
+      - name: Provenance (SLSA)
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/*.tar.gz
+
+      - name: omastore-bin PKGBUILD
+        run: |
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+          su builder -c "make pkgbuild-bin VERSION=$VERSION"
+
+      - name: Publish
+        uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+            packaging/arch-bin/PKGBUILD
+            packaging/install.sh

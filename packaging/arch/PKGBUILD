@@ -1,0 +1,57 @@
+# Maintainer: KitsuneSemCalda <arthuramagalhaes1312@gmail.com>
+pkgname=omastore-git
+_pkgname=omastore
+pkgver=r0.0000000
+pkgrel=1
+pkgdesc='App store for Omarchy: indexes GitHub apps and installs release binaries into $HOME'
+arch=('x86_64' 'aarch64')
+url='https://github.com/KitsuneSemCalda/OmaStore'
+license=('MIT')
+depends=('glibc' 'gcc-libs' 'qt6-base' 'qt6-declarative' 'qt6-svg')
+optdepends=(
+  'github-cli: authentication to avoid the GitHub rate limit (gh auth login)'
+  'desktop-file-utils: refresh the .desktop cache after installing apps'
+  'gtk-update-icon-cache: refresh the icon cache after installing apps'
+)
+makedepends=('git' 'go' 'cmake' 'ninja')
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+source=("$_pkgname::git+$url.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$_pkgname"
+  printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+prepare() {
+  cd "$_pkgname/backend"
+  export GOPATH="$srcdir/gopath"
+  go mod download -x
+}
+
+build() {
+  cd "$_pkgname"
+  export GOPATH="$srcdir/gopath"
+  export CGO_ENABLED=1
+  export CGO_CPPFLAGS="$CPPFLAGS"
+  export CGO_CFLAGS="$CFLAGS"
+  export CGO_CXXFLAGS="$CXXFLAGS"
+  export CGO_LDFLAGS="$LDFLAGS"
+  export GOFLAGS='-buildmode=pie -trimpath -mod=readonly -modcacherw'
+  make release GOLDFLAGS="-linkmode=external"
+}
+
+check() {
+  cd "$_pkgname"
+  export GOPATH="$srcdir/gopath"
+  export GOFLAGS='-mod=readonly -modcacherw'
+  # No -race (needs an extra toolchain) and no network: the tests use fixtures.
+  make test-backend TESTFLAGS='./...'
+  QT_QPA_PLATFORM=offscreen ctest --test-dir frontend/build-release --output-on-failure
+}
+
+package() {
+  cd "$_pkgname"
+  make install DESTDIR="$pkgdir" PREFIX=/usr
+}

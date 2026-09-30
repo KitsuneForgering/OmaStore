@@ -1,0 +1,3 @@
+[linux.x86_64]
+asset = "tool-{version}-x86_64-linux.tar.gz"
+exec = "tool-{version}-x86_64-linux/bin/tool-cli"

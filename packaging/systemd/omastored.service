@@ -1,0 +1,15 @@
+[Unit]
+Description=OmaStore daemon (Omarchy app indexer and installer)
+Documentation=https://github.com/KitsuneSemCalda/OmaStore
+Requires=omastored.socket
+After=omastored.socket network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/omastored
+Restart=on-failure
+# The daemon never needs privileges: everything is installed into $HOME.
+NoNewPrivileges=yes
+
+[Install]
+Also=omastored.socket

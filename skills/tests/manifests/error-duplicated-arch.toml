@@ -1,0 +1,4 @@
+[linux.x86_64]
+asset = "a"
+[linux.amd64]
+asset = "b"

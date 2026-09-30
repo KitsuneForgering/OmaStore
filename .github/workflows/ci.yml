@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - run: make check
+      # Without -race the timing changes, and it has already exposed bugs that -race hid.
+      - run: make test-backend TESTFLAGS='-count=1 ./...'
+      - run: make backend
+      - run: make test-skills
+
+  frontend:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - run: pacman -Syu --noconfirm --needed base-devel cmake ninja qt6-base qt6-declarative qt6-svg
+      - uses: actions/checkout@v7
+      - run: make test-frontend
