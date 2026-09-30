@@ -202,9 +202,9 @@ result), with no external service or LLM.
 - [x] **High — reliable uninstallation:** `install.removeRegistered` only logs failures, but `Uninstall` deletes the database record even when a file was not removed (`backend/internal/install/install.go`). Distinguish a missing file, a file changed by third parties and an I/O failure; keep the pending paths in the database to allow a retry. On update, also handle failures when cleaning up files from the previous version.
 - [ ] **Medium — stale responses in the interface:** `Backend::reloadDetail` and `loadSimilar` discard responses for another repository, but accept stale responses for the same repository (`frontend/src/backend.cpp`). Use a per-request generation id and test out-of-order responses, as `CatalogModel` already does.
 - [ ] **Medium — checksum state name:** `AssetInfo.verified` only means a digest or checksum file is available before the download (`backend/internal/rpc/methods.go`, `frontend/qml/DetailPage.qml`). Rename the field and the displayed text so they do not suggest a completed verification; keep provenance as a separate state in Phase 15 and update `docs/ipc.md`.
-- [ ] **Medium — repository identity:** `github.SplitFullName`, `rpc.repoParams.validate` and `install.splitName` accept different sets of `owner/repo` names. Use a single validation before API calls and local path operations; cover invalid and valid names in shared tests.
-- [ ] **Medium — format boundary:** `install` imports `index` only for constants, architecture classification and format preference (`backend/internal/install/{install,extract}.go`). Move these asset concepts into a neutral module used by both, without making the installer depend on the indexing pipeline.
-- [ ] **Medium — single entry point for use cases:** the CLI calls `Indexer` and `Installer` directly and changes indexer options, while the daemon uses `app.App` methods (`backend/cmd/omastore/main.go`, `backend/internal/app/backend.go`). Pass options per call and route both interfaces through the same application methods, especially before adding the Phase 15 policy.
+- [x] **Medium — repository identity:** `github.SplitFullName`, `rpc.repoParams.validate` and `install.splitName` accept different sets of `owner/repo` names. Use a single validation before API calls and local path operations; cover invalid and valid names in shared tests.
+- [x] **Medium — format boundary:** `install` imports `index` only for constants, architecture classification and format preference (`backend/internal/install/{install,extract}.go`). Move these asset concepts into a neutral module used by both, without making the installer depend on the indexing pipeline.
+- [x] **Medium — single entry point for use cases:** the CLI calls `Indexer` and `Installer` directly and changes indexer options, while the daemon uses `app.App` methods (`backend/cmd/omastore/main.go`, `backend/internal/app/backend.go`). Pass options per call and route both interfaces through the same application methods, especially before adding the Phase 15 policy.
 - [x] **Low — first indexing:** `Backend::maybeIndexOnFirstRun` marks the query as done before the response (`frontend/src/backend.cpp`). Allow a retry after a transient error so a fresh installation is not left with an empty catalog until the user acts.
 - [ ] **Low — errors in the indexer tests:** replace the `stats, _ = ix.Run(...)` calls in `backend/internal/index/index_test.go` with explicit error checks; an indexing failure should not show up only as an unexpected statistic.
 
@@ -228,6 +228,16 @@ result), with no external service or LLM.
 - [x] Image cache pruned on daemon start (unused for 30 days, 200 MB cap); lookup without `Glob`
 - [x] Installer: one HTTP client (connection reuse) and downloads that abort after 60 s without data
 - [x] Frontend: friendly text for `-32010` (incomplete uninstall); today the backend message is shown
+
+## Maintenance fixes — project analysis (2026-09-29)
+
+- [x] Anonymous indexing made no progress: repositories without a manifest were not recorded, so every run checked the same ones until the rate limit. `not_apps` skips them for 7 days (index.Version-aware) and a new repository costs one request (manifest first, on the default branch) instead of two
+- [x] Repository names are case-insensitive (`omastore show PCH/Rawmakase` failed): `COLLATE NOCASE` lookups in `GetApp`/`GetInstall`, one validation in `internal/repoid`
+- [x] Per-app install lock across processes (`flock`, like the index lock): the CLI and the daemon never change the same app at once; the second gets `-32002`
+- [x] Notifications never block: per-connection send queue; a client that stops reading is disconnected instead of stalling the indexer (which reports progress under its lock)
+- [x] `catalog.changed` and the search index follow `changed_at`, not `indexed_at`: a run that changed nothing no longer notifies the clients
+- [x] The CLI goes through `app.App` like the daemon; per-run indexer settings live in `index.Options`
+- [x] Asset rules in `internal/asset`, used by the indexer and the installer
 
 ## Phase 16 — Two audiences: people who use Omarchy and people who make apps
 

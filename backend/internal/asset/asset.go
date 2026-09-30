@@ -1,4 +1,6 @@
-package index
+// Package asset classifies release files (format, architecture, checksum) for
+// the indexer and the installer.
+package asset
 
 import (
 	"path"
@@ -24,8 +26,8 @@ const (
 	ArchARM64 = "arm64"
 )
 
-// AssetInfo is the classification of a release asset.
-type AssetInfo struct {
+// Info is the classification of a release asset.
+type Info struct {
 	Format string // "" = not installable
 	Arch   string // "" = not stated in the name
 	// Checksum is true for checksum files (.sha256, checksums.txt...).
@@ -62,23 +64,23 @@ var skipExt = []string{
 // install/helper scripts rather than the app itself.
 var scriptExt = []string{".sh", ".bash", ".ps1", ".bat", ".cmd", ".py"}
 
-// ClassifyAsset identifies an asset's format and architecture from its name.
-func ClassifyAsset(name string) AssetInfo {
+// Classify identifies an asset's format and architecture from its name.
+func Classify(name string) Info {
 	lower := strings.ToLower(name)
 	if reChecksum.MatchString(lower) {
-		return AssetInfo{Checksum: true}
+		return Info{Checksum: true}
 	}
-	var info AssetInfo
+	var info Info
 	switch {
 	case reAMD64.MatchString(lower):
 		info.Arch = ArchAMD64
 	case reARM64.MatchString(lower):
 		info.Arch = ArchARM64
 	case reOtherArch.MatchString(lower):
-		return AssetInfo{}
+		return Info{}
 	}
 	if reOtherOS.MatchString(lower) || reSource.MatchString(lower) || reBootImage.MatchString(lower) {
-		return AssetInfo{}
+		return Info{}
 	}
 	switch {
 	case strings.HasSuffix(lower, ".pkg.tar.zst"):
@@ -94,7 +96,7 @@ func ClassifyAsset(name string) AssetInfo {
 	case strings.HasSuffix(lower, ".zip"):
 		// Zips without an architecture or "linux" in the name are usually for Windows.
 		if info.Arch == "" && !strings.Contains(lower, "linux") {
-			return AssetInfo{}
+			return Info{}
 		}
 		info.Format = FormatZip
 	case strings.HasSuffix(lower, ".appimage"):
@@ -102,24 +104,24 @@ func ClassifyAsset(name string) AssetInfo {
 	default:
 		for _, e := range append(skipExt, scriptExt...) {
 			if strings.HasSuffix(lower, e) {
-				return AssetInfo{}
+				return Info{}
 			}
 		}
 		// Plain binary: no recognized extension. We require a hint that it is
 		// for Linux (architecture or "linux" in the name) to avoid picking up junk.
 		ext := path.Ext(lower)
 		if ext != "" && !isVersionLike(ext) && !strings.Contains(ext, "linux") && info.Arch == "" {
-			return AssetInfo{}
+			return Info{}
 		}
 		if info.Arch == "" && !strings.Contains(lower, "linux") {
-			return AssetInfo{}
+			return Info{}
 		}
 		info.Format = FormatBinary
 	}
 	return info
 }
 
-// FormatOf identifies the format from the extension only, without ClassifyAsset's
+// FormatOf identifies the format from the extension only, without Classify's
 // OS and architecture rules (used for assets declared in the manifest).
 // Returns "" for formats the installer does not support.
 func FormatOf(name string) string {
@@ -155,7 +157,7 @@ func isVersionLike(ext string) bool { return reVersionExt.MatchString(ext) }
 
 // Installable reports whether the asset can be installed on this architecture.
 // An asset without an architecture in its name is accepted as a generic candidate.
-func (a AssetInfo) Installable(goarch string) bool {
+func (a Info) Installable(goarch string) bool {
 	return a.Format != "" && (a.Arch == "" || a.Arch == goarch)
 }
 

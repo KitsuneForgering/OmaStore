@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/asset"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/github"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/gitrepo"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/manifest"
@@ -93,6 +94,12 @@ type Options struct {
 	// Progress, if set, receives the progress when a stage starts and after
 	// each repository. The calls are serialized; the callback must not block.
 	Progress func(Progress)
+
+	// Per-run settings; the zero value keeps the Indexer's.
+	Prune            bool          // see Indexer.Prune
+	MaxSearch        int           // see Indexer.MaxSearch
+	NoBatch          bool          // see Indexer.NoBatch
+	DiscoveryTimeout time.Duration // see Indexer.DiscoveryTimeout
 }
 
 // Progress is an indexing run's progress.
@@ -319,11 +326,29 @@ func RepoLinks(text, self string, max int) []string {
 // longer discovered (manifest removed, repository deleted or renamed) is still
 // checked, and leaves the catalog through the normal rules.
 func (ix *Indexer) Run(ctx context.Context, opts Options) (Stats, error) {
+	// The per-run settings go into a copy: the Indexer is shared by the
+	// daemon's calls and never changes after it is created.
+	run := *ix
+	run.Prune = run.Prune || opts.Prune
+	run.NoBatch = run.NoBatch || opts.NoBatch
+	if opts.MaxSearch > 0 {
+		run.MaxSearch = opts.MaxSearch
+	}
+	if opts.DiscoveryTimeout > 0 {
+		run.DiscoveryTimeout = opts.DiscoveryTimeout
+	}
+	return run.run(ctx, opts)
+}
+
+func (ix *Indexer) run(ctx context.Context, opts Options) (Stats, error) {
 	unlock, err := ix.lock()
 	if err != nil {
 		return Stats{}, err
 	}
 	defer unlock()
+	if err := ix.Store.PruneNotApps(ctx, ix.now().Add(-notAppKeep)); err != nil {
+		ix.log().Warn("could not prune not-app marks", "err", err)
+	}
 
 	names := opts.Only
 	// discovered is what this run found; canPrune is false when discovery did
@@ -400,7 +425,8 @@ func (ix *Indexer) Run(ctx context.Context, opts Options) (Stats, error) {
 				snap, batched := snaps[name]
 				// With a local manifest, reprocess: the published one did not change, but the one that counts did.
 				canonical := name
-				out, err := ix.process(ctx, name, opts.Force || len(opts.ManifestOverride) > 0, snap, batched, opts.ManifestOverride, &canonical)
+				out, err := ix.process(ctx, name, opts.Force || len(opts.ManifestOverride) > 0, len(opts.Only) > 0,
+					snap, batched, opts.ManifestOverride, &canonical)
 				mu.Lock()
 				if canonical != name {
 					resolved = append(resolved, canonical)
@@ -507,7 +533,9 @@ func (ix *Indexer) prune(ctx context.Context, found []string) (int, error) {
 // state fetched in batch through GraphQL (nil = repository does not exist);
 // without a batch, the state comes from the REST API with conditional requests.
 // canonical receives the name the API answered (renamed/transferred repo).
-func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *github.Snapshot, batched bool,
+// explicit means the run named the repository (opts.Only): it is checked even
+// if it was recently found without a manifest.
+func (ix *Indexer) process(ctx context.Context, name string, force, explicit bool, snap *github.Snapshot, batched bool,
 	overrides map[string]string, canonical *string) (outcome, error) {
 	prev, err := ix.Store.RepoState(ctx, name)
 	known := err == nil
@@ -525,6 +553,35 @@ func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *g
 	// The indexer rules changed since last time: reprocess everything.
 	if known && prev.IndexVersion < Version {
 		force = true
+	}
+
+	// A new repository found recently without an app manifest is skipped
+	// without any request: adding the manifest is a push, and the mark
+	// expires after notAppTTL.
+	if !known && !force && !explicit {
+		skip, err := ix.Store.NotAppFresh(ctx, name, Version, now.Add(-notAppTTL))
+		if err != nil {
+			return 0, err
+		}
+		if skip {
+			return outNotApp, nil
+		}
+	}
+
+	// Without the batch, a new repository is checked for a manifest (on the
+	// default branch) before anything else: most discovered repositories have
+	// none, so they cost one request, and anonymous access allows 60 per hour.
+	var (
+		m   *manifest.Manifest
+		why string
+	)
+	if !batched && !known {
+		if m, why, err = ix.manifestFor(ctx, name, "", snap, false, overrides); err != nil {
+			return 0, err
+		}
+		if m == nil {
+			return ix.notApp(ctx, name, why, now)
+		}
 	}
 
 	var (
@@ -595,23 +652,6 @@ func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *g
 		}
 	}
 
-	// Without the batch, a new repository is checked for a manifest before
-	// spending requests on HEAD and the release: most discovered repositories
-	// have none, and anonymous access only allows 60 requests per hour.
-	var (
-		m   *manifest.Manifest
-		why string
-	)
-	if !batched && !known {
-		if m, why, err = ix.manifestFor(ctx, name, repo.DefaultBranch, snap, false, overrides); err != nil {
-			return 0, err
-		}
-		if m == nil {
-			ix.log().Debug("out of the catalog", "repo", name, "reason", why)
-			return outNotApp, nil
-		}
-	}
-
 	var (
 		sha string
 		rel *github.Release
@@ -649,11 +689,14 @@ func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *g
 		}
 	}
 	if m == nil {
-		ix.log().Debug("out of the catalog", "repo", name, "reason", why)
 		if known {
-			return outRemoved, ix.Store.RemoveRepo(ctx, name)
+			if err := ix.Store.RemoveRepo(ctx, name); err != nil {
+				return 0, err
+			}
+			_, err := ix.notApp(ctx, name, why, now)
+			return outRemoved, err
 		}
-		return outNotApp, nil
+		return ix.notApp(ctx, name, why, now)
 	}
 
 	app, assets, err := ix.extract(ctx, repo, sha, rel, m)
@@ -681,6 +724,26 @@ func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *g
 	}
 	ix.log().Debug("indexed", "repo", name, "tag", r.LatestTag, "installable", app.Installable)
 	return outUpdated, nil
+}
+
+// Not-app marks: how long a repository without an app manifest is skipped,
+// and how long an unused mark is kept.
+const (
+	notAppTTL  = 7 * 24 * time.Hour
+	notAppKeep = 30 * 24 * time.Hour
+)
+
+// unreadablePrefix starts the reason of a manifest that could not be read
+// (a transient error): no mark is recorded for it.
+const unreadablePrefix = "unreadable manifest: "
+
+// notApp records that name has no app manifest, so the next runs skip it.
+func (ix *Indexer) notApp(ctx context.Context, name, why string, now time.Time) (outcome, error) {
+	ix.log().Debug("out of the catalog", "repo", name, "reason", why)
+	if strings.HasPrefix(why, unreadablePrefix) {
+		return outNotApp, nil
+	}
+	return outNotApp, ix.Store.MarkNotApp(ctx, name, Version, now)
 }
 
 func tagOf(rel *github.Release) string {
@@ -789,7 +852,7 @@ func (ix *Indexer) extract(ctx context.Context, repo *github.Repo, sha string, r
 
 	assets := releaseAssets(rel, m)
 	for _, a := range assets {
-		if (AssetInfo{Format: a.Format, Arch: a.Arch}).Installable(ix.goarch()) {
+		if (asset.Info{Format: a.Format, Arch: a.Arch}).Installable(ix.goarch()) {
 			app.Installable = true
 			break
 		}
@@ -817,7 +880,7 @@ func (ix *Indexer) manifestFor(ctx context.Context, name, sha string, snap *gith
 			if errors.As(err, &rl) {
 				return nil, "", err
 			}
-			return nil, "unreadable manifest: " + err.Error(), nil
+			return nil, unreadablePrefix + err.Error(), nil
 		}
 		if !found {
 			return nil, "no " + manifest.FileName, nil
@@ -890,7 +953,7 @@ func releaseAssets(rel *github.Release, m *manifest.Manifest) []store.Asset {
 				continue
 			}
 			for _, a := range rel.Assets {
-				if manifest.MatchAsset(t.Asset, rel.Tag, a.Name) && !ClassifyAsset(a.Name).Checksum {
+				if manifest.MatchAsset(t.Asset, rel.Tag, a.Name) && !asset.Classify(a.Name).Checksum {
 					declared[a.Name] = arch
 				}
 			}
@@ -899,7 +962,7 @@ func releaseAssets(rel *github.Release, m *manifest.Manifest) []store.Asset {
 	sums := map[string]string{} // asset name → URL of its .sha256
 	general := ""               // checksums.txt / SHA256SUMS
 	for _, a := range rel.Assets {
-		if !ClassifyAsset(a.Name).Checksum {
+		if !asset.Classify(a.Name).Checksum {
 			continue
 		}
 		lower := strings.ToLower(a.Name)
@@ -911,9 +974,9 @@ func releaseAssets(rel *github.Release, m *manifest.Manifest) []store.Asset {
 	}
 	var out []store.Asset
 	for _, a := range rel.Assets {
-		info := ClassifyAsset(a.Name)
+		info := asset.Classify(a.Name)
 		if arch, ok := declared[a.Name]; ok {
-			info = AssetInfo{Format: FormatOf(a.Name), Arch: arch}
+			info = asset.Info{Format: asset.FormatOf(a.Name), Arch: arch}
 		}
 		if info.Format == "" {
 			continue

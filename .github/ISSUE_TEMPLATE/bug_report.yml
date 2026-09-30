@@ -1,0 +1,49 @@
+name: Bug report
+description: Something in OmaStore does not work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. omastore index
+        2. omastore install owner/repo
+        3. ...
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output or logs
+      description: Command output, or the daemon log with `OMASTORE_LOG=debug` (`journalctl --user -u omastored` when it runs under systemd).
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: OmaStore version
+      description: The release tag, or the commit if you built from source.
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How OmaStore was installed
+      options:
+        - install.sh
+        - omastore-bin (PKGBUILD from the release)
+        - omastore-git / built from source
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System
+      description: Architecture and Omarchy version, if relevant.
+      placeholder: x86_64, Omarchy 3.x

@@ -88,7 +88,7 @@ func toError(err error) *Error {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		code = CodeNotFound
-	case errors.Is(err, ErrBusy), errors.Is(err, index.ErrBusy):
+	case errors.Is(err, ErrBusy), errors.Is(err, index.ErrBusy), errors.Is(err, install.ErrBusy):
 		code = CodeBusy
 	case errors.Is(err, install.ErrConflict):
 		code = CodeConflict

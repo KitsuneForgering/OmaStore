@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/asset"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/github"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
 )
@@ -208,11 +209,11 @@ func TestIndexNewRepo(t *testing.T) {
 	}
 	for _, a := range d.Assets {
 		switch a.Arch {
-		case ArchAMD64:
+		case asset.ArchAMD64:
 			if a.ChecksumURL != "https://dl/x86.sha256" || a.Digest != "sha256:aa" {
 				t.Errorf("amd64: %+v", a)
 			}
-		case ArchARM64:
+		case asset.ArchARM64:
 			if a.ChecksumURL != "https://dl/checksums.txt" {
 				t.Errorf("arm64: %+v", a)
 			}
@@ -427,7 +428,7 @@ exec = "bin/omaphoto"
 	var found bool
 	for _, a := range d.Assets {
 		if a.Name == "omaphoto-portable-1.0.0" {
-			found = a.Arch == ArchAMD64 && a.Format == FormatBinary
+			found = a.Arch == asset.ArchAMD64 && a.Format == asset.FormatBinary
 		}
 	}
 	if !found {
@@ -540,7 +541,7 @@ func TestBatchedIndexingSkipsRESTMetadata(t *testing.T) {
 		t.Errorf("stats = %+v", stats)
 	}
 	if gh.n("snapshots") != 1 || gh.n("repo") != 0 || gh.n("head") != 0 || gh.n("release") != 0 {
-		t.Errorf("chamadas = %v", gh.calls)
+		t.Errorf("calls = %v", gh.calls)
 	}
 	d, _ := st.GetApp(ctx, "acme/omaphoto")
 	if !d.Installable || d.Repo.HeadSHA != "sha1" || d.Repo.LatestTag != "v1.0.0" {
@@ -742,7 +743,31 @@ func TestRESTChecksManifestFirst(t *testing.T) {
 	if stats.NotApps != 1 {
 		t.Errorf("stats = %+v", stats)
 	}
-	if gh.n("head") != 0 || gh.n("release") != 0 || gh.n("repo") != 1 || gh.n("file") != 1 {
+	// One request: the manifest, on the default branch.
+	if gh.n("head") != 0 || gh.n("release") != 0 || gh.n("repo") != 0 || gh.n("file") != 1 {
 		t.Errorf("calls = %v", gh.calls)
+	}
+
+	// The next run skips the repository without requests...
+	stats, err = ix.Run(context.Background(), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.NotApps != 1 || gh.n("file") != 1 || gh.n("repo") != 0 {
+		t.Errorf("second run: stats = %+v, calls = %v", stats, gh.calls)
+	}
+	// ...unless it is asked for by name, or the mark expired.
+	if _, err := ix.Run(context.Background(), Options{Only: []string{"acme/nothing"}}); err != nil {
+		t.Fatal(err)
+	}
+	if gh.n("file") != 2 {
+		t.Errorf("explicit run: calls = %v", gh.calls)
+	}
+	ix.Now = func() time.Time { return t0.Add(24*time.Hour + notAppTTL + time.Hour) }
+	if _, err := ix.Run(context.Background(), Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if gh.n("file") != 3 {
+		t.Errorf("expired mark: calls = %v", gh.calls)
 	}
 }

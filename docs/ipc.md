@@ -117,10 +117,20 @@ Long operations return a `Job` immediately and continue through notifications:
 | `job.failed` | failed or was canceled (`state` says which; `error` filled in) |
 | `catalog.changed` | while an index runs (when it wrote repos, at most every ~2 s) and after it finishes, after a successful install/update/removal, or when another process (the CLI, the index timer) changed the database — checked every ~15 s; params `{}` or `{repo}` |
 
-Concurrency: **one index at a time** (also across processes: an index started
-while `omastore index` runs fails with `-32002`) and **one operation per app** (installing,
-updating and uninstalling the same repo are mutually exclusive); conflicts
-return `-32002`. Different apps install in parallel.
+Concurrency: **one index at a time** and **one operation per app** (installing,
+updating and uninstalling the same repo are mutually exclusive). Both hold
+across processes too: an index started while `omastore index` runs, or an
+install while `omastore install` changes the same app, fails with `-32002`.
+Different apps install in parallel.
+
+Repository names (`repo` params) follow GitHub's rules (`owner` with letters,
+digits and hyphens; `repo` starting with a letter or digit) and are compared
+ignoring case, as on GitHub: `PCH/Rawmakase` finds `pch/rawmakase`. Results
+always carry the stored spelling.
+
+Notifications never wait for a client: each connection has a queue of about a
+thousand messages, and a client that stops reading until it fills up is
+disconnected (it can reconnect and reload with `jobs.list`).
 
 `catalog.changed` always arrives **after** the matching `job.done`/`job.failed`,
 so when it receives it the frontend can reload the list knowing that the job

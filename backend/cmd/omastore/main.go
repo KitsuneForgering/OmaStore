@@ -29,7 +29,8 @@ import (
 const usage = `usage: omastore [-v] <command> [options]
 
 commands:
-  index [--force] [--prune] [--max N] [--no-batch] [--manifest file] [owner/repo...]
+  index [--force] [--prune] [--max N] [--no-batch] [--search-timeout D] [--manifest file]
+        [owner/repo...]
                                     index the catalog (or only the given repos)
   list [--category C] [--query Q] [--installed] [--all] [--json]
   categories                        list the categories
@@ -153,10 +154,6 @@ func cmdIndex(ctx context.Context, a *app.App, args []string, stdout, stderr io.
 	if err := parse(fs, args); err != nil {
 		return err
 	}
-	a.Indexer.Prune = *prune
-	a.Indexer.MaxSearch = *maxSearch
-	a.Indexer.NoBatch = *noBatch
-	a.Indexer.DiscoveryTimeout = *searchTimeout
 	var overrides map[string]string
 	if *manifestFile != "" {
 		if fs.NArg() != 1 {
@@ -172,10 +169,14 @@ func cmdIndex(ctx context.Context, a *app.App, args []string, stdout, stderr io.
 	reqBefore := a.GitHub.Requests()
 	tty := isTerminal(stderr)
 	start := time.Now()
-	stats, err := a.Indexer.Run(ctx, index.Options{
+	stats, err := a.Index(ctx, index.Options{
 		Force:            *force,
 		Only:             fs.Args(),
 		ManifestOverride: overrides,
+		Prune:            *prune,
+		MaxSearch:        *maxSearch,
+		NoBatch:          *noBatch,
+		DiscoveryTimeout: *searchTimeout,
 		Progress: func(p index.Progress) {
 			if !tty {
 				return
@@ -272,7 +273,7 @@ func cmdList(ctx context.Context, a *app.App, args []string, stdout, stderr io.W
 	fs := newFlags("list", stderr)
 	var f store.Filter
 	fs.StringVar(&f.Category, "category", "", "filter by category")
-	fs.StringVar(&f.Query, "query", "", "busca por texto")
+	fs.StringVar(&f.Query, "query", "", "search text")
 	fs.BoolVar(&f.InstalledOnly, "installed", false, "installed only")
 	fs.BoolVar(&f.All, "all", false, "include apps without an installable binary")
 	asJSON := fs.Bool("json", false, "JSON output")
@@ -405,7 +406,7 @@ func cmdLintManifest(args []string, stdout, stderr io.Writer) error {
 }
 
 func cmdCategories(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
-	cats, err := a.Store.Categories(ctx)
+	cats, err := a.Categories(ctx)
 	if err != nil {
 		return err
 	}
@@ -425,7 +426,7 @@ func cmdShow(ctx context.Context, a *app.App, args []string, stdout, stderr io.W
 		fmt.Fprintln(stderr, "usage: omastore show [--json] owner/repo")
 		return errUsage
 	}
-	d, err := a.Store.GetApp(ctx, fs.Arg(0))
+	d, err := a.GetApp(ctx, fs.Arg(0))
 	if err != nil {
 		return fmt.Errorf("%s: %w", fs.Arg(0), err)
 	}
@@ -536,7 +537,7 @@ func cmdInstall(ctx context.Context, a *app.App, args []string, stdout, stderr i
 	}
 	var errs []error
 	for _, name := range args {
-		inst, err := a.Installer.Install(ctx, name, progressPrinter(stderr, name))
+		inst, err := a.Install(ctx, name, progressPrinter(stderr, name))
 		endLine(stderr)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
@@ -553,7 +554,7 @@ func cmdUninstall(ctx context.Context, a *app.App, args []string, stdout, stderr
 	}
 	var errs []error
 	for _, name := range args {
-		if err := a.Installer.Uninstall(ctx, name); err != nil {
+		if err := a.Uninstall(ctx, name); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
 			continue
 		}
@@ -581,7 +582,7 @@ func cmdUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io
 	}
 	names := fs.Args()
 	if len(names) == 0 {
-		insts, err := a.Store.ListInstalls(ctx)
+		insts, err := a.ListInstalls(ctx)
 		if err != nil {
 			return err
 		}
@@ -595,7 +596,7 @@ func cmdUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io
 	}
 	var errs []error
 	for _, name := range names {
-		inst, err := a.Installer.Update(ctx, name, progressPrinter(stderr, name))
+		inst, err := a.Update(ctx, name, progressPrinter(stderr, name))
 		switch {
 		case errors.Is(err, install.ErrUpToDate):
 			fmt.Fprintf(stdout, "%s is already at %s\n", name, inst.Version)
@@ -613,7 +614,7 @@ func cmdUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io
 // checkUpdates lists the installed apps with a newer version in the catalog and,
 // with notify, shows a desktop notification (once per set of versions).
 func checkUpdates(ctx context.Context, a *app.App, notifyUser bool, stdout io.Writer) error {
-	items, err := a.Store.ListApps(ctx, store.Filter{InstalledOnly: true, All: true})
+	items, err := a.ListApps(ctx, store.Filter{InstalledOnly: true, All: true})
 	if err != nil {
 		return err
 	}

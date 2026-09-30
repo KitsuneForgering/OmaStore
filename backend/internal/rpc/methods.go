@@ -9,6 +9,7 @@ import (
 
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/index"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/install"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/repoid"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
 )
 
@@ -212,9 +213,8 @@ func decode(raw json.RawMessage, dst any) error {
 }
 
 func (p repoParams) validate() error {
-	owner, repo, ok := strings.Cut(p.Repo, "/")
-	if !ok || owner == "" || repo == "" || strings.Contains(repo, "/") {
-		return errInvalidParams(`"repo" must be "owner/repo", got %q`, p.Repo)
+	if err := repoid.Validate(p.Repo); err != nil {
+		return errInvalidParams(`"repo" must be a valid "owner/repo", got %q`, p.Repo)
 	}
 	return nil
 }

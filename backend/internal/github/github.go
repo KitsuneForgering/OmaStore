@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/repoid"
 	gh "github.com/google/go-github/v92/github"
 )
 
@@ -154,11 +155,7 @@ func isNotModified(err error) bool { return statusOf(err) == http.StatusNotModif
 
 // SplitFullName splits "owner/repo".
 func SplitFullName(fullName string) (owner, repo string, err error) {
-	owner, repo, ok := strings.Cut(fullName, "/")
-	if !ok || owner == "" || repo == "" || strings.Contains(repo, "/") {
-		return "", "", fmt.Errorf("invalid repository name: %q", fullName)
-	}
-	return owner, repo, nil
+	return repoid.Split(fullName)
 }
 
 // SearchByTopic returns the repositories (owner/repo) with the topic, sorted

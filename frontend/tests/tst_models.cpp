@@ -290,7 +290,7 @@ private slots:
         QVERIFY(Backend::friendlyError(-32010, "x").contains("retry"));
         QVERIFY(Backend::friendlyError(-32005, "x").contains("gh auth login"));
         QVERIFY(Backend::friendlyError(-32008, "x").contains("checksum"));
-        QCOMPARE(Backend::friendlyError(-32603, "falhou"), QStringLiteral("falhou"));
+        QCOMPARE(Backend::friendlyError(-32603, "failed"), QStringLiteral("failed"));
     }
 };
 

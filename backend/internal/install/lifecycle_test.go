@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/index"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/asset"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
 )
 
@@ -29,7 +29,7 @@ func TestUninstallKeepsPendingFiles(t *testing.T) {
 	skipIfRoot(t)
 	e := newEnv(t)
 	ctx := context.Background()
-	e.publish(t, "v1", appTarGz(t, "1"), index.FormatTarGz, true)
+	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
 	inst, err := e.in.Install(ctx, "acme/omaphoto", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +70,7 @@ func TestUpdateRecordsLeftoverOldVersion(t *testing.T) {
 	skipIfRoot(t)
 	e := newEnv(t)
 	ctx := context.Background()
-	e.publish(t, "v1", appTarGz(t, "1"), index.FormatTarGz, true)
+	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
 	if _, err := e.in.Install(ctx, "acme/omaphoto", nil); err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestUpdateRecordsLeftoverOldVersion(t *testing.T) {
 	os.Chmod(locked, 0o555)
 	defer os.Chmod(locked, 0o755)
 
-	e.publish(t, "v2", appTarGz(t, "2"), index.FormatTarGz, true)
+	e.publish(t, "v2", appTarGz(t, "2"), asset.FormatTarGz, true)
 	inst, err := e.in.Update(ctx, "acme/omaphoto", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -107,14 +107,14 @@ func TestUpdateRecordsLeftoverOldVersion(t *testing.T) {
 func TestUpdateAfterRepositoryRename(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	e.publish(t, "v1", appTarGz(t, "1"), index.FormatTarGz, true)
+	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
 	first, err := e.in.Install(ctx, "acme/omaphoto", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// The repository moves to neo/omaphoto and publishes v2.
-	e.publish(t, "v2", appTarGz(t, "2"), index.FormatTarGz, true)
+	e.publish(t, "v2", appTarGz(t, "2"), asset.FormatTarGz, true)
 	d, err := e.st.GetApp(ctx, "acme/omaphoto")
 	if err != nil {
 		t.Fatal(err)
