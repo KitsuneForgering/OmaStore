@@ -726,3 +726,23 @@ func TestPruneKeepsRenamedRepo(t *testing.T) {
 		}
 	}
 }
+
+// Without a token, a new repository without omastore.toml costs two requests
+// (metadata and manifest): HEAD and the release are never fetched.
+func TestRESTChecksManifestFirst(t *testing.T) {
+	ix, gh, _ := setup(t)
+	gh.repos = map[string]*fakeRepo{"acme/nothing": {
+		repo: github.Repo{FullName: "acme/nothing", Name: "nothing", PushedAt: t0}, sha: "n1", noToml: true,
+		release: libRepo().release}}
+	gh.search = []string{"acme/nothing"}
+	stats, err := ix.Run(context.Background(), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.NotApps != 1 {
+		t.Errorf("stats = %+v", stats)
+	}
+	if gh.n("head") != 0 || gh.n("release") != 0 || gh.n("repo") != 1 || gh.n("file") != 1 {
+		t.Errorf("calls = %v", gh.calls)
+	}
+}

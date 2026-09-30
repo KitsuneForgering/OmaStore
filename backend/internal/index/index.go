@@ -540,6 +540,23 @@ func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *g
 		}
 	}
 
+	// Without the batch, a new repository is checked for a manifest before
+	// spending requests on HEAD and the release: most discovered repositories
+	// have none, and anonymous access only allows 60 requests per hour.
+	var (
+		m   *manifest.Manifest
+		why string
+	)
+	if !batched && !known {
+		if m, why, err = ix.manifestFor(ctx, name, repo.DefaultBranch, snap, false, overrides); err != nil {
+			return 0, err
+		}
+		if m == nil {
+			ix.log().Debug("out of the catalog", "repo", name, "reason", why)
+			return outNotApp, nil
+		}
+	}
+
 	var (
 		sha string
 		rel *github.Release
@@ -571,9 +588,10 @@ func (ix *Indexer) process(ctx context.Context, name string, force bool, snap *g
 
 	// Only repositories with an omastore.toml declaring an app (no plugins or
 	// themes) enter the catalog. The presence of the file is the author's opt-in.
-	m, why, err := ix.manifestFor(ctx, name, sha, snap, batched, overrides)
-	if err != nil {
-		return 0, err
+	if m == nil {
+		if m, why, err = ix.manifestFor(ctx, name, sha, snap, batched, overrides); err != nil {
+			return 0, err
+		}
 	}
 	if m == nil {
 		ix.log().Debug("out of the catalog", "repo", name, "reason", why)
