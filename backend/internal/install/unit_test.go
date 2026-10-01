@@ -56,6 +56,41 @@ func TestDesktopEscaping(t *testing.T) {
 	}
 }
 
+func TestDesktopOmarchyTUI(t *testing.T) {
+	d := Desktop{
+		Name: "App", Exec: "/home/u/.local/share/omastore/apps/acme__app/v1/app", Terminal: true,
+		TUILauncher: "/usr/bin/omarchy-launch-or-focus-tui", AppID: "omastore.acme.app", Repo: "acme/app",
+	}
+	out := d.Render()
+	for _, want := range []string{
+		"Exec=/usr/bin/omarchy-launch-or-focus-tui --app-id=omastore.acme.app /home/u/.local/share/omastore/apps/acme__app/v1/app\n",
+		"TryExec=/home/u/.local/share/omastore/apps/acme__app/v1/app\n",
+		"Terminal=false\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	// A graphical app, no launcher, or anything the launcher's eval would
+	// reinterpret keeps the plain entry.
+	for name, change := range map[string]func(*Desktop){
+		"graphical":   func(d *Desktop) { d.Terminal = false },
+		"no launcher": func(d *Desktop) { d.TUILauncher = "" },
+		"space":       func(d *Desktop) { d.Exec = "/home/my user/app" },
+		"dollar":      func(d *Desktop) { d.Exec = "/home/u/$(reboot)/app" },
+		"quote":       func(d *Desktop) { d.Exec = "/home/u'/app" },
+		"app id":      func(d *Desktop) { d.AppID = "a;b" },
+	} {
+		dd := d
+		change(&dd)
+		if out := dd.Render(); strings.Contains(out, "omarchy-launch") {
+			t.Errorf("%s: launched through Omarchy:\n%s", name, out)
+		} else if dd.Terminal && !strings.Contains(out, "Terminal=true\n") {
+			t.Errorf("%s: lost Terminal=true:\n%s", name, out)
+		}
+	}
+}
+
 func TestParseChecksums(t *testing.T) {
 	h1, h2 := strings.Repeat("a", 64), strings.Repeat("B", 64)
 	data := "# comment\n" + h1 + "  app.tar.gz\n" + h2 + " *./dist/other.zip\nSHA256 (bsd.tgz) = " + h1 + "\n"

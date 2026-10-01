@@ -25,7 +25,7 @@ Page {
         page.runCheck()
     }
     function runCheck() {
-        backend.checkRepo(repoField.text, testManifest.checked ? manifestArea.text : "")
+        backend.checkRepo(repoField.text, manifestArea.text, testManifest.checked)
     }
     function statusColor(s) {
         return s === "ok" ? theme.success : s === "warning" ? theme.warning : theme.danger
@@ -229,8 +229,9 @@ Page {
                         spacing: 2
                         Heading {
                             objectName: "checkVerdict"
-                            text: page.report.compatible ? qsTr("%1 is ready for OmaStore").arg(page.report.repo)
-                                                         : qsTr("%1 is not in the store yet").arg(page.report.repo)
+                            text: !page.report.compatible ? qsTr("%1 is not in the store yet").arg(page.report.repo)
+                                : page.report.localManifest ? qsTr("%1 works with this omastore.toml").arg(page.report.repo)
+                                : qsTr("%1 is ready for OmaStore").arg(page.report.repo)
                         }
                         Text {
                             Layout.fillWidth: true
@@ -239,8 +240,10 @@ Page {
                             text: {
                                 const fails = page.count("fail"), warns = page.count("warning")
                                 const w = warns === 1 ? qsTr("1 warning") : qsTr("%1 warnings").arg(warns)
+                                if (page.report.compatible && page.report.localManifest)
+                                    return qsTr("Tested with your local file, not the published one: push it to the root of the default branch, then check again without it (%1 to polish).").arg(w)
                                 if (page.report.compatible)
-                                    return qsTr("It appears after the next catalog refresh (%1 to polish).").arg(w)
+                                    return qsTr("%1 to polish.").arg(w)
                                 const f = fails === 1 ? qsTr("1 problem to fix") : qsTr("%1 problems to fix").arg(fails)
                                 return f + ", " + w + "."
                             }
@@ -338,6 +341,23 @@ Page {
                     }
                 }
 
+                // What "ready" does and does not promise.
+                ColumnLayout {
+                    objectName: "readyNotes"
+                    Layout.fillWidth: true
+                    visible: !!page.report.compatible && !page.report.localManifest
+                    spacing: 8
+                    Heading { text: qsTr("When it shows up") }
+                    Body {
+                        text: qsTr("It is listed once a catalog refresh finds it. Users without a GitHub token only find repositories with the omarchy topic, and a repository checked before it had an omastore.toml can wait up to 7 days to be looked at again. To see it in your own catalog now:")
+                    }
+                    Code { text: "omastore index " + page.report.repo }
+                    Body {
+                        text: qsTr("This check reads your release; it does not download, install or run the app. Install it once to make sure the executable, its libraries and the menu entry work:")
+                    }
+                    Code { text: "omastore install " + page.report.repo }
+                }
+
                 ColumnLayout {
                     Layout.fillWidth: true
                     visible: !!page.report.suggestedManifest
@@ -384,7 +404,7 @@ Page {
                     Layout.preferredWidth: 1
                     Heading { text: qsTr("3. Check and share") }
                     Body {
-                        text: qsTr("Use the checker above or the command line. Once it passes, the app shows up for everyone on the next catalog refresh.")
+                        text: qsTr("Use the checker above or the command line, then install it once. Catalogs pick it up on their next refresh; the omarchy topic makes it visible to users without a GitHub token too.")
                     }
                     Code { text: "omastore check owner/repo" }
                 }
@@ -392,7 +412,7 @@ Page {
 
             Body {
                 objectName: "claudeHint"
-                text: qsTr("Using Claude Code? OmaStore's installer adds its author skills to ~/.claude/skills: open your app's project and ask “get this app ready for OmaStore”.")
+                text: qsTr("Using Claude Code? OmaStore's install.sh adds its author skills to ~/.claude/skills; with the pacman package, copy them from /usr/share/omastore/skills. Then open your app's project and ask “get this app ready for OmaStore”.")
             }
             Flow {
                 Layout.fillWidth: true

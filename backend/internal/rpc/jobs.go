@@ -14,6 +14,7 @@ const (
 	KindIndex   = "index"
 	KindInstall = "install"
 	KindUpdate  = "update"
+	KindDeps    = "deps" // system dependencies through pacman
 )
 
 // Job states.
@@ -74,8 +75,8 @@ func newJobs(notify func(string, any)) *jobs {
 // jobKey identifies jobs that cannot run at the same time: one index at a
 // time and one operation per app.
 func jobKey(kind, repo string) string {
-	if kind == KindIndex {
-		return KindIndex
+	if kind == KindIndex || kind == KindDeps {
+		return kind // pacman has a single, system-wide lock
 	}
 	return "app:" + strings.ToLower(repo)
 }

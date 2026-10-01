@@ -65,6 +65,23 @@ root="$XDG_DATA_HOME/omastore/self"
 [ ! -e "$HOME/.claude" ]
 grep -F 'share/skills' "$fixture/no-claude-log" >/dev/null
 
+# Without Omarchy (~/.config/omarchy), no post-update hook.
+hook="$HOME/.config/omarchy/hooks/post-update.d/omastore.hook"
+[ ! -e "$HOME/.config/omarchy" ]
+# With it, the hook runs the CLI by its absolute path; --no-hooks skips it.
+mkdir -p "$HOME/.config/omarchy"
+sh "$project/packaging/install.sh" --no-hooks > /dev/null
+[ ! -e "$hook" ]
+sh "$project/packaging/install.sh" > /dev/null
+grep -qxF '# omastore-managed' "$hook"
+grep -F "cli='$HOME/.local/bin/omastore'" "$hook" >/dev/null
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" > "$FIXTURE/hook-args"\n' > "$root/1.2.3/bin/omastore"
+bash "$hook"
+[ "$(cat "$fixture/hook-args")" = 'update --check --notify' ]
+# A failing CLI never fails omarchy-update.
+printf '#!/bin/sh\nexit 3\n' > "$root/1.2.3/bin/omastore"
+bash "$hook"
+
 # With Claude Code, they are copied into ~/.claude/skills, except where the
 # user already has a skill of the same name.
 claude_skills="$HOME/.claude/skills"
@@ -143,7 +160,7 @@ fi
 for p in "$HOME/.local/bin/omastored" "$HOME/.local/bin/omastore-gui" \
   "$XDG_DATA_HOME/applications/omastore.desktop" \
   "$XDG_DATA_HOME/icons/hicolor/scalable/apps/omastore.svg" "$root" "$XDG_CACHE_HOME/omastore" \
-  "$claude_skills/omastore-check"; do
+  "$claude_skills/omastore-check" "$hook"; do
   if [ -e "$p" ] || [ -L "$p" ]; then
     echo "Left behind by --uninstall: $p" >&2
     exit 1
@@ -154,3 +171,13 @@ done
 [ -d "$XDG_DATA_HOME/omastore/apps/acme__app" ]
 [ "$(cat "$claude_skills/omastore-release/SKILL.md")" = mine ]
 sh "$project/packaging/install.sh" --uninstall > /dev/null
+
+# A hook of the same name that the user wrote is never replaced or removed.
+rm "$HOME/.local/bin/omastore" # the user's file from the test above
+mkdir -p "${hook%/*}"
+printf 'mine\n' > "$hook"
+sh "$project/packaging/install.sh" > /dev/null 2> "$fixture/user-hook-log"
+[ "$(cat "$hook")" = mine ]
+grep -F 'Omarchy hook left as is' "$fixture/user-hook-log" >/dev/null
+sh "$project/packaging/install.sh" --uninstall > /dev/null
+[ "$(cat "$hook")" = mine ]

@@ -7,8 +7,9 @@
   **who** built the binary.
 - Some apps publish signatures (`checksums.txt.sig` in RAWmakase), which
   we currently just discard.
-- Installing software from any repository with the `omarchy` topic is, in
-  practice, trusting anyone who sets that topic.
+- Since Phase 15b a repository gets in only with an `omastore.toml`, but that
+  file is an opt-in, not a check: installing an app is, in practice, trusting
+  anyone who commits that file and publishes a release.
 
 ## Proposal
 
@@ -17,20 +18,19 @@
    API (`GET /repos/{owner}/{repo}/attestations/{digest}`). Show
    "built by workflow X of the repository itself" when available, and
    allow requiring it in a setting ("only apps with provenance").
+   *Accepted:* Phase 15 and 16 of `TODO.md` (badge first, required later).
 2. **minisign/cosign signatures:** verify when the repository publishes
-   the public key (or in the manifest, see [manifest.md](manifest.md)).
+   the public key (or in `omastore.toml`, see [`../authors.md`](../authors.md)).
 3. **Reputation signals in the catalog:** repository age, number of
    releases, whether the release is newer than the last commit, and whether the asset was
    uploaded by a CI bot (`uploader.type`). Show them, without blocking.
-4. **Explicit warning without checksum:** today we only log a warning.
-   The frontend should ask for confirmation.
-5. **Optional sandbox:** generate the `.desktop` `Exec` through `bwrap` with a
+4. **Optional sandbox:** generate the `.desktop` `Exec` through `bwrap` with a
    restricted profile (without the whole `$HOME`), for those who want it. It cannot be the default,
    because many apps need `$HOME`.
 
 ## Cost
 
-Attestations and the no-checksum warning are small; minisign is medium (simple
+Attestations are small; minisign is medium (simple
 format, there is a Go implementation); the sandbox is large (per-app profiles).
 
 ## Risks

@@ -14,6 +14,7 @@ import (
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/index"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/install"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/sysdeps"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/xdg"
 )
 
@@ -25,6 +26,7 @@ type App struct {
 	Indexer   *index.Indexer
 	Installer *install.Installer
 	Images    *imagecache.Cache
+	Pacman    *sysdeps.Pacman
 	Log       *slog.Logger
 
 	search searchCache
@@ -74,6 +76,7 @@ func Open(ctx context.Context, log *slog.Logger) (*App, error) {
 		},
 		Installer: inst,
 		Images:    &imagecache.Cache{Dir: paths.ImagesDir},
+		Pacman:    &sysdeps.Pacman{},
 		Log:       log,
 	}, nil
 }

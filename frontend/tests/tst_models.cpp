@@ -6,6 +6,8 @@
 
 #include <QJsonArray>
 #include <QSignalSpy>
+#include <QUrl>
+#include <QUrlQuery>
 #include <QtTest>
 
 namespace {
@@ -48,7 +50,19 @@ void serveCatalog(FakeDaemon &d, QJsonArray *all)
         if (m == "author.check")
             return {{"result", QJsonObject{{"repo", p.value("repo")}, {"compatible", p.contains("manifest")},
                                            {"checks", QJsonArray{}}, {"suggestedManifest", ""}}}};
-        if (m == "index.start" || m == "install.start")
+        if (m == "star.get") {
+            if (p.value("repo").toString() == "a/anon")
+                return {{"error", QJsonObject{{"code", -32011}, {"message", "token required"}}}};
+            return {{"result", QJsonObject{{"starred", false}}}};
+        }
+        if (m == "star.set")
+            return {{"result", QJsonObject{{"starred", p.value("starred")}, {"stars", 4}}}};
+        if (m == "deps.check")
+            return {{"result", QJsonObject{{"repo", p.value("repo")}, {"source", "PKGBUILD"}, {"pacman", true},
+                                           {"deps", QJsonArray{QJsonObject{{"name", "ffmpeg"}, {"status", "available"},
+                                                                           {"package", "extra/ffmpeg"}}}},
+                                           {"missing", 1}, {"toInstall", QJsonArray{"extra/ffmpeg"}}}}};
+        if (m == "index.start" || m == "install.start" || m == "deps.install")
             return {{"result", QJsonObject{{"id", "job-1"}, {"state", "running"}}}};
         return {{"error", QJsonObject{{"code", -32601}, {"message", "?"}}}};
     };
@@ -271,8 +285,15 @@ private slots:
         QVERIFY(!b.authorCheck().value("compatible").toBool()); // no manifest sent
         QVERIFY(b.authorCheckError().isEmpty());
 
-        b.checkRepo("acme/photo", "kind = \"app\"");
+        b.checkRepo("acme/photo", "kind = \"app\"", true);
         QTRY_VERIFY(b.authorCheck().value("compatible").toBool());
+        // An empty local manifest is sent as such, not as "use the published one".
+        b.checkRepo("acme/photo", "  ", true);
+        QTRY_VERIFY(!b.authorCheckBusy());
+        QCOMPARE(d.received.last().value("params").toObject().value("manifest"), QJsonValue("  "));
+        b.checkRepo("acme/photo", "ignored", false);
+        QTRY_VERIFY(!b.authorCheckBusy());
+        QVERIFY(!d.received.last().value("params").toObject().contains("manifest"));
         b.clearAuthorCheck();
         QVERIFY(b.authorCheck().isEmpty());
 
@@ -285,8 +306,89 @@ private slots:
         QTRY_VERIFY(b.indexError().isEmpty());
     }
 
+    void starAndDeps()
+    {
+        FakeDaemon d;
+        QJsonArray all{app("a/photo", "Graphics"), app("a/anon", "Graphics")};
+        serveCatalog(d, &all);
+        QVERIFY(d.listen());
+        RpcClient rpc(d.path());
+        rpc.setAutoStart(false);
+        Backend b(&rpc);
+        rpc.start();
+        QTRY_VERIFY(b.connected());
+
+        b.openDetail("a/photo");
+        QTRY_COMPARE(b.starState(), int(Backend::StarNo));
+        QTRY_COMPARE(b.deps().value("toInstall").toStringList(), QStringList{"extra/ffmpeg"});
+        b.toggleStar();
+        QVERIFY(b.starBusy());
+        QTRY_COMPARE(b.starState(), int(Backend::StarYes));
+        QVERIFY(!b.starBusy());
+        QCOMPARE(b.detail().value("stars").toInt(), 4);
+        QCOMPARE(d.received.last().value("params").toObject().value("starred").toBool(), true);
+
+        // Without a token the star stays unknown and explains why.
+        b.openDetail("a/anon");
+        QCOMPARE(b.starState(), int(Backend::StarUnknown));
+        QTRY_VERIFY(b.starHint().contains("gh auth login"));
+        const int sets = d.count("star.set");
+        b.toggleStar();
+        QCOMPARE(d.count("star.set"), sets);
+
+        // A finished install with missing dependencies offers to install them.
+        QSignalSpy suggested(&b, &Backend::depsSuggested);
+        d.notify("job.done", QJsonObject{{"id", "j1"}, {"kind", "install"}, {"repo", "a/photo"}, {"state", "done"}});
+        QTRY_COMPARE(suggested.count(), 1);
+        QCOMPARE(suggested.first().at(0).toString(), QStringLiteral("a/photo"));
+        QCOMPARE(suggested.first().at(1).toStringList(), QStringList{"extra/ffmpeg"});
+        b.installDeps("a/photo");
+        QTRY_COMPARE(d.count("deps.install"), 1);
+
+        // A failed install of the open app is kept until one succeeds.
+        QVERIFY(b.detailFailure().isEmpty());
+        d.notify("job.failed", QJsonObject{{"id", "j2"}, {"kind", "install"}, {"repo", "A/Anon"}, {"state", "failed"},
+                                           {"error", QJsonObject{{"code", -32603}, {"message", "checksum mismatch"}}}});
+        QTRY_COMPARE(b.detailFailure(), QStringLiteral("checksum mismatch"));
+        QVERIFY(QUrlQuery(QUrl(b.issueUrl())).queryItemValue("body", QUrl::FullyDecoded).contains("checksum mismatch"));
+        b.openDetail("a/photo");
+        QVERIFY(b.detailFailure().isEmpty());
+        b.openDetail("a/anon");
+        QCOMPARE(b.detailFailure(), QStringLiteral("checksum mismatch"));
+        d.notify("job.done", QJsonObject{{"id", "j3"}, {"kind", "install"}, {"repo", "a/anon"}, {"state", "done"}});
+        QTRY_VERIFY(b.detailFailure().isEmpty());
+    }
+
+    void issueUrl()
+    {
+        const QVariantMap detail{
+            {"repo", "acme/app"}, {"latestVersion", "v2"},
+            {"install", QVariantMap{{"version", "v1"}, {"execPath", "/home/u/.local/bin/app"}}},
+            {"assets", QVariantList{QVariantMap{{"name", "app-x86_64.tar.gz"}, {"arch", "amd64"}},
+                                    QVariantMap{{"name", "app-aarch64.tar.gz"}, {"arch", "arm64"}},
+                                    QVariantMap{{"name", "app.AppImage"}, {"arch", ""}}}}};
+        const QUrl url(Backend::buildIssueUrl(detail, "open /home/u/.cache/x: `denied`\nnext", "x86_64", "0.1.0", "/home/u"));
+        QCOMPARE(url.scheme() + "://" + url.host() + url.path(), QStringLiteral("https://github.com/acme/app/issues/new"));
+        const QUrlQuery q(url);
+        QCOMPARE(q.queryItemValue("title", QUrl::FullyDecoded), QStringLiteral("Installing through OmaStore fails"));
+        const QString body = q.queryItemValue("body", QUrl::FullyDecoded);
+        for (const char *want : {"App version: v1 (latest release: v2)", "Architecture: x86_64",
+                                 "Release files for it: app-x86_64.tar.gz, app.AppImage", "OmaStore: 0.1.0",
+                                 "Error: `open ~/.cache/x: 'denied' next`"})
+            QVERIFY2(body.contains(QLatin1String(want)), qPrintable(body));
+        // Only allow-listed fields: never the local paths of the installation.
+        QVERIFY(!body.contains("/home/u"));
+        QVERIFY(!body.contains("aarch64"));
+
+        const QUrlQuery plain(QUrl(Backend::buildIssueUrl(QVariantMap{{"repo", "acme/app"}}, {}, "arm64", {}, "/home/u")));
+        QVERIFY(!plain.hasQueryItem("title"));
+        QVERIFY(plain.queryItemValue("body", QUrl::FullyDecoded).contains("not installed"));
+        QVERIFY(Backend::buildIssueUrl(QVariantMap{{"repo", "../x"}}, {}, "x86_64", {}, {}).isEmpty());
+    }
+
     void friendlyErrors()
     {
+        QVERIFY(Backend::friendlyError(-32012, "x").contains("password"));
         QVERIFY(Backend::friendlyError(-32010, "x").contains("retry"));
         QVERIFY(Backend::friendlyError(-32005, "x").contains("gh auth login"));
         QVERIFY(Backend::friendlyError(-32008, "x").contains("checksum"));

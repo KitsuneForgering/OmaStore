@@ -1,6 +1,7 @@
 {
   "tag_name": "v1.2.0",
   "name": "OmaPhoto 1.2.0",
+  "body": "## Changes\r\n\r\n- Faster export",
   "published_at": "2026-09-19T08:00:00Z",
   "prerelease": false,
   "assets": [

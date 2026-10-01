@@ -35,7 +35,9 @@ Rectangle {
                 elide: Text.ElideRight
                 color: theme.foreground
                 text: kind === "index" ? qsTr("Indexing catalog") + (message ? " — " + message : "")
-                      : (kind === "update" ? qsTr("Updating %1") : qsTr("Installing %1")).arg(repo)
+                      : (kind === "update" ? qsTr("Updating %1")
+                         : kind === "deps" ? qsTr("Installing dependencies of %1")
+                         : qsTr("Installing %1")).arg(repo)
             }
             ProgressBar {
                 Layout.fillWidth: true

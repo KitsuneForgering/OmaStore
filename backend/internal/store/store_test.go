@@ -387,3 +387,29 @@ func TestNotApps(t *testing.T) {
 		t.Error("old mark not pruned")
 	}
 }
+
+func TestAddStarsAndSysDeps(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
+	if err := s.SaveIndexed(ctx, Repo{FullName: "acme/Photo", Stars: 1, IndexedAt: now},
+		App{Name: "Photo", SysDeps: `{"deps":[{"spec":"gtk4"}]}`}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := s.AddStars(ctx, "ACME/photo", 1, now.Add(time.Minute)); err != nil || n != 2 {
+		t.Errorf("star: %d %v", n, err)
+	}
+	for range 3 {
+		s.AddStars(ctx, "acme/Photo", -1, now.Add(time.Minute))
+	}
+	d, err := s.GetApp(ctx, "acme/Photo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Repo.Stars != 0 || d.SysDeps != `{"deps":[{"spec":"gtk4"}]}` {
+		t.Errorf("stars = %d, sysdeps = %q", d.Repo.Stars, d.SysDeps)
+	}
+	if _, err := s.AddStars(ctx, "acme/none", 1, now); !errors.Is(err, ErrNotFound) {
+		t.Errorf("missing repo: %v", err)
+	}
+}

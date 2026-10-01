@@ -42,6 +42,10 @@ Missing `params` is the same as `{}`. Unknown fields in `params` are an error
 | `jobs.cancel` | `{job}` | `{}` |
 | `image.get` | `{url}` | `{path}`: local path of the cached image |
 | `author.check` | `{repo, manifest?}` | `CheckReport` (synchronous; writes nothing to the catalog) |
+| `star.get` | `{repo}` | `{starred}`: whether the GitHub user starred the repository |
+| `star.set` | `{repo, starred}` | `{starred, stars}`: stars/unstars it on GitHub; `stars` is the catalog's new count |
+| `deps.check` | `{repo}` | `DepsReport` (synchronous; runs no privileged command) |
+| `deps.install` | `{repo}` | `Job` (kind `deps`) |
 
 `repo` is always `"owner/repo"`. `all: true` includes apps without an installable binary.
 
@@ -63,6 +67,22 @@ what the store understands and what to fix. `manifest`, when present (even
 `""`), is used instead of the published `omastore.toml`, to test a file before
 pushing it. Costs a handful of GitHub requests; a rate limit is error `-32005`.
 
+`star.get`/`star.set` act as the owner of the daemon's GitHub token
+(`GITHUB_TOKEN`, `GH_TOKEN` or `gh auth token`); without one, or with a token
+that may not star (fine-grained without the "Starring" permission), they fail
+with `-32011`. `star.set` sends `catalog.changed` with `{repo}`.
+
+`deps.check` reads the system dependencies stored at index time from the app's
+`PKGBUILD` or `.SRCINFO` (`depends`, `optdepends` and their `_<arch>` variants;
+the file is parsed, never run) and asks pacman which are missing (`pacman -T`)
+and which repository package satisfies each (`pacman -Sddp`). `deps.install`
+installs every missing one that a pacman repository has, depends and
+optdepends alike, with `pkexec pacman -S --needed`: polkit asks for the
+administrator password. Dependencies found in no repository (AUR) are never
+installed; they stay `unavailable` in the report, and when nothing else was
+missing the job fails with `-32014`. Only one `deps` job runs at a time
+(pacman has a single lock).
+
 ### Types
 
 ```ts
@@ -76,6 +96,8 @@ AppItem {
 }
 AppDetail extends AppItem {
   readme: string                   // markdown with URLs already absolute
+  releaseNotes: string             // markdown body of the latest release, as the
+                                   // author wrote it (up to ~16 KiB); "" if none
   description, license, htmlUrl: string
   topics: string[]
   pushedAt?, indexedAt?: string    // RFC 3339
@@ -84,14 +106,15 @@ AppDetail extends AppItem {
 }
 InstallInfo { repo, version, installedAt, execPath, desktopPath }
 Job {
-  id, kind: "index" | "install" | "update", repo?: string
+  id, kind: "index" | "install" | "update" | "deps", repo?: string
   state: "running" | "done" | "failed" | "canceled"
   stage?: string                   // install: download, verify, extract, integrate, done
                                    // index: discover (total 0), state, index
+                                   // deps: authorize (waiting for polkit and pacman)
   done, total: number              // bytes (install) or repos (index)
   message?: string                 // index: current repo
   error?: {code, message}
-  result?: InstallInfo | IndexResult
+  result?: InstallInfo | IndexResult | DepsReport
   started, finished?: string
 }
 IndexResult { updated, refreshed, unchanged, removed, skipped, notApps, failed }
@@ -102,6 +125,19 @@ CheckReport {
   screenshots: string[]
   checks: {status: "ok" | "warning" | "fail", item, detail, fix: string}[]
   suggestedManifest: string        // starter omastore.toml; "" when assets are declared
+}
+DepsReport {
+  repo, source: string             // source: PKGBUILD/.SRCINFO path in the repository ("" if none)
+  pacman: boolean                  // false: no pacman here, every status is "unknown"
+  deps: {
+    name, spec: string             // spec keeps the version constraint ("qt6-base>=6.5")
+    reason: string                 // optdepends description
+    optional: boolean
+    status: "installed" | "available" | "unavailable" | "unknown"
+    package: string                // "repo/name" pacman would install, when available
+  }[]
+  missing: number                  // available + unavailable
+  toInstall: string[]              // what deps.install installs
 }
 ```
 
@@ -156,6 +192,10 @@ up to the cancellation (e.g. repos already indexed).
 | -32008 | checksum mismatch |
 | -32009 | canceled |
 | -32010 | uninstall incomplete: some files could not be removed; the installation stays recorded with only those files, so uninstalling again retries them |
+| -32011 | GitHub authentication required (no token, or the token may not star) |
+| -32012 | administrator authentication canceled or refused (polkit) |
+| -32013 | unsupported system: no pacman |
+| -32014 | missing dependencies are in no pacman repository (e.g. AUR) |
 
 ## Running
 

@@ -54,6 +54,8 @@ ApplicationWindow {
             openPublish(startupCheck)
         else if (startupRepo !== "")
             openApp(startupRepo)
+        else if (["discover", "installed", "publish"].indexOf(startupPage) >= 0)
+            window.section = startupPage
     }
 
     Shortcut { sequence: "/"; enabled: window.section !== "publish"; onActivated: catalogPage.focusSearch() }
@@ -157,9 +159,34 @@ ApplicationWindow {
         MouseArea { anchors.fill: parent; onClicked: toast.opacity = 0 }
     }
 
+    // After an install: offer the missing system dependencies (PKGBUILD
+    // depends and optdepends). The daemon asks for the password via polkit.
+    Dialog {
+        id: depsDialog
+        objectName: "depsDialog"
+        property string repo: ""
+        property var packages: []
+        anchors.centerIn: parent
+        modal: true
+        title: qsTr("Install system dependencies?")
+        standardButtons: Dialog.Yes | Dialog.No
+        Label {
+            width: 400
+            wrapMode: Text.Wrap
+            text: qsTr("%1 needs these packages to work fully:\n\n%2\n\nThey are installed with pacman, which asks for the administrator password.")
+                  .arg(depsDialog.repo).arg(depsDialog.packages.join(", "))
+        }
+        onAccepted: backend.installDeps(repo)
+    }
+
     Connections {
         target: backend
         function onErrorOccurred(message) { toast.show(message, true) }
         function onNotice(message) { toast.show(message, false) }
+        function onDepsSuggested(repo, packages) {
+            depsDialog.repo = repo
+            depsDialog.packages = packages
+            depsDialog.open()
+        }
     }
 }

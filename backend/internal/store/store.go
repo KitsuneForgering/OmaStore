@@ -64,6 +64,7 @@ type Repo struct {
 	PushedAt      time.Time
 	HeadSHA       string
 	LatestTag     string
+	ReleaseNotes  string // body of the latest release (markdown)
 	ETag          string
 	IndexedAt     time.Time
 	IndexVersion  int
@@ -94,6 +95,9 @@ type App struct {
 	Installable bool
 	// Manifest is the validated omastore.toml, as JSON (see internal/manifest).
 	Manifest string
+	// SysDeps are the system dependencies declared in a PKGBUILD/.SRCINFO,
+	// as JSON (see internal/sysdeps); "" if there are none.
+	SysDeps string
 }
 
 // Asset is a release file.
@@ -228,17 +232,18 @@ func (s *Store) SaveIndexed(ctx context.Context, r Repo, a App, assets []Asset) 
 
 	if _, err = tx.ExecContext(ctx, `
 		INSERT INTO repos (full_name, description, stars, topics, license, html_url, default_branch,
-		                   pushed_at, head_sha, latest_tag, etag, indexed_at, index_version, changed_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		                   pushed_at, head_sha, latest_tag, release_notes, etag, indexed_at, index_version, changed_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(full_name) DO UPDATE SET
 			description = excluded.description, stars = excluded.stars, topics = excluded.topics,
 			license = excluded.license, html_url = excluded.html_url,
 			default_branch = excluded.default_branch, pushed_at = excluded.pushed_at,
-			head_sha = excluded.head_sha, latest_tag = excluded.latest_tag, etag = excluded.etag,
+			head_sha = excluded.head_sha, latest_tag = excluded.latest_tag,
+			release_notes = excluded.release_notes, etag = excluded.etag,
 			indexed_at = excluded.indexed_at, index_version = excluded.index_version,
 			changed_at = excluded.changed_at`,
 		r.FullName, r.Description, r.Stars, encodeList(r.Topics), r.License, r.HTMLURL, r.DefaultBranch,
-		nullTime(r.PushedAt), r.HeadSHA, r.LatestTag, r.ETag, nullTime(r.IndexedAt), r.IndexVersion,
+		nullTime(r.PushedAt), r.HeadSHA, r.LatestTag, r.ReleaseNotes, r.ETag, nullTime(r.IndexedAt), r.IndexVersion,
 		nullTime(r.IndexedAt)); err != nil {
 		return fmt.Errorf("save repo %s: %w", r.FullName, err)
 	}
@@ -247,15 +252,16 @@ func (s *Store) SaveIndexed(ctx context.Context, r Repo, a App, assets []Asset) 
 	}
 
 	if _, err = tx.ExecContext(ctx, `
-		INSERT INTO apps (full_name, name, summary, readme, icon_url, screenshots, category, score, installable, manifest)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO apps (full_name, name, summary, readme, icon_url, screenshots, category, score, installable,
+		                  manifest, sysdeps)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(full_name) DO UPDATE SET
 			name = excluded.name, summary = excluded.summary, readme = excluded.readme,
 			icon_url = excluded.icon_url, screenshots = excluded.screenshots,
 			category = excluded.category, score = excluded.score, installable = excluded.installable,
-			manifest = excluded.manifest`,
+			manifest = excluded.manifest, sysdeps = excluded.sysdeps`,
 		a.FullName, a.Name, a.Summary, a.Readme, a.IconURL, encodeList(a.Screenshots),
-		a.Category, a.Score, a.Installable, a.Manifest); err != nil {
+		a.Category, a.Score, a.Installable, a.Manifest, a.SysDeps); err != nil {
 		return fmt.Errorf("save app %s: %w", a.FullName, err)
 	}
 
@@ -369,14 +375,14 @@ func (s *Store) GetApp(ctx context.Context, fullName string) (*AppDetail, error)
 	var pushed, indexed sql.NullTime
 	err := s.db.QueryRowContext(ctx, `
 		SELECT a.full_name, a.name, a.summary, a.readme, a.icon_url, a.screenshots, a.category, a.score,
-		       a.installable, a.manifest, r.description, r.stars, r.topics, r.license, r.html_url, r.default_branch,
-		       r.pushed_at, r.head_sha, r.latest_tag, r.etag, r.indexed_at
+		       a.installable, a.manifest, a.sysdeps, r.description, r.stars, r.topics, r.license, r.html_url, r.default_branch,
+		       r.pushed_at, r.head_sha, r.latest_tag, r.release_notes, r.etag, r.indexed_at
 		FROM repos r JOIN apps a ON a.full_name = r.full_name
 		WHERE r.full_name = ? COLLATE NOCASE
 		ORDER BY r.full_name = ? DESC LIMIT 1`, fullName, fullName).
 		Scan(&d.FullName, &d.Name, &d.Summary, &d.Readme, &d.IconURL, &shots, &d.Category, &d.Score,
-			&d.Installable, &d.Manifest, &d.Repo.Description, &d.Repo.Stars, &topics, &d.Repo.License, &d.Repo.HTMLURL,
-			&d.Repo.DefaultBranch, &pushed, &d.Repo.HeadSHA, &d.Repo.LatestTag, &d.Repo.ETag, &indexed)
+			&d.Installable, &d.Manifest, &d.SysDeps, &d.Repo.Description, &d.Repo.Stars, &topics, &d.Repo.License, &d.Repo.HTMLURL,
+			&d.Repo.DefaultBranch, &pushed, &d.Repo.HeadSHA, &d.Repo.LatestTag, &d.Repo.ReleaseNotes, &d.Repo.ETag, &indexed)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -523,6 +529,22 @@ func (s *Store) UpdateStats(ctx context.Context, fullName string, stars int, des
 		return fmt.Errorf("update score of %s: %w", fullName, err)
 	}
 	return tx.Commit()
+}
+
+// AddStars changes a repository's star count by delta (the user starred or
+// unstarred it); the next index brings the exact count from GitHub.
+func (s *Store) AddStars(ctx context.Context, fullName string, delta int, at time.Time) (int, error) {
+	var stars int
+	err := s.db.QueryRowContext(ctx, `
+		UPDATE repos SET stars = MAX(stars + ?, 0), changed_at = ?
+		WHERE full_name = ? COLLATE NOCASE RETURNING stars`, delta, at.UTC(), fullName).Scan(&stars)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	if err != nil {
+		return 0, fmt.Errorf("update stars of %s: %w", fullName, err)
+	}
+	return stars, nil
 }
 
 // RepoNames lists every repository in the catalog.

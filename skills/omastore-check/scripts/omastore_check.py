@@ -26,6 +26,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.request
 
 PASS, WARN, FAIL = "ok", "warning", "fail"
 ICON = {PASS: "✅", WARN: "⚠️", FAIL: "❌"}
@@ -75,17 +77,50 @@ def isolated_env(home: str, token: str) -> dict:
     return env
 
 
-def fetch_manifest(repo: str, dest: str) -> bool:
-    """Downloads the published omastore.toml; False if it does not exist."""
-    if not shutil.which("gh"):
-        return False
-    p = run(["gh", "api", f"repos/{repo}/contents/omastore.toml",
-             "-H", "Accept: application/vnd.github.raw"], timeout=30)
-    if p.returncode != 0:
-        return False
-    with open(dest, "w") as f:
-        f.write(p.stdout)
-    return True
+# Outcomes of fetch_manifest.
+FOUND, MISSING, NO_REPO, DENIED, UNREACHABLE = "found", "missing", "no-repo", "denied", "unreachable"
+
+
+def github_get(path: str, token: str, raw: bool = False) -> tuple[int, bytes, str]:
+    """GET on the GitHub API: (HTTP status, body, error). Status 0 means the
+    request did not complete (network, DNS, timeout)."""
+    req = urllib.request.Request("https://api.github.com/" + path, headers={
+        "Accept": "application/vnd.github.raw" if raw else "application/vnd.github+json",
+        "User-Agent": "omastore-check",
+    })
+    if token:
+        req.add_header("Authorization", "Bearer " + token)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.status, resp.read(), ""
+    except urllib.error.HTTPError as e:
+        return e.code, e.read(), e.reason
+    except (urllib.error.URLError, OSError) as e:
+        return 0, b"", str(getattr(e, "reason", e))
+
+
+def fetch_manifest(repo: str, dest: str, token: str) -> tuple[str, str]:
+    """Downloads the published omastore.toml into dest. Returns (outcome,
+    detail): a missing file is told apart from a missing repository, a
+    refused request (bad token, rate limit) and a network failure."""
+    status, body, err = github_get(f"repos/{repo}/contents/omastore.toml", token, raw=True)
+    if status == 200:
+        with open(dest, "wb") as f:
+            f.write(body)
+        return FOUND, ""
+    if status == 404:
+        rstatus, _, rerr = github_get(f"repos/{repo}", token)
+        if rstatus == 404:
+            return NO_REPO, "repository not found, or private"
+        if rstatus == 200:
+            return MISSING, ""
+        status, err = rstatus, rerr  # could not tell: report why
+    if status in (401, 403, 429):
+        why = "rate limit or bad token" if token else "rate limit (no token)"
+        return DENIED, f"GitHub refused the request ({status} {err}: {why})"
+    if status == 0:
+        return UNREACHABLE, f"GitHub is unreachable: {err}"
+    return UNREACHABLE, f"GitHub answered {status} {err}"
 
 
 def file_kind(path: str) -> str:
@@ -127,9 +162,19 @@ def audit(repo: str, omastore: str, manifest_file: str | None, install: bool, wo
     mpath = manifest_file
     if not mpath:
         mpath = os.path.join(work, "omastore.toml")
-        if not fetch_manifest(repo, mpath):
+        outcome, detail = fetch_manifest(repo, mpath, token)
+        if outcome == MISSING:
             a.add(FAIL, "omastore.toml", "missing from the root of the default branch: the store ignores the repository",
                   "create the manifest (skill omastore-manifest) and push it; to test first, use --manifest")
+            return a
+        if outcome == NO_REPO:
+            a.add(FAIL, "Repository", detail, "check the owner/repo name; the store only lists public repositories")
+            return a
+        if outcome != FOUND:
+            # Not a verdict on the repository: the audit could not look.
+            a.add(FAIL, "Could not read omastore.toml", detail,
+                  "`gh auth login` (or GITHUB_TOKEN) and try again" if outcome == DENIED
+                  else "check the network connection and try again")
             return a
     lint = run([omastore, "lint-manifest", mpath], env=env)
     lint_out = (lint.stdout + lint.stderr).strip()

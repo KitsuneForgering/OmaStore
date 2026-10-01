@@ -33,6 +33,10 @@ Why this way:
   `{version}` is replaced by each release's version.
 - The store checks the sha256 GitHub computes per asset; `checksums.txt`
   is a useful extra for people who download by hand.
+- The templates attest the tarballs' build provenance
+  (`actions/attest-build-provenance`, like OmaStore's own release). Keep that
+  step: the store plans to require provenance, and it needs the
+  `id-token: write` and `attestations: write` permissions.
 - Everything is installed into `~/.local/share/omastore/apps/…`, never into `/usr`.
   Programs that look for data at absolute paths (`/usr/share/myapp`)
   break; resolve paths relative to the executable.

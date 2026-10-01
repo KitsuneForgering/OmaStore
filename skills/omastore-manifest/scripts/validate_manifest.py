@@ -35,7 +35,31 @@ MAIN_CATEGORIES = {
     "AudioVideo", "Audio", "Video", "Development", "Education", "Game", "Graphics",
     "Network", "Office", "Science", "Settings", "System", "Utility",
 }
-RE_ADDITIONAL = re.compile(r"^[A-Z][A-Za-z0-9]{1,39}$")
+# freedesktop additional categories (Desktop Menu Specification, appendix A,
+# plus the desktops desktop-file-validate registers). The reserved ones
+# (Screensaver, TrayIcon, Applet, Shell) need OnlyShowIn and are left out.
+ADDITIONAL_CATEGORIES = set("""
+    Building Debugger IDE GUIDesigner Profiling RevisionControl Translation
+    Calendar ContactManagement Database Dictionary Chart Email Finance FlowChart PDA
+    ProjectManagement Presentation Spreadsheet WordProcessor
+    2DGraphics VectorGraphics RasterGraphics 3DGraphics Scanning OCR Photography
+    Publishing Viewer TextTools DesktopSettings HardwareSettings Printing PackageManager
+    Dialup InstantMessaging Chat IRCClient Feed FileTransfer HamRadio News P2P
+    RemoteAccess Telephony TelephonyTools VideoConference WebBrowser WebDevelopment
+    Midi Mixer Sequencer Tuner TV AudioVideoEditing Player Recorder DiscBurning
+    ActionGame AdventureGame ArcadeGame BoardGame BlocksGame CardGame KidsGame
+    LogicGame RolePlaying Shooter Simulation SportsGame StrategyGame
+    Art Construction Music Languages ArtificialIntelligence Astronomy Biology
+    Chemistry ComputerScience DataVisualization Economy Electricity Geography Geology
+    Geoscience History Humanities ImageProcessing Literature Maps Math
+    NumericalAnalysis MedicalSoftware Physics Robotics Spirituality Sports
+    ParallelComputing Amusement Archiving Compression Electronics Emulator
+    Engineering FileTools FileManager TerminalEmulator Filesystem Monitor Security
+    Accessibility Calculator Clock TextEditor Documentation Adult Core
+    KDE GNOME XFCE DDE LXQt COSMIC GTK Qt Motif Java ConsoleOnly
+""".split())
+# The specification's own extensions ("X-Omarchy").
+RE_EXTENSION = re.compile(r"^X-[A-Za-z0-9-]{1,38}$")
 ARCH = {"x86_64": "amd64", "amd64": "amd64", "x64": "amd64", "aarch64": "arm64", "arm64": "arm64"}
 IMAGE_EXT = {".png", ".svg", ".jpg", ".jpeg", ".webp", ".gif"}
 RE_PLACEHOLDER = re.compile(r"\{[^}]*\}")
@@ -154,8 +178,8 @@ def validate(data: dict, rep: Report) -> dict:
         c = str(c).strip()
         if c in cats:
             continue
-        if c not in MAIN_CATEGORIES and not RE_ADDITIONAL.match(c):
-            rep.err("categories", f'invalid category "{c}"')
+        if c not in MAIN_CATEGORIES and c not in ADDITIONAL_CATEGORIES and not RE_EXTENSION.match(c):
+            rep.err("categories", f'"{c}" is not a freedesktop category (see the Desktop Menu Specification; extensions start with X-)')
             continue
         if len(cats) == MAX_CATEGORIES:
             rep.warn("categories", f"only the first {MAX_CATEGORIES} are used")

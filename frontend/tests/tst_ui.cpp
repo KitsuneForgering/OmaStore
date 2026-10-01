@@ -248,6 +248,7 @@ private slots:
         engine.rootContext()->setContextProperty("theme", &theme);
         engine.rootContext()->setContextProperty("startupRepo", QString());
         engine.rootContext()->setContextProperty("startupCheck", QString());
+        engine.rootContext()->setContextProperty("startupPage", QString());
         QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(OMASTORE_QML_DIR "/Main.qml")));
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         std::unique_ptr<QObject> object(component.create());

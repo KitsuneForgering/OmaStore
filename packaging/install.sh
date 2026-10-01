@@ -3,8 +3,10 @@ set -eu
 
 repo=https://github.com/KitsuneSemCalda/OmaStore
 
-# --no-skills (anywhere in the arguments) leaves ~/.claude alone.
+# --no-skills (anywhere in the arguments) leaves ~/.claude alone; --no-hooks
+# leaves Omarchy's hooks alone.
 skills=yes
+hooks=yes
 n=$#
 while [ "$n" -gt 0 ]; do
   arg=$1
@@ -12,6 +14,7 @@ while [ "$n" -gt 0 ]; do
   n=$((n - 1))
   case $arg in
     --no-skills) skills=no ;;
+    --no-hooks) hooks=no ;;
     *) set -- "$@" "$arg" ;;
   esac
 done
@@ -32,6 +35,19 @@ icon="$data_home/icons/hicolor/scalable/apps/omastore.svg"
 claude_home=${CLAUDE_CONFIG_DIR:-"$HOME/.claude"}
 claude_skills="$claude_home/skills"
 skill_marker=.omastore-managed
+# Omarchy's post-update hook: omarchy-update runs every file in this directory
+# with bash, so the ownership mark lives inside the file, not next to it.
+# Omarchy uses $HOME/.config literally, not $XDG_CONFIG_HOME.
+omarchy_config="$HOME/.config/omarchy"
+hook="$omarchy_config/hooks/post-update.d/omastore.hook"
+hook_marker='# omastore-managed'
+
+# Removes the hook this script installed (never one the user wrote).
+remove_managed_hook() {
+  if [ -f "$hook" ] && [ ! -L "$hook" ] && grep -qxF "$hook_marker" "$hook"; then
+    rm -f "$hook"
+  fi
+}
 
 # Removes the skill copies this script made (never the user's own skills).
 remove_managed_skills() {
@@ -54,7 +70,7 @@ refresh_caches() {
 
 # --uninstall stops OmaStore's processes and removes what this
 # script installed: the launchers that point into $root, the menu entry, the
-# icon, the Claude Code skills it copied, $root itself and the cache. The catalog database and the apps
+# icon, the Claude Code skills it copied, the Omarchy hook, $root itself and the cache. The catalog database and the apps
 # installed through OmaStore are kept.
 if [ "${1:-}" = --uninstall ]; then
   [ "$#" -eq 1 ] || { echo "Usage: sh $0 --uninstall" >&2; exit 1; }
@@ -89,6 +105,7 @@ if [ "${1:-}" = --uninstall ]; then
     rm -f "$desktop" "$icon"
   fi
   remove_managed_skills
+  remove_managed_hook
   rm -rf "$root" "$cache_home/omastore" "$cache_home/OmaStore"
   refresh_caches
   echo 'OmaStore removed. Your catalog and the apps installed through it were kept.'
@@ -127,7 +144,7 @@ elif [ "$#" -eq 1 ]; then
   cp "$1" "$tmp/$archive"
   cp "$1.sha256" "$tmp/$archive.sha256"
 else
-  echo "Usage: sh $0 [--no-skills] [path/to/release-tarball] | --uninstall" >&2
+  echo "Usage: sh $0 [--no-skills] [--no-hooks] [path/to/release-tarball] | --uninstall" >&2
   exit 1
 fi
 digest=$(sed -n "s/^\([0-9a-fA-F]\{64\}\)  \{0,1\}$archive$/\1/p" "$tmp/$archive.sha256")
@@ -188,6 +205,30 @@ install -m644 "$tmp/omastore.desktop" "$desktop"
 install -m644 "$tmp/usr/share/icons/hicolor/scalable/apps/omastore.svg" "$icon"
 refresh_caches
 echo "OmaStore $version installed. Open it from the menu or run $bin/omastore-gui"
+
+# On Omarchy (its config directory exists), omarchy-update also reports the
+# updates of the apps installed through OmaStore. The hook only reads the
+# catalog and sends a notification, and never fails the system update.
+if [ "$hooks" = yes ] && [ -d "$omarchy_config" ]; then
+  if { [ -e "$hook" ] || [ -L "$hook" ]; } && { [ -L "$hook" ] || ! grep -qxF "$hook_marker" "$hook"; }; then
+    echo "Omarchy hook left as is: $hook was not installed by OmaStore." >&2
+  else
+    quoted_cli=$(printf '%s' "$bin/omastore" | sed "s/'/'\\\\''/g")
+    mkdir -p "${hook%/*}"
+    cat > "$tmp/omastore.hook" <<HOOK
+#!/bin/bash
+$hook_marker
+# Installed by OmaStore's install.sh and removed by install.sh --uninstall.
+# After omarchy-update, notifies about updates to the apps installed through
+# OmaStore. It only reads OmaStore's catalog and never fails the update.
+cli='$quoted_cli'
+[[ -x \$cli ]] && timeout 20 "\$cli" update --check --notify >/dev/null 2>&1
+exit 0
+HOOK
+    install -m644 "$tmp/omastore.hook" "$hook"
+    echo "omarchy-update now reports OmaStore app updates ($hook; --no-hooks skips it)"
+  fi
+fi
 
 if "$has_skills"; then
   rm -rf "$root/$version/share/skills"

@@ -153,7 +153,7 @@ func TestLatestRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rel.Tag != "v1.2.0" || len(rel.Assets) != 2 || rel.Assets[0].Size != 1024 ||
+	if rel.Tag != "v1.2.0" || rel.Body != "## Changes\r\n\r\n- Faster export" || len(rel.Assets) != 2 || rel.Assets[0].Size != 1024 ||
 		rel.Assets[0].Digest == "" || rel.Assets[1].Digest != "" {
 		t.Errorf("release = %+v", rel)
 	}

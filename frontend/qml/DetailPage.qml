@@ -30,6 +30,7 @@ Page {
         case "extract": return qsTr("Extracting")
         case "integrate": return qsTr("Integrating with the system")
         case "done": return qsTr("Done")
+        case "authorize": return qsTr("Installing system dependencies (administrator password)")
         }
         return qsTr("Preparing")
     }
@@ -131,6 +132,28 @@ Page {
                             page.app.category,
                             page.installed ? qsTr("installed: %1").arg(page.app.install.version) : ""
                         ].filter(s => !!s).join("  ·  ")
+                    }
+                }
+                // Liking an app stars its repository on GitHub. The wrapper
+                // takes the hover so the tooltip also explains a disabled button.
+                Item {
+                    Layout.alignment: Qt.AlignTop
+                    implicitWidth: starButton.implicitWidth
+                    implicitHeight: starButton.implicitHeight
+                    HoverHandler { id: starHover }
+                    ToolTip.visible: starHover.hovered
+                    ToolTip.delay: 400
+                    ToolTip.text: backend.starHint !== "" ? backend.starHint
+                                : starButton.starred ? qsTr("Remove your star on GitHub")
+                                : qsTr("Star this app on GitHub")
+                    Button {
+                        id: starButton
+                        objectName: "starButton"
+                        anchors.fill: parent
+                        readonly property bool starred: backend.starState === 1
+                        enabled: backend.connected && backend.starState !== -1 && !backend.starBusy
+                        text: (starred ? "★ " + qsTr("Starred") : "☆ " + qsTr("Star")) + "  " + (page.app.stars || 0)
+                        onClicked: backend.toggleStar()
                     }
                 }
             }
@@ -300,6 +323,23 @@ Page {
                                     onClicked: Qt.openUrlExternally(page.app.htmlUrl)
                                 }
                             }
+                            // A prefilled issue on the app's repository; nothing is
+                            // sent until the user submits it in the browser.
+                            Text {
+                                objectName: "reportLink"
+                                visible: !!page.app.htmlUrl
+                                Layout.topMargin: -8
+                                text: qsTr("Report a problem ↗")
+                                color: theme.accent
+                                font.underline: reportArea.containsMouse
+                                MouseArea {
+                                    id: reportArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Qt.openUrlExternally(backend.issueUrl())
+                                }
+                            }
                         }
                     }
 
@@ -318,10 +358,45 @@ Page {
                         onClicked: backend.update(page.app.repo)
                     }
                     Button {
+                        objectName: "openButton"
+                        Layout.fillWidth: true
+                        visible: page.installed && !page.busy
+                        text: qsTr("Open")
+                        onClicked: backend.launch()
+                    }
+                    Button {
                         Layout.fillWidth: true
                         visible: page.installed && !page.busy
                         text: qsTr("Remove")
                         onClicked: confirmRemove.open()
+                    }
+                    // The last install/update of this app failed: say why and
+                    // offer a prefilled report to its author.
+                    ColumnLayout {
+                        objectName: "failureBox"
+                        Layout.fillWidth: true
+                        visible: backend.detailFailure !== "" && !page.busy
+                        spacing: 4
+                        Text {
+                            Layout.fillWidth: true
+                            text: qsTr("The last attempt failed: %1").arg(backend.detailFailure)
+                            color: theme.danger
+                            font.pixelSize: 12
+                            wrapMode: Text.Wrap
+                        }
+                        Text {
+                            text: qsTr("Report this problem to the author ↗")
+                            color: theme.accent
+                            font.pixelSize: 12
+                            font.underline: failureReportArea.containsMouse
+                            MouseArea {
+                                id: failureReportArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: Qt.openUrlExternally(backend.issueUrl())
+                            }
+                        }
                     }
                     ColumnLayout {
                         visible: page.busy
@@ -339,6 +414,82 @@ Page {
                             text: qsTr("Cancel")
                             flat: true
                             onClicked: backend.cancelJob(page.job.id)
+                        }
+                    }
+                    // System dependencies declared in the app's PKGBUILD.
+                    Rectangle {
+                        id: depsBox
+                        objectName: "depsBox"
+                        readonly property var deps: backend.deps.deps || []
+                        readonly property var toInstall: backend.deps.toInstall || []
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: depsContent.implicitHeight + 32
+                        visible: deps.length > 0
+                        radius: 8
+                        color: theme.surface
+                        border.color: theme.selection
+
+                        function statusText(d) {
+                            switch (d.status) {
+                            case "installed": return "✓"
+                            case "available": return qsTr("missing")
+                            case "unavailable": return qsTr("not in pacman (AUR?)")
+                            }
+                            return ""
+                        }
+
+                        ColumnLayout {
+                            id: depsContent
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            spacing: 6
+
+                            Label {
+                                text: qsTr("System dependencies")
+                                color: theme.muted
+                                font.pixelSize: 12
+                            }
+                            Repeater {
+                                model: depsBox.deps
+                                RowLayout {
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: modelData.name + (modelData.optional ? " " + qsTr("(optional)") : "")
+                                        color: theme.foreground
+                                        elide: Text.ElideRight
+                                        ToolTip.visible: depHover.hovered && !!modelData.reason
+                                        ToolTip.text: modelData.reason || ""
+                                        HoverHandler { id: depHover }
+                                    }
+                                    Text {
+                                        text: depsBox.statusText(modelData)
+                                        color: modelData.status === "installed" ? theme.muted
+                                             : modelData.status === "unavailable" ? theme.warning : theme.accent
+                                        font.pixelSize: 12
+                                    }
+                                }
+                            }
+                            Button {
+                                objectName: "installDepsButton"
+                                Layout.fillWidth: true
+                                Layout.topMargin: 6
+                                visible: depsBox.toInstall.length > 0 && !page.busy
+                                enabled: backend.connected
+                                text: depsBox.toInstall.length === 1 ? qsTr("Install 1 dependency")
+                                      : qsTr("Install %1 dependencies").arg(depsBox.toInstall.length)
+                                onClicked: backend.installDeps(page.repo)
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                visible: backend.deps.pacman === false
+                                text: qsTr("Install them with your system's package manager.")
+                                color: theme.muted
+                                font.pixelSize: 11
+                                wrapMode: Text.Wrap
+                            }
                         }
                     }
                     Text {
@@ -374,6 +525,44 @@ Page {
                             onClicked: page.publishRequested(page.app.repo)
                         }
                     }
+                }
+            }
+
+            // Release notes of the latest release, rendered like the README
+            // (no remote images; links open only on click).
+            ColumnLayout {
+                objectName: "releaseNotes"
+                Layout.fillWidth: true
+                Layout.maximumWidth: 900
+                Layout.alignment: Qt.AlignHCenter
+                visible: !!page.app.releaseNotes
+                spacing: 18
+                Text {
+                    text: page.installed && page.app.updateAvailable
+                          ? qsTr("What's new in %1 (you have %2)").arg(page.app.latestVersion).arg(page.app.install.version)
+                          : qsTr("What's new in %1").arg(page.app.latestVersion)
+                    color: theme.foreground
+                    font.pixelSize: 20
+                    font.bold: true
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 1
+                    color: theme.selection
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: page.app.releaseNotes ? backend.readmeForDisplay(page.app.releaseNotes) : ""
+                    textFormat: Text.MarkdownText
+                    wrapMode: Text.Wrap
+                    font.pixelSize: 15
+                    color: theme.foreground
+                    linkColor: theme.accent
+                    onLinkActivated: (link) => {
+                        if (link.startsWith("https://") || link.startsWith("http://"))
+                            Qt.openUrlExternally(link)
+                    }
+                    HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
                 }
             }
 

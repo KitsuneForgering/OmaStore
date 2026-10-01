@@ -50,14 +50,19 @@ func quoteExecArg(arg string) string {
 
 // Desktop holds the fields of the generated .desktop file.
 type Desktop struct {
-	Name       string
-	Comment    string
-	Exec       string // absolute path of the executable
-	Icon       string // icon name in the theme or absolute path
-	Terminal   bool
-	Categories []string
-	Repo       string
-	Version    string
+	Name     string
+	Comment  string
+	Exec     string // absolute path of the executable
+	Icon     string // icon name in the theme or absolute path
+	Terminal bool
+	// TUILauncher is Omarchy's omarchy-launch-or-focus-tui (absolute path), or
+	// "" outside Omarchy. With it, a terminal app opens in the configured
+	// terminal, and focuses the window it already has, as AppID.
+	TUILauncher string
+	AppID       string
+	Categories  []string
+	Repo        string
+	Version     string
 }
 
 // Render generates the .desktop content.
@@ -80,12 +85,18 @@ func (d Desktop) Render() string {
 	if c := escapeValue(d.Comment); c != "" {
 		line("Comment", c)
 	}
-	line("Exec", escapeValue(quoteExecArg(d.Exec)))
+	terminal := d.Terminal
+	if terminal && d.TUILauncher != "" && shellSafe(d.TUILauncher) && shellSafe(d.Exec) && shellSafe(d.AppID) {
+		line("Exec", d.TUILauncher+" --app-id="+d.AppID+" "+d.Exec)
+		terminal = false
+	} else {
+		line("Exec", escapeValue(quoteExecArg(d.Exec)))
+	}
 	line("TryExec", escapeValue(d.Exec))
 	if d.Icon != "" {
 		line("Icon", escapeValue(d.Icon))
 	}
-	if d.Terminal {
+	if terminal {
 		line("Terminal", "true")
 	} else {
 		line("Terminal", "false")
@@ -102,6 +113,22 @@ func (d Desktop) Render() string {
 	line("X-OmaStore-Repo", escapeValue(d.Repo))
 	line("X-OmaStore-Version", escapeValue(d.Version))
 	return b.String()
+}
+
+// shellSafe reports whether s holds only characters that need no quoting in a
+// shell or in the Exec key. omarchy-launch-or-focus-tui joins its arguments
+// into a string that omarchy-launch-or-focus runs with eval, so anything else
+// (a space in $HOME, a quote, a '$') keeps the plain Terminal=true entry.
+func shellSafe(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if !(r < 128 && (unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("._/+-", r))) {
+			return false
+		}
+	}
+	return true
 }
 
 // sanitizeListItem keeps only safe characters in a list item.
