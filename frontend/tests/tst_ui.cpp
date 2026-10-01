@@ -143,41 +143,48 @@ private slots:
         QVERIFY(content && controls && carousel && hero && panel && strip && readme &&
                 previous && next && position && install && name);
         QTRY_COMPARE(position->property("text").toString(), QStringLiteral("1 / 2"));
-        // The screenshots arrive before the layouts are polished: measure after.
-        QTRY_VERIFY(carousel->height() > 0 && strip->height() > 0);
-        QTRY_VERIFY(leftTop(strip, page).y() > leftTop(carousel, page).y() + carousel->height());
-
-        const QPointF contentPos = leftTop(content, page);
-        const QPointF controlsPos = leftTop(controls, page);
-        const QPointF carouselPos = leftTop(carousel, page);
-        const QPointF panelPos = leftTop(panel, page);
-        const QPointF stripPos = leftTop(strip, page);
-        const QPointF readmePos = leftTop(readme, page);
-        const QPointF prevPos = leftTop(previous, page);
-        const QPointF nextPos = leftTop(next, page);
-        QVERIFY(contentPos.x() >= 24);
-        QVERIFY(contentPos.x() + content->width() <= width - 24);
-        QVERIFY(controlsPos.x() >= contentPos.x());
-        QVERIFY(carouselPos.x() >= contentPos.x());
-        QVERIFY(carouselPos.x() + carousel->width() <= contentPos.x() + content->width());
-        QVERIFY(prevPos.x() + previous->width() <= nextPos.x());
-        QVERIFY(nextPos.x() + next->width() <= width - 24);
-        QVERIFY(stripPos.y() > carouselPos.y() + carousel->height());
-        QVERIFY(readmePos.y() > std::max(carouselPos.y() + carousel->height(),
-                                        panelPos.y() + panel->height()));
+        // The layout settles over several passes after the screenshots arrive
+        // (columns, then widths): the geometry is checked until it holds, and
+        // a failure says which condition did not.
+        const auto layoutProblem = [&]() -> QString {
+            const QPointF contentPos = leftTop(content, page);
+            const QPointF controlsPos = leftTop(controls, page);
+            const QPointF carouselPos = leftTop(carousel, page);
+            const QPointF panelPos = leftTop(panel, page);
+            const QPointF stripPos = leftTop(strip, page);
+            const QPointF readmePos = leftTop(readme, page);
+            const QPointF prevPos = leftTop(previous, page);
+            const QPointF nextPos = leftTop(next, page);
+            const QList<std::pair<bool, const char *>> checks{
+                {carousel->height() > 0 && strip->height() > 0, "carousel and strip laid out"},
+                {contentPos.x() >= 24, "content left margin"},
+                {contentPos.x() + content->width() <= width - 24, "content right margin"},
+                {controlsPos.x() >= contentPos.x(), "controls inside the content"},
+                {carouselPos.x() >= contentPos.x(), "carousel left edge inside the content"},
+                {carouselPos.x() + carousel->width() <= contentPos.x() + content->width(),
+                 "carousel right edge inside the content"},
+                {prevPos.x() + previous->width() <= nextPos.x(), "Previous before Next"},
+                {nextPos.x() + next->width() <= width - 24, "Next inside the window"},
+                {stripPos.y() > carouselPos.y() + carousel->height(), "strip below the carousel"},
+                {readmePos.y() > std::max(carouselPos.y() + carousel->height(), panelPos.y() + panel->height()),
+                 "README below the carousel and the panel"},
+                {width >= 720 ? hero->property("columns").toInt() == 2 : hero->property("columns").toInt() == 1,
+                 "hero columns for the width"},
+                {width < 720 || (carousel->width() >= hero->width() * 0.55 && carousel->width() <= hero->width() * 0.65),
+                 "carousel takes 55-65% of a wide hero"},
+                {width < 720 || panelPos.x() >= carouselPos.x() + carousel->width(), "panel beside the carousel"},
+                {width >= 720 || panelPos.y() > stripPos.y(), "panel below the strip when narrow"},
+            };
+            for (const auto &[ok, what] : checks)
+                if (!ok)
+                    return QString::fromLatin1(what);
+            return {};
+        };
+        QTRY_VERIFY2_WITH_TIMEOUT(layoutProblem().isEmpty(), qPrintable(layoutProblem()), 5000);
         QVERIFY(readme->width() <= 900);
         QVERIFY(readme->property("font").value<QFont>().pixelSize() >= 17);
         QVERIFY(readme->property("lineHeight").toReal() >= 1.5);
         QVERIFY(contrast(readme->property("color").value<QColor>(), theme.background()) >= 7);
-        if (width >= 720) {
-            QCOMPARE(hero->property("columns").toInt(), 2);
-            QVERIFY(carousel->width() >= hero->width() * 0.55);
-            QVERIFY(carousel->width() <= hero->width() * 0.65);
-            QVERIFY(panelPos.x() >= carouselPos.x() + carousel->width());
-        } else {
-            QCOMPARE(hero->property("columns").toInt(), 1);
-            QVERIFY(panelPos.y() > stripPos.y());
-        }
 
         auto *buttonText = install->property("contentItem").value<QQuickItem *>();
         auto *buttonBackground = install->property("background").value<QQuickItem *>();
