@@ -8,6 +8,7 @@ All notable changes to OmaStore are listed here. The format follows
 
 ### Added
 
+- Demo GIF in the README.
 - Star button on an app's page: liking an app stars its repository on GitHub
   (and removes the star when pressed again). Needs `gh auth login` or
   `GITHUB_TOKEN`; CLI: `omastore star`/`omastore unstar`.

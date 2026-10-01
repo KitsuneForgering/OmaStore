@@ -20,6 +20,8 @@ interface or the command line, without `sudo`. When an app declares system
 packages in a `PKGBUILD`, the store can install them with pacman for you
 (it asks for your password first).
 
+<p align="center"><img src="docs/screenshots/demo.gif" width="880" alt="OmaStore demo: searching for &quot;virtual machine&quot;, opening OmaVM's page, installing it with one click and launching it"></p>
+
 | Discover | See the details before installing |
 |---|---|
 | ![OmaStore catalog screen](docs/screenshots/catalog.png) | ![An app's detail screen in OmaStore](docs/screenshots/detail.png) |
