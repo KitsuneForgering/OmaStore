@@ -150,6 +150,33 @@ private slots:
         }
     }
 
+    void reducedMotion()
+    {
+        QTemporaryDir cfg;
+        qputenv("XDG_CONFIG_HOME", cfg.path().toUtf8());
+        qunsetenv("OMASTORE_REDUCE_MOTION");
+        {
+            Theme t({"/does/not/exist"});
+            QVERIFY(!t.reducedMotion());
+            QVERIFY(t.durationShort() > 0 && t.durationMedium() > t.durationShort());
+        }
+        write(cfg.path() + "/gtk-3.0/settings.ini", "[Settings]\ngtk-enable-animations=false\n");
+        {
+            Theme t({"/does/not/exist"});
+            QVERIFY(t.reducedMotion());
+            QCOMPARE(t.durationShort(), 0);
+            QCOMPARE(t.durationMedium(), 0);
+        }
+        // The environment variable wins, both ways.
+        qputenv("OMASTORE_REDUCE_MOTION", "0");
+        QVERIFY(!Theme::prefersReducedMotion());
+        qputenv("OMASTORE_REDUCE_MOTION", "1");
+        write(cfg.path() + "/gtk-3.0/settings.ini", "[Settings]\n");
+        QVERIFY(Theme::prefersReducedMotion());
+        qunsetenv("OMASTORE_REDUCE_MOTION");
+        qunsetenv("XDG_CONFIG_HOME");
+    }
+
     void noOmarchyUsesDefaults()
     {
         Theme t({"/does/not/exist"});

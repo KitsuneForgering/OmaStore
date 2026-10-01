@@ -9,7 +9,7 @@ Rectangle {
     visible: implicitHeight > 0
     color: theme.surface
     clip: true
-    Behavior on implicitHeight { NumberAnimation { duration: 120 } }
+    Behavior on implicitHeight { NumberAnimation { duration: theme.durationShort; easing.type: Easing.OutCubic } }
 
     ListView {
         id: list

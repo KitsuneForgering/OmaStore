@@ -36,6 +36,7 @@ Rectangle {
             radius: 4
             border.color: theme.focus
             border.width: item.visualFocus ? 2 : 0
+            Behavior on color { ColorAnimation { duration: theme.durationShort } }
         }
     }
 
@@ -110,6 +111,8 @@ Rectangle {
             readonly property var job: { backend.jobs.revision; return backend.jobs.selfJob() }
             readonly property bool restart: backend.selfInstalled !== ""
             visible: restart || !!st.updateAvailable || !!job.id
+            onVisibleChanged: if (visible) selfFade.restart()
+            NumberAnimation on opacity { id: selfFade; from: 0; to: 1; duration: theme.durationMedium; running: false }
             Layout.fillWidth: true
             Layout.topMargin: 6
             implicitHeight: selfColumn.implicitHeight + 20

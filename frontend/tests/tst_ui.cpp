@@ -182,9 +182,10 @@ private slots:
         auto *buttonText = install->property("contentItem").value<QQuickItem *>();
         auto *buttonBackground = install->property("background").value<QQuickItem *>();
         QVERIFY(buttonText && buttonBackground);
-        QCOMPARE(name->property("color").value<QColor>(), theme.foreground());
-        QCOMPARE(buttonText->property("color").value<QColor>(), theme.onAccent());
-        QCOMPARE(buttonBackground->property("color").value<QColor>(), theme.accentFill());
+        // QTRY: the button's fill eases between colors (theme.durationShort).
+        QTRY_COMPARE(name->property("color").value<QColor>(), theme.foreground());
+        QTRY_COMPARE(buttonText->property("color").value<QColor>(), theme.onAccent());
+        QTRY_COMPARE(buttonBackground->property("color").value<QColor>(), theme.accentFill());
         // WCAG AAA (7:1) for text.
         QVERIFY(contrast(name->property("color").value<QColor>(), theme.background()) >= 7);
         QVERIFY(contrast(buttonText->property("color").value<QColor>(),

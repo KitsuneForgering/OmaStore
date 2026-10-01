@@ -86,6 +86,22 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 initialItem: home
+                // Into an app's page: it slides in from the right and fades in;
+                // back: the reverse. Instant with reduced motion.
+                pushEnter: Transition {
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "x"; from: 32; to: 0; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+                }
+                pushExit: Transition {
+                    NumberAnimation { property: "opacity"; from: 1; to: 0; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+                }
+                popEnter: Transition {
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+                }
+                popExit: Transition {
+                    NumberAnimation { property: "opacity"; from: 1; to: 0; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "x"; from: 0; to: 32; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+                }
             }
 
             JobsBar {
@@ -102,6 +118,8 @@ ApplicationWindow {
             id: catalogPage
             anchors.fill: parent
             visible: window.section !== "publish"
+            onVisibleChanged: if (visible) catalogFade.restart()
+            NumberAnimation on opacity { id: catalogFade; from: 0; to: 1; duration: theme.durationMedium; running: false }
             model: window.section === "installed" ? backend.installed : backend.catalog
             installedView: window.section === "installed"
             onAppActivated: (repo) => window.openApp(repo)
@@ -112,6 +130,8 @@ ApplicationWindow {
             id: publishPage
             anchors.fill: parent
             visible: window.section === "publish"
+            onVisibleChanged: if (visible) publishFade.restart()
+            NumberAnimation on opacity { id: publishFade; from: 0; to: 1; duration: theme.durationMedium; running: false }
         }
     }
 
@@ -131,7 +151,8 @@ ApplicationWindow {
         property alias text: toastText.text
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 72
+        anchors.bottomMargin: opacity > 0.99 ? 72 : 56
+        Behavior on anchors.bottomMargin { NumberAnimation { duration: theme.durationMedium; easing.type: Easing.OutCubic } }
         width: Math.min(toastText.implicitWidth + 32, parent.width - 64)
         height: toastText.implicitHeight + 20
         radius: 6
@@ -141,7 +162,7 @@ ApplicationWindow {
         Accessible.name: toastText.text
         opacity: 0
         visible: opacity > 0
-        Behavior on opacity { NumberAnimation { duration: 150 } }
+        Behavior on opacity { NumberAnimation { duration: theme.durationMedium } }
 
         Text {
             id: toastText

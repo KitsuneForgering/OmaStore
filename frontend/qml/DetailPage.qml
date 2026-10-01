@@ -594,6 +594,7 @@ Page {
                             color: simArea.containsMouse || activeFocus ? theme.hover : theme.surface
                             border.color: theme.focus
                             border.width: activeFocus ? 2 : 0
+                            Behavior on color { ColorAnimation { duration: theme.durationShort } }
                             activeFocusOnTab: true
                             Accessible.role: Accessible.Button
                             Accessible.name: qsTr("%1, %2").arg(modelData.name).arg(modelData.category)

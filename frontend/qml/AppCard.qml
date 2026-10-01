@@ -22,6 +22,8 @@ Rectangle {
     color: area.containsMouse || activeFocus ? theme.hover : theme.surface
     border.color: activeFocus ? theme.focus : "transparent"
     border.width: 2
+    Behavior on color { ColorAnimation { duration: theme.durationShort } }
+    Behavior on border.color { ColorAnimation { duration: theme.durationShort } }
     Keys.onReturnPressed: activated()
     Keys.onEnterPressed: activated()
     Keys.onSpacePressed: activated()

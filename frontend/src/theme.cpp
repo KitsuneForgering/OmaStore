@@ -131,6 +131,23 @@ Theme::Theme(QStringList dirs, QObject *parent)
     reload();
 }
 
+bool Theme::prefersReducedMotion()
+{
+    const QByteArray env = qgetenv("OMASTORE_REDUCE_MOTION").trimmed().toLower();
+    if (!env.isEmpty())
+        return env != "0" && env != "false" && env != "no";
+    // GTK's switch, which GNOME's "Reduce animation" and Omarchy users set.
+    const QString config = qEnvironmentVariable("XDG_CONFIG_HOME", QDir::homePath() + QStringLiteral("/.config"));
+    static const QRegularExpression off(QStringLiteral(R"(^\s*gtk-enable-animations\s*=\s*(false|0)\s*$)"),
+                                        QRegularExpression::CaseInsensitiveOption | QRegularExpression::MultilineOption);
+    for (const char *dir : {"/gtk-4.0/settings.ini", "/gtk-3.0/settings.ini"}) {
+        QFile f(config + QLatin1String(dir));
+        if (f.open(QIODevice::ReadOnly) && off.match(QString::fromUtf8(f.read(64 * 1024))).hasMatch())
+            return true;
+    }
+    return false;
+}
+
 QStringList Theme::defaultDirs()
 {
     const QString home = QDir::homePath();
@@ -223,10 +240,12 @@ void Theme::reload()
             name = QString::fromUtf8(nameFile.readAll()).trimmed();
         break;
     }
-    const bool differs = colors != m_colors || dark != m_dark || name != m_name;
+    const bool reduced = prefersReducedMotion();
+    const bool differs = colors != m_colors || dark != m_dark || name != m_name || reduced != m_reducedMotion;
     m_colors = colors;
     m_dark = dark;
     m_name = name;
+    m_reducedMotion = reduced;
     derive();
     watch();
     if (differs)

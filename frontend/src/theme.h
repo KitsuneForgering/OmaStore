@@ -43,6 +43,12 @@ class Theme : public QObject {
     // Error message fill and the text on it (7:1).
     Q_PROPERTY(QColor dangerFill READ dangerFill NOTIFY changed)
     Q_PROPERTY(QColor onDanger READ onDanger NOTIFY changed)
+    // Animation durations in ms; 0 when the user asked for reduced motion
+    // (gtk-enable-animations=false in the GTK settings, or
+    // OMASTORE_REDUCE_MOTION=1), so every transition becomes instant (WCAG 2.3.3).
+    Q_PROPERTY(bool reducedMotion READ reducedMotion NOTIFY changed)
+    Q_PROPERTY(int durationShort READ durationShort NOTIFY changed)
+    Q_PROPERTY(int durationMedium READ durationMedium NOTIFY changed)
 
 public:
     // dirs: theme directories in order of preference. Empty = Omarchy's
@@ -87,6 +93,11 @@ public:
     QColor onAccent() const { return m_ui.value(QStringLiteral("onAccent")); }
     QColor dangerFill() const { return m_ui.value(QStringLiteral("dangerFill")); }
     QColor onDanger() const { return m_ui.value(QStringLiteral("onDanger")); }
+    bool reducedMotion() const { return m_reducedMotion; }
+    int durationShort() const { return m_reducedMotion ? 0 : 120; }
+    int durationMedium() const { return m_reducedMotion ? 0 : 220; }
+    // Whether the environment asks for reduced motion (see reducedMotion).
+    static bool prefersReducedMotion();
 
     Q_INVOKABLE void reload();
 
@@ -102,6 +113,7 @@ private:
     QHash<QString, QColor> m_colors; // as read from colors.toml
     QHash<QString, QColor> m_ui;     // derived, accessible colors
     bool m_dark = true;
+    bool m_reducedMotion = false;
     QString m_name;
     QFileSystemWatcher m_watcher;
     QTimer m_debounce;

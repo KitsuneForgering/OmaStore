@@ -21,5 +21,6 @@ Button {
         color: control.enabled ? theme.accentFill : theme.selection
         border.color: control.enabled ? theme.onAccent : theme.border
         border.width: control.visualFocus ? 3 : (control.down || control.hovered) && control.enabled ? 1 : 0
+        Behavior on color { ColorAnimation { duration: theme.durationShort } }
     }
 }

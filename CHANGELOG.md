@@ -22,6 +22,10 @@ All notable changes to OmaStore are listed here. The format follows
   apps are reachable from the keyboard with a visible focus ring, cards and
   screenshots have names for screen readers, and error messages stay until
   dismissed.
+- Animations: pages fade and slide in, catalog cards fade in and glide to
+  their new place when filtering, hover colors ease and notices rise into
+  view. They turn instant with reduced motion (`gtk-enable-animations=false`
+  in the GTK settings, or `OMASTORE_REDUCE_MOTION=1`).
 - Star button on an app's page: liking an app stars its repository on GitHub
   (and removes the star when pressed again). Needs `gh auth login` or
   `GITHUB_TOKEN`; CLI: `omastore star`/`omastore unstar`.
