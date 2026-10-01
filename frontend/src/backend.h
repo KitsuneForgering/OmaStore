@@ -41,6 +41,11 @@ class Backend : public QObject {
     Q_PROPERTY(QString starHint READ starHint NOTIFY starChanged)
     // System dependencies of the open app (deps.check; see docs/ipc.md).
     Q_PROPERTY(QVariantMap deps READ deps NOTIFY depsChanged)
+    // OmaStore's own update (self.status): mode, version, latest,
+    // updateAvailable, notes.
+    Q_PROPERTY(QVariantMap selfStatus READ selfStatus NOTIFY selfChanged)
+    // Version installed by a finished self-update, waiting for a restart ("" if none).
+    Q_PROPERTY(QString selfInstalled READ selfInstalled NOTIFY selfChanged)
 
 public:
     enum StarState { StarUnknown = -1, StarNo = 0, StarYes = 1 };
@@ -66,6 +71,8 @@ public:
     bool starBusy() const { return m_starBusy; }
     QString starHint() const { return m_starHint; }
     QVariantMap deps() const { return m_deps; }
+    QVariantMap selfStatus() const { return m_selfStatus; }
+    QString selfInstalled() const { return m_selfInstalled; }
 
     Q_INVOKABLE void openDetail(const QString &repo);
     Q_INVOKABLE void closeDetail();
@@ -80,6 +87,12 @@ public:
     // Installs the app's missing system dependencies (the daemon asks for
     // the administrator password through polkit).
     Q_INVOKABLE void installDeps(const QString &repo);
+    // OmaStore updating itself (only installations made by install.sh).
+    Q_INVOKABLE void checkSelf();
+    Q_INVOKABLE void updateSelf();
+    // After a self-update: stops the daemon and emits restartReady, so the
+    // new version of the interface (and of the daemon) takes over.
+    Q_INVOKABLE void restartSelf();
     // README markdown ready to display (without remote images).
     Q_INVOKABLE QString readmeForDisplay(const QString &markdown) const;
     // Asks the daemon what the store sees of a repository (owner/repo or a
@@ -117,6 +130,9 @@ signals:
     void indexErrorChanged();
     void starChanged();
     void depsChanged();
+    void selfChanged();
+    // The daemon stopped for the restart: start gui (the updated interface) and quit.
+    void restartReady(const QString &gui);
     // An app was installed and has missing system dependencies that pacman
     // can install: offer to install them.
     void depsSuggested(const QString &repo, const QStringList &packages);
@@ -157,4 +173,7 @@ private:
     QString m_starHint;
     QVariantMap m_deps;
     QHash<QString, QString> m_failures; // lowercase repo → last job error
+    QVariantMap m_selfStatus;
+    QString m_selfInstalled;
+    QString m_selfGui; // launcher of the updated interface
 };

@@ -45,6 +45,8 @@ Backend::Backend(RpcClient *rpc, QObject *parent)
                 loadStar(m_detailRepo);
             }
             maybeIndexOnFirstRun();
+            if (m_selfInstalled.isEmpty())
+                checkSelf();
             if (!m_pendingCheck.isEmpty())
                 sendAuthorCheck(std::exchange(m_pendingCheck, {}));
         }
@@ -71,6 +73,21 @@ Backend::Backend(RpcClient *rpc, QObject *parent)
                 m_indexError = why;
                 emit indexErrorChanged();
             }
+        }
+        if (kind == QLatin1String("self")) {
+            if (state == QLatin1String("done")) {
+                const QVariantMap result = job.value(QStringLiteral("result")).toMap();
+                m_selfInstalled = result.value(QStringLiteral("to")).toString();
+                m_selfGui = result.value(QStringLiteral("gui")).toString();
+                m_selfStatus.insert(QStringLiteral("updateAvailable"), false);
+                emit selfChanged();
+                emit notice(tr("OmaStore %1 is installed. Restart OmaStore to use it.").arg(m_selfInstalled));
+            } else if (state == QLatin1String("failed")) {
+                emit errorOccurred(tr("OmaStore could not update itself; the current version keeps working.\n%1")
+                                       .arg(friendlyError(error.value(QStringLiteral("code")).toInt(),
+                                                          error.value(QStringLiteral("message")).toString())));
+            }
+            return;
         }
         if (kind == QLatin1String("deps") && repoOf(job).compare(m_detailRepo, Qt::CaseInsensitive) == 0)
             loadDeps(m_detailRepo);
@@ -349,6 +366,44 @@ void Backend::refreshIndex(bool force)
 void Backend::cancelJob(const QString &jobId)
 {
     m_rpc->call(QStringLiteral("jobs.cancel"), {{QStringLiteral("job"), jobId}});
+}
+
+void Backend::checkSelf()
+{
+    m_rpc->call(QStringLiteral("self.status"), {}, [this](const QJsonValue &result, const RpcError &err) {
+        if (!err.ok())
+            return; // an older daemon without self.status: nothing to offer
+        const QVariantMap st = result.toObject().toVariantMap();
+        if (st != m_selfStatus) {
+            m_selfStatus = st;
+            emit selfChanged();
+        }
+    });
+}
+
+void Backend::updateSelf()
+{
+    startJob(QStringLiteral("self.update"), {});
+}
+
+void Backend::restartSelf()
+{
+    const QFileInfo gui(m_selfGui);
+    if (m_selfInstalled.isEmpty() || !gui.isAbsolute() || gui.fileName() != QLatin1String("omastore-gui")) {
+        emit errorOccurred(tr("Close and reopen OmaStore to use the new version."));
+        return;
+    }
+    m_rpc->call(QStringLiteral("self.restart"), {}, [this](const QJsonValue &, const RpcError &err) {
+        // A dropped connection means the daemon already went away.
+        if (!err.ok() && err.code != RpcClient::DisconnectedCode) {
+            emit errorOccurred(err.code == -32002
+                                   ? tr("Wait for the running operations to finish, then restart OmaStore.")
+                                   : friendlyError(err.code, err.message));
+            return;
+        }
+        m_rpc->stop(); // no reconnection to the daemon that is leaving
+        emit restartReady(m_selfGui);
+    });
 }
 
 QString Backend::readmeForDisplay(const QString &markdown) const

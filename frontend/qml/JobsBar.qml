@@ -35,6 +35,7 @@ Rectangle {
                 elide: Text.ElideRight
                 color: theme.foreground
                 text: kind === "index" ? qsTr("Indexing catalog") + (message ? " — " + message : "")
+                      : kind === "self" ? qsTr("Updating OmaStore")
                       : (kind === "update" ? qsTr("Updating %1")
                          : kind === "deps" ? qsTr("Installing dependencies of %1")
                          : qsTr("Installing %1")).arg(repo)

@@ -15,6 +15,7 @@ const (
 	KindInstall = "install"
 	KindUpdate  = "update"
 	KindDeps    = "deps" // system dependencies through pacman
+	KindSelf    = "self" // OmaStore updating itself
 )
 
 // Job states.
@@ -75,7 +76,7 @@ func newJobs(notify func(string, any)) *jobs {
 // jobKey identifies jobs that cannot run at the same time: one index at a
 // time and one operation per app.
 func jobKey(kind, repo string) string {
-	if kind == KindIndex || kind == KindDeps {
+	if kind == KindIndex || kind == KindDeps || kind == KindSelf {
 		return kind // pacman has a single, system-wide lock
 	}
 	return "app:" + strings.ToLower(repo)

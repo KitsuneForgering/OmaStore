@@ -30,6 +30,7 @@ type App struct {
 	Log       *slog.Logger
 
 	search searchCache
+	self   selfCache
 }
 
 // Open resolves the XDG paths, opens the database and creates the services.

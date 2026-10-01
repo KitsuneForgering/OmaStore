@@ -62,7 +62,12 @@ void serveCatalog(FakeDaemon &d, QJsonArray *all)
                                            {"deps", QJsonArray{QJsonObject{{"name", "ffmpeg"}, {"status", "available"},
                                                                            {"package", "extra/ffmpeg"}}}},
                                            {"missing", 1}, {"toInstall", QJsonArray{"extra/ffmpeg"}}}}};
-        if (m == "index.start" || m == "install.start" || m == "deps.install")
+        if (m == "self.status")
+            return {{"result", QJsonObject{{"mode", "self"}, {"version", "0.1.0"}, {"latest", "0.2.0"},
+                                           {"updateAvailable", true}, {"notes", "Faster"}}}};
+        if (m == "self.restart")
+            return {{"result", QJsonObject{}}};
+        if (m == "index.start" || m == "install.start" || m == "deps.install" || m == "self.update")
             return {{"result", QJsonObject{{"id", "job-1"}, {"state", "running"}}}};
         return {{"error", QJsonObject{{"code", -32601}, {"message", "?"}}}};
     };
@@ -357,6 +362,56 @@ private slots:
         QCOMPARE(b.detailFailure(), QStringLiteral("checksum mismatch"));
         d.notify("job.done", QJsonObject{{"id", "j3"}, {"kind", "install"}, {"repo", "a/anon"}, {"state", "done"}});
         QTRY_VERIFY(b.detailFailure().isEmpty());
+    }
+
+    void selfUpdate()
+    {
+        FakeDaemon d;
+        QJsonArray all{app("a/photo", "Graphics")};
+        serveCatalog(d, &all);
+        QVERIFY(d.listen());
+        RpcClient rpc(d.path());
+        rpc.setAutoStart(false);
+        Backend b(&rpc);
+        rpc.start();
+
+        // The status is asked for on connecting.
+        QTRY_VERIFY(b.selfStatus().value("updateAvailable").toBool());
+        QCOMPARE(b.selfStatus().value("latest").toString(), QStringLiteral("0.2.0"));
+        QVERIFY(b.selfInstalled().isEmpty());
+
+        // No restart before an update finished.
+        QSignalSpy errors(&b, &Backend::errorOccurred);
+        QSignalSpy ready(&b, &Backend::restartReady);
+        b.restartSelf();
+        QCOMPARE(errors.count(), 1);
+        QCOMPARE(d.count("self.restart"), 0);
+
+        b.updateSelf();
+        QTRY_COMPARE(d.count("self.update"), 1);
+        d.notify("job.started", QJsonObject{{"id", "s1"}, {"kind", "self"}, {"state", "running"}});
+        QTRY_VERIFY(!b.jobs()->selfJob().isEmpty());
+        // A failure keeps the current version and says so.
+        d.notify("job.failed", QJsonObject{{"id", "s1"}, {"kind", "self"}, {"state", "failed"},
+                                           {"error", QJsonObject{{"code", -32603}, {"message", "no checksum"}}}});
+        QTRY_COMPARE(errors.count(), 2);
+        QVERIFY(errors.last().at(0).toString().contains("no checksum"));
+        QVERIFY(b.selfInstalled().isEmpty());
+
+        QSignalSpy notices(&b, &Backend::notice);
+        d.notify("job.done", QJsonObject{{"id", "s2"}, {"kind", "self"}, {"state", "done"},
+                                         {"result", QJsonObject{{"from", "0.1.0"}, {"to", "0.2.0"},
+                                                                {"gui", "/home/u/.local/bin/omastore-gui"}}}});
+        QTRY_COMPARE(b.selfInstalled(), QStringLiteral("0.2.0"));
+        QVERIFY(!b.selfStatus().value("updateAvailable").toBool());
+        QCOMPARE(notices.count(), 1);
+        QVERIFY(b.jobs()->selfJob().isEmpty());
+
+        b.restartSelf();
+        QTRY_COMPARE(ready.count(), 1);
+        QCOMPARE(ready.first().at(0).toString(), QStringLiteral("/home/u/.local/bin/omastore-gui"));
+        QCOMPARE(d.count("self.restart"), 1);
+        QVERIFY(!rpc.isConnected()); // no reconnection to the daemon that is leaving
     }
 
     void issueUrl()

@@ -39,6 +39,8 @@ type Server struct {
 	connsWG    sync.WaitGroup
 	// catalogInterval limits how often a running index sends catalog.changed.
 	catalogInterval time.Duration
+	restart         chan struct{} // closed when a client asked the daemon to restart
+	restartOnce     sync.Once
 }
 
 // NewServer creates a server on top of the backend.
@@ -48,7 +50,7 @@ func NewServer(b Backend, log *slog.Logger) *Server {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &Server{backend: b, log: log, conns: map[*conn]struct{}{}, ctx: ctx, cancel: cancel, lastActive: time.Now(),
-		catalogInterval: 2 * time.Second}
+		catalogInterval: 2 * time.Second, restart: make(chan struct{})}
 	s.jobs = newJobs(s.broadcast)
 	return s
 }
@@ -281,6 +283,17 @@ func (s *Server) WatchChanges(interval time.Duration) {
 		}
 	}
 }
+
+// restartDelay lets the reply to self.restart reach the client first.
+var restartDelay = 200 * time.Millisecond
+
+func (s *Server) requestRestart() {
+	s.restartOnce.Do(func() { time.AfterFunc(restartDelay, func() { close(s.restart) }) })
+}
+
+// Restart is closed when a client asks the daemon to exit so that it is
+// started again from the updated executable (self.restart).
+func (s *Server) Restart() <-chan struct{} { return s.restart }
 
 // Shutdown stops accepting connections, cancels the jobs, waits for them to
 // finish and closes the connections.

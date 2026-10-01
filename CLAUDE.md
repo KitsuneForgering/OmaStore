@@ -95,6 +95,10 @@ Rules:
   dependencies (`internal/sysdeps`): only on the user's request, only through `pkexec /usr/bin/pacman -S --needed`
   (polkit asks for the password), only package names validated and resolved by pacman from the configured
   repositories (never AUR, never a helper such as yay). The PKGBUILD/.SRCINFO they come from is parsed, never run.
+- OmaStore updates itself (`install/self.go`, `self.*` methods) only for the per-user installation made by
+  `install.sh` (`$XDG_DATA_HOME/omastore/self/<version>/` + links in `~/.local/bin`); the version comes from the
+  running executable's path. The tarball must have a checksum, nothing from it is run, the links/menu entry/icon
+  switch with rollback, and the running version is kept until the next update. Packages are left to pacman.
 - Uninstalling removes only the paths registered in the database. A path that could not be removed stays
   registered (uninstall returns `ErrIncomplete`), never silently forgotten.
 
@@ -119,7 +123,7 @@ Schema changes go through numbered migrations in `backend/internal/store/migrati
 ```
 backend/
   cmd/omastored/        # daemon (IPC server)
-  cmd/omastore/         # debug CLI: index, list, show, install, uninstall, update, check, deps, star
+  cmd/omastore/         # debug CLI: index, list, show, install, uninstall, update, self-update, check, deps, star
   internal/app/         # wires the services; the single entry point for the CLI and the daemon
   internal/github/      # go-github wrapper
   internal/gitrepo/     # shallow clones via go-git + icon/screenshot lookup

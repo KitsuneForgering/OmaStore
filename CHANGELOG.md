@@ -8,6 +8,12 @@ All notable changes to OmaStore are listed here. The format follows
 
 ### Added
 
+- OmaStore updates itself: an installation made by `install.sh` sees new
+  releases in the sidebar ("Update OmaStore", then "Restart OmaStore") and with
+  `omastore self-update [--check]`; `omastore update --check --notify` (and the
+  Omarchy hook) reports it too. The release tarball must match its published
+  SHA-256, the switch is all or nothing, and the previous version stays until
+  the next update. Package installations keep updating through pacman.
 - Demo GIF in the README.
 - Star button on an app's page: liking an app stars its repository on GitHub
   (and removes the star when pressed again). Needs `gh auth login` or

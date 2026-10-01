@@ -63,12 +63,13 @@ fi
 }
 
 # This script is for the first installation; an existing one is updated
-# through the way it was installed (pacman, make install or install.sh).
+# through the way it was installed (pacman, make install, or OmaStore itself:
+# "Update OmaStore" in the interface or omastore self-update).
 if ! "$force"; then
   for p in "$HOME/.local/bin/omastore-gui" /usr/bin/omastore-gui /usr/local/bin/omastore-gui; do
     if [ -e "$p" ]; then
       echo "OmaStore is already installed: $p" >&2
-      echo 'Update it the way it was installed, or run again with --force.' >&2
+      echo 'Update it from OmaStore itself (omastore self-update), the way it was installed, or run again with --force.' >&2
       exit 1
     fi
   done

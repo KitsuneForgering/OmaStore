@@ -44,7 +44,9 @@ commands:
   install owner/repo...             install the latest release
   uninstall owner/repo...           remove an installed app
   update [owner/repo...]            update the given apps (or every installed one)
-  update --check [--notify]         list updates; --notify shows a desktop notification
+  update --check [--notify]         list updates (OmaStore's own too); --notify shows a
+                                    desktop notification
+  self-update [--check]             update OmaStore itself (installations made by install.sh)
   deps [--install] [--json] owner/repo
                                     system dependencies from the app's PKGBUILD; --install
                                     installs the missing ones with pacman (asks for the password)
@@ -84,18 +86,19 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	cmd, cmdArgs := rest[0], rest[1:]
 	commands := map[string]func(context.Context, *app.App, []string, io.Writer, io.Writer) error{
-		"index":      cmdIndex,
-		"list":       cmdList,
-		"categories": cmdCategories,
-		"show":       cmdShow,
-		"similar":    cmdSimilar,
-		"check":      cmdCheck,
-		"install":    cmdInstall,
-		"uninstall":  cmdUninstall,
-		"update":     cmdUpdate,
-		"deps":       cmdDeps,
-		"star":       cmdStar,
-		"unstar":     cmdStar,
+		"index":       cmdIndex,
+		"list":        cmdList,
+		"categories":  cmdCategories,
+		"show":        cmdShow,
+		"similar":     cmdSimilar,
+		"check":       cmdCheck,
+		"install":     cmdInstall,
+		"uninstall":   cmdUninstall,
+		"update":      cmdUpdate,
+		"self-update": cmdSelfUpdate,
+		"deps":        cmdDeps,
+		"star":        cmdStar,
+		"unstar":      cmdStar,
 	}
 	// Commands that need neither the database nor the network.
 	if cmd == "lint-manifest" {
@@ -760,6 +763,11 @@ func checkUpdates(ctx context.Context, a *app.App, notifyUser bool, stdout io.Wr
 		return err
 	}
 	var ups []notify.Update
+	// OmaStore itself: only reported when it can update itself, and never
+	// failing the check (the Omarchy hook runs it offline too).
+	if st, err := a.SelfStatus(ctx); err == nil && st.UpdateAvailable {
+		ups = append(ups, notify.Update{Repo: install.SelfRepo, Name: "OmaStore", From: st.Version, To: st.Latest})
+	}
 	for _, it := range items {
 		if it.LatestTag != "" && it.InstalledVersion != it.LatestTag {
 			ups = append(ups, notify.Update{Repo: it.FullName, Name: it.Name, From: it.InstalledVersion, To: it.LatestTag})
@@ -774,6 +782,10 @@ func checkUpdates(ctx context.Context, a *app.App, notifyUser bool, stdout io.Wr
 		return nil
 	}
 	for _, u := range ups {
+		if u.Repo == install.SelfRepo {
+			fmt.Fprintf(stdout, "OmaStore: %s → %s (omastore self-update)\n", u.From, u.To)
+			continue
+		}
 		fmt.Fprintf(stdout, "%s: %s → %s\n", u.Repo, u.From, u.To)
 		if d, err := a.GetApp(ctx, u.Repo); err == nil && d.Repo.ReleaseNotes != "" {
 			fmt.Fprintln(stdout, indent(d.Repo.ReleaseNotes, 3))
@@ -790,5 +802,50 @@ func checkUpdates(ctx context.Context, a *app.App, notifyUser bool, stdout io.Wr
 	if !sent {
 		fmt.Fprintln(stdout, "(already notified)")
 	}
+	return nil
+}
+
+func cmdSelfUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
+	fs := newFlags("self-update", stderr)
+	check := fs.Bool("check", false, "only tell whether a newer OmaStore exists")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return errUsage
+	}
+	st, err := a.SelfStatus(ctx)
+	switch st.Mode {
+	case install.SelfPackage:
+		fmt.Fprintln(stdout, "OmaStore was installed by a package; update it with pacman")
+		return nil
+	case install.SelfDev:
+		fmt.Fprintln(stdout, "this is a development build of OmaStore; it does not update itself")
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("latest OmaStore release: %w", err)
+	}
+	if !st.UpdateAvailable {
+		fmt.Fprintf(stdout, "OmaStore %s is up to date\n", st.Version)
+		return nil
+	}
+	if *check {
+		fmt.Fprintf(stdout, "OmaStore %s → %s\n", st.Version, st.Latest)
+		if st.Notes != "" {
+			fmt.Fprintln(stdout, indent(st.Notes, 3))
+		}
+		return nil
+	}
+	r, err := a.SelfUpdate(ctx, progressPrinter(stderr, "OmaStore"))
+	endLine(stderr)
+	if errors.Is(err, install.ErrUpToDate) {
+		fmt.Fprintf(stdout, "OmaStore %s is up to date\n", r.From)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "OmaStore updated from %s to %s; reopen it to use the new version\n", r.From, r.To)
 	return nil
 }

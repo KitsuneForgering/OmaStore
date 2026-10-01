@@ -114,7 +114,11 @@ On Omarchy, it also adds a hook to `~/.config/omarchy/hooks/post-update.d/`, so
 `ln -s /usr/share/omastore/omarchy/omastore.hook ~/.config/omarchy/hooks/post-update.d/`.
 The two-step commands let you inspect `install.sh` before running it.
 The SHA-256 check covers the release tarball; it does not verify `install.sh` itself.
-To update, run the same script again (the skills are updated too). To remove
+OmaStore updates itself: when a new release is out, the sidebar offers
+**Update OmaStore** and then **Restart OmaStore** (or run `omastore self-update`).
+The release is checked against its published SHA-256 before anything changes,
+and a failed update leaves the current version as it was. Running the same
+script again also works. To remove
 it, including the skills and the hook it added (the catalog and the apps installed through
 OmaStore are kept):
 
@@ -190,7 +194,8 @@ omastore list --category Graphics
 omastore show pch/rawmakase
 omastore install pch/rawmakase
 omastore update                 # updates all installed apps
-omastore update --check         # only lists what has a new version
+omastore update --check         # only lists what has a new version (OmaStore's own too)
+omastore self-update            # updates OmaStore itself (installations made by install.sh)
 omastore uninstall pch/rawmakase
 omastore check pch/rawmakase    # for authors: what the store sees and what to fix
 omastore deps pch/rawmakase     # system dependencies from its PKGBUILD; --install installs them

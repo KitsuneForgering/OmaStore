@@ -7,6 +7,7 @@
 #include <QCommandLineParser>
 #include <QGuiApplication>
 #include <QPalette>
+#include <QProcess>
 #include <QQuickWindow>
 #include <QTimer>
 #include <QQmlApplicationEngine>
@@ -54,6 +55,13 @@ int main(int argc, char *argv[])
     };
     applyLinkColor();
     QObject::connect(&theme, &Theme::changed, &app, applyLinkColor);
+
+    // After a self-update: the new interface takes over (it starts the new daemon).
+    QObject::connect(&backend, &Backend::restartReady, &app, [](const QString &gui) {
+        if (!QProcess::startDetached(gui, {}))
+            qWarning("could not start %s", qPrintable(gui));
+        QCoreApplication::quit();
+    });
 
     QQmlApplicationEngine engine;
     OfflineNamFactory nam;

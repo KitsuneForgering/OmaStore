@@ -197,6 +197,19 @@ func (f *fakeBackend) InstallSysDeps(ctx context.Context, name string) (sysdeps.
 	return sysdeps.Report{Source: "PKGBUILD"}, nil
 }
 
+func (f *fakeBackend) SelfStatus(ctx context.Context) (install.SelfStatus, error) {
+	return install.SelfStatus{Mode: install.SelfManaged, Version: "0.1.0", Latest: "0.2.0", UpdateAvailable: true,
+		Notes: "notes"}, nil
+}
+
+func (f *fakeBackend) SelfUpdate(ctx context.Context, p func(install.Progress)) (*install.SelfResult, error) {
+	p(install.Progress{Stage: install.StageDownload, Done: 1, Total: 2})
+	if err := f.wait(ctx); err != nil {
+		return nil, err
+	}
+	return &install.SelfResult{From: "0.1.0", To: "0.2.0", GUI: "/home/u/.local/bin/omastore-gui"}, nil
+}
+
 // client is a test client that separates responses from notifications.
 type client struct {
 	t     *testing.T
@@ -831,5 +844,48 @@ func TestDepsMethods(t *testing.T) {
 	failed := cl.waitNote("job.failed", func(x Job) bool { return x.ID == j.ID })
 	if failed.Error == nil || failed.Error.Code != CodeDenied {
 		t.Errorf("denied job = %+v", failed)
+	}
+}
+
+func TestSelfMethods(t *testing.T) {
+	f := newFake()
+	s, sock := startServer(t, f)
+	cl := dial(t, sock)
+
+	var st SelfInfo
+	if e := cl.call("self.status", nil, &st); e != nil || st.Mode != "self" || st.Latest != "0.2.0" || !st.UpdateAvailable {
+		t.Fatalf("self.status: %+v %v", st, e)
+	}
+	var j Job
+	if e := cl.call("self.update", nil, &j); e != nil || j.Kind != KindSelf {
+		t.Fatalf("self.update: %+v %v", j, e)
+	}
+	if e := cl.call("self.update", nil, nil); e == nil || e.Code != CodeBusy {
+		t.Errorf("second self.update: %v", e)
+	}
+	// No restart while a job runs: it would be canceled halfway.
+	if e := cl.call("self.restart", nil, nil); e == nil || e.Code != CodeBusy {
+		t.Errorf("self.restart during a job: %v", e)
+	}
+	f.release <- struct{}{}
+	done := cl.waitNote("job.done", func(x Job) bool { return x.ID == j.ID })
+	var r SelfUpdateResult
+	b, _ := json.Marshal(done.Result)
+	if err := json.Unmarshal(b, &r); err != nil || r.To != "0.2.0" || r.GUI == "" {
+		t.Errorf("self.update result = %s (%v)", b, err)
+	}
+
+	restartDelay = 0
+	if e := cl.call("self.restart", nil, nil); e != nil {
+		t.Fatalf("self.restart: %v", e)
+	}
+	select {
+	case <-s.Restart():
+	case <-time.After(3 * time.Second):
+		t.Fatal("Restart() was not closed")
+	}
+	// A second request is harmless.
+	if e := cl.call("self.restart", nil, nil); e != nil {
+		t.Errorf("second self.restart: %v", e)
 	}
 }

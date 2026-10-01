@@ -46,8 +46,21 @@ Missing `params` is the same as `{}`. Unknown fields in `params` are an error
 | `star.set` | `{repo, starred}` | `{starred, stars}`: stars/unstars it on GitHub; `stars` is the catalog's new count |
 | `deps.check` | `{repo}` | `DepsReport` (synchronous; runs no privileged command) |
 | `deps.install` | `{repo}` | `Job` (kind `deps`) |
+| `self.status` | — | `SelfInfo` (synchronous; the latest release is cached for 30 min) |
+| `self.update` | — | `Job` (kind `self`): installs OmaStore's latest release over this installation |
+| `self.restart` | — | `{}`; the daemon exits right after replying (`-32002` while jobs run) |
 
 `repo` is always `"owner/repo"`. `all: true` includes apps without an installable binary.
+
+OmaStore updates itself only when `install.sh` installed it (`mode: "self"`:
+`$XDG_DATA_HOME/omastore/self/<version>/` with links in `~/.local/bin`). The
+release tarball must have a checksum (API digest or `.sha256`); it is extracted
+into a new version directory, then the links, the menu entry, the icon and the
+Claude Code skill copies `install.sh` made are switched over, all or nothing.
+The running version stays on disk until the next update. To finish, the
+frontend calls `self.restart` and starts the `gui` of the job result, which
+starts the new daemon. A package (`mode: "package"`) is updated by pacman and a
+development build (`"dev"`) is never compared with releases.
 
 Search and recommendation (`backend/internal/search`) are local and
 deterministic: the same query over the same catalog always returns the
@@ -105,16 +118,26 @@ AppDetail extends AppItem {
   install: InstallInfo | null
 }
 InstallInfo { repo, version, installedAt, execPath, desktopPath }
+SelfInfo {
+  mode: "self" | "package" | "dev"
+  version: string                  // running version ("" unless mode is "self")
+  latest: string                   // latest release, without the "v" ("" if unknown)
+  updateAvailable: boolean         // latest is newer and mode is "self"
+  notes: string                    // release notes of latest (markdown)
+  checkError?: string              // why latest is unknown (offline, rate limit)
+}
+SelfUpdateResult { from, to, gui: string }   // gui: ~/.local/bin/omastore-gui
 Job {
-  id, kind: "index" | "install" | "update" | "deps", repo?: string
+  id, kind: "index" | "install" | "update" | "deps" | "self", repo?: string
   state: "running" | "done" | "failed" | "canceled"
   stage?: string                   // install: download, verify, extract, integrate, done
                                    // index: discover (total 0), state, index
                                    // deps: authorize (waiting for polkit and pacman)
+                                   // self: same stages as install
   done, total: number              // bytes (install) or repos (index)
   message?: string                 // index: current repo
   error?: {code, message}
-  result?: InstallInfo | IndexResult | DepsReport
+  result?: InstallInfo | IndexResult | DepsReport | SelfUpdateResult
   started, finished?: string
 }
 IndexResult { updated, refreshed, unchanged, removed, skipped, notApps, failed }

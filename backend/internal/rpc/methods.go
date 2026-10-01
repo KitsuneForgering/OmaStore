@@ -34,6 +34,8 @@ type Backend interface {
 	Star(ctx context.Context, fullName string, starred bool) (int, error)
 	SysDeps(ctx context.Context, fullName string) (sysdeps.Report, error)
 	InstallSysDeps(ctx context.Context, fullName string) (sysdeps.Report, error)
+	SelfStatus(ctx context.Context) (install.SelfStatus, error)
+	SelfUpdate(ctx context.Context, progress func(install.Progress)) (*install.SelfResult, error)
 }
 
 // DTOs: the JSON format exposed to the frontend, stable and in camelCase,
@@ -209,6 +211,23 @@ func nonNil(s []string) []string {
 		return []string{}
 	}
 	return s
+}
+
+// SelfInfo is OmaStore's own update status.
+type SelfInfo struct {
+	Mode            string `json:"mode"`    // "self", "package" or "dev"
+	Version         string `json:"version"` // running version, "" unless mode is "self"
+	Latest          string `json:"latest"`  // latest release, "" if unknown
+	UpdateAvailable bool   `json:"updateAvailable"`
+	Notes           string `json:"notes"`
+	CheckError      string `json:"checkError,omitempty"` // why the latest release is unknown
+}
+
+// SelfUpdateResult is the result of a self.update job.
+type SelfUpdateResult struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+	GUI  string `json:"gui"` // launcher of the new interface, to restart into
 }
 
 // Method parameters.
@@ -512,6 +531,36 @@ func (s *Server) call(method string, raw json.RawMessage) (any, error) {
 			r, err := b.InstallSysDeps(ctx, p.Repo)
 			return toDeps(p.Repo, r, true), err
 		}, nil)
+
+	case "self.status":
+		st, err := b.SelfStatus(ctx)
+		info := SelfInfo{Mode: st.Mode, Version: st.Version, Latest: st.Latest,
+			UpdateAvailable: st.UpdateAvailable, Notes: st.Notes}
+		if err != nil {
+			// The installation mode is still useful without GitHub.
+			s.log.Warn("OmaStore release not checked", "err", err)
+			info.CheckError = err.Error()
+		}
+		return info, nil
+
+	case "self.update":
+		return s.jobs.start(s.ctx, KindSelf, "", func(ctx context.Context, report func(progress)) (any, error) {
+			r, err := b.SelfUpdate(ctx, func(ip install.Progress) {
+				report(progress{Stage: ip.Stage, Done: ip.Done, Total: ip.Total})
+			})
+			if r != nil {
+				return SelfUpdateResult{From: r.From, To: r.To, GUI: r.GUI}, err
+			}
+			return nil, err
+		}, nil)
+
+	case "self.restart":
+		// The daemon exits so the next one starts from the new version.
+		if s.jobs.running() > 0 {
+			return nil, ErrBusy
+		}
+		s.requestRestart()
+		return struct{}{}, nil
 
 	case "image.get":
 		var p imageParams
