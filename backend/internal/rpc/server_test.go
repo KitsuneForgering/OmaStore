@@ -21,6 +21,7 @@ import (
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/index"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/install"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/sysdeps"
 )
 
 // fakeBackend controls the pace of long operations through channels.
@@ -152,6 +153,61 @@ func (f *fakeBackend) Check(ctx context.Context, name string, m *string) (*index
 		r.SuggestedManifest = "kind = \"app\"\n"
 	}
 	return r, nil
+}
+
+func (f *fakeBackend) Starred(ctx context.Context, name string) (bool, error) {
+	if name == "acme/anon" {
+		return false, github.ErrNoToken
+	}
+	return name == "acme/photo", nil
+}
+
+func (f *fakeBackend) Star(ctx context.Context, name string, starred bool) (int, error) {
+	if name == "acme/anon" {
+		return 0, github.ErrNoToken
+	}
+	if starred {
+		return 11, nil
+	}
+	return 10, nil
+}
+
+func (f *fakeBackend) SysDeps(ctx context.Context, name string) (sysdeps.Report, error) {
+	rep := sysdeps.Report{Source: "PKGBUILD", Deps: []sysdeps.DepState{
+		{Dep: sysdeps.Dep{Spec: "glibc"}, Status: sysdeps.StatusInstalled},
+		{Dep: sysdeps.Dep{Spec: "ffmpeg>=6", Reason: "video", Optional: true}, Status: sysdeps.StatusAvailable, Package: "extra/ffmpeg"},
+		{Dep: sysdeps.Dep{Spec: "aur-only"}, Status: sysdeps.StatusUnavailable},
+	}}
+	if name == "acme/other-os" {
+		for i := range rep.Deps {
+			rep.Deps[i].Status, rep.Deps[i].Package = sysdeps.StatusUnknown, ""
+		}
+		return rep, sysdeps.ErrNoPacman
+	}
+	return rep, nil
+}
+
+func (f *fakeBackend) InstallSysDeps(ctx context.Context, name string) (sysdeps.Report, error) {
+	if err := f.wait(ctx); err != nil {
+		return sysdeps.Report{}, err
+	}
+	if name == "acme/denied" {
+		return sysdeps.Report{}, sysdeps.ErrDenied
+	}
+	return sysdeps.Report{Source: "PKGBUILD"}, nil
+}
+
+func (f *fakeBackend) SelfStatus(ctx context.Context) (install.SelfStatus, error) {
+	return install.SelfStatus{Mode: install.SelfManaged, Version: "0.1.0", Latest: "0.2.0", UpdateAvailable: true,
+		Notes: "notes"}, nil
+}
+
+func (f *fakeBackend) SelfUpdate(ctx context.Context, p func(install.Progress)) (*install.SelfResult, error) {
+	p(install.Progress{Stage: install.StageDownload, Done: 1, Total: 2})
+	if err := f.wait(ctx); err != nil {
+		return nil, err
+	}
+	return &install.SelfResult{From: "0.1.0", To: "0.2.0", GUI: "/home/u/.local/bin/omastore-gui"}, nil
 }
 
 // client is a test client that separates responses from notifications.
@@ -731,5 +787,105 @@ func TestSlowClientDoesNotBlockBroadcast(t *testing.T) {
 	s.mu.Unlock()
 	if n != 1 {
 		t.Errorf("%d connections; the stuck client should have been dropped", n)
+	}
+}
+
+func TestStarMethods(t *testing.T) {
+	_, sock := startServer(t, newFake())
+	cl := dial(t, sock)
+
+	var got map[string]any
+	if e := cl.call("star.get", map[string]any{"repo": "acme/photo"}, &got); e != nil || got["starred"] != true {
+		t.Errorf("star.get: %v %v", got, e)
+	}
+	if e := cl.call("star.set", map[string]any{"repo": "acme/vm", "starred": true}, &got); e != nil ||
+		got["starred"] != true || got["stars"] != float64(11) {
+		t.Errorf("star.set: %v %v", got, e)
+	}
+	cl.waitNote("catalog.changed", nil)
+	if e := cl.call("star.set", map[string]any{"repo": "acme/anon", "starred": true}, nil); e == nil || e.Code != CodeAuthRequired {
+		t.Errorf("without token: %v", e)
+	}
+	if e := cl.call("star.get", map[string]any{"repo": "bad"}, nil); e == nil || e.Code != CodeInvalidParams {
+		t.Errorf("invalid repo: %v", e)
+	}
+}
+
+func TestDepsMethods(t *testing.T) {
+	f := newFake()
+	_, sock := startServer(t, f)
+	cl := dial(t, sock)
+
+	var rep DepsReport
+	if e := cl.call("deps.check", map[string]any{"repo": "acme/photo"}, &rep); e != nil {
+		t.Fatal(e)
+	}
+	if !rep.Pacman || rep.Source != "PKGBUILD" || len(rep.Deps) != 3 || rep.Missing != 2 ||
+		len(rep.ToInstall) != 1 || rep.ToInstall[0] != "extra/ffmpeg" {
+		t.Fatalf("report = %+v", rep)
+	}
+	if d := rep.Deps[1]; d.Name != "ffmpeg" || d.Spec != "ffmpeg>=6" || !d.Optional || d.Reason != "video" || d.Status != "available" {
+		t.Errorf("dep = %+v", d)
+	}
+	// Without pacman the dependencies are still listed.
+	if e := cl.call("deps.check", map[string]any{"repo": "acme/other-os"}, &rep); e != nil || rep.Pacman || rep.Deps[0].Status != "unknown" {
+		t.Errorf("no pacman: %+v %v", rep, e)
+	}
+
+	var j Job
+	if e := cl.call("deps.install", map[string]any{"repo": "acme/denied"}, &j); e != nil || j.Kind != KindDeps {
+		t.Fatalf("deps.install: %+v %v", j, e)
+	}
+	// pacman has one lock: a second dependency job waits for the first.
+	if e := cl.call("deps.install", map[string]any{"repo": "acme/photo"}, nil); e == nil || e.Code != CodeBusy {
+		t.Errorf("second deps job: %v", e)
+	}
+	f.release <- struct{}{}
+	failed := cl.waitNote("job.failed", func(x Job) bool { return x.ID == j.ID })
+	if failed.Error == nil || failed.Error.Code != CodeDenied {
+		t.Errorf("denied job = %+v", failed)
+	}
+}
+
+func TestSelfMethods(t *testing.T) {
+	f := newFake()
+	s, sock := startServer(t, f)
+	cl := dial(t, sock)
+
+	var st SelfInfo
+	if e := cl.call("self.status", nil, &st); e != nil || st.Mode != "self" || st.Latest != "0.2.0" || !st.UpdateAvailable {
+		t.Fatalf("self.status: %+v %v", st, e)
+	}
+	var j Job
+	if e := cl.call("self.update", nil, &j); e != nil || j.Kind != KindSelf {
+		t.Fatalf("self.update: %+v %v", j, e)
+	}
+	if e := cl.call("self.update", nil, nil); e == nil || e.Code != CodeBusy {
+		t.Errorf("second self.update: %v", e)
+	}
+	// No restart while a job runs: it would be canceled halfway.
+	if e := cl.call("self.restart", nil, nil); e == nil || e.Code != CodeBusy {
+		t.Errorf("self.restart during a job: %v", e)
+	}
+	f.release <- struct{}{}
+	done := cl.waitNote("job.done", func(x Job) bool { return x.ID == j.ID })
+	var r SelfUpdateResult
+	b, _ := json.Marshal(done.Result)
+	if err := json.Unmarshal(b, &r); err != nil || r.To != "0.2.0" || r.GUI == "" {
+		t.Errorf("self.update result = %s (%v)", b, err)
+	}
+
+	restartDelay = 0
+	if e := cl.call("self.restart", nil, nil); e != nil {
+		t.Fatalf("self.restart: %v", e)
+	}
+	select {
+	case <-s.Restart():
+	case <-time.After(3 * time.Second):
+		t.Fatal("Restart() was not closed")
+	}
+	// A second request is harmless.
+	if e := cl.call("self.restart", nil, nil); e != nil {
+		t.Errorf("second self.restart: %v", e)
 	}
 }

@@ -24,6 +24,7 @@ add_library(omastore-core STATIC
 target_include_directories(omastore-core PUBLIC src)
 target_link_libraries(omastore-core PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Quick)
 target_compile_options(omastore-core PRIVATE -Wall -Wextra)
+target_compile_definitions(omastore-core PUBLIC OMASTORE_VERSION="${PROJECT_VERSION}")
 
 qt_add_executable(omastore-gui src/main.cpp)
 
@@ -39,6 +40,7 @@ qt_add_qml_module(omastore-gui
         qml/JobsBar.qml
         qml/SideBar.qml
         qml/PrimaryButton.qml
+        qml/LinkText.qml
         qml/PublishPage.qml
 )
 

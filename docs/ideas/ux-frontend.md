@@ -1,26 +1,11 @@
-# Interface ideas (Phase 8)
+# Interface ideas
 
-Notes for the frontend. Items marked **done** are already in Phase 8.
+Open items for the frontend. Search, grid navigation, `/`, `Esc`, `Ctrl+R`,
+the checksum badge, the empty state, the rate limit message and the theme are
+done (Phase 8); release notes and the "Open" button are done (Phase 18).
 
-- **Keyboard first** (*partial: `/`, `Esc`, `Ctrl+R` and grid navigation done; `i`/`u` missing*): Omarchy users live on the keyboard. `/` focuses the
-  search, `j/k` moves through the grid, `Enter` opens the detail, `i` installs, `u`
-  updates, `Esc` goes back.
-- **Verification badge** (*done*): `AssetInfo.verified` already exists in the protocol.
-  Show "checksum verified" or "no checksum" before installing, and ask for
-  confirmation in the second case (see [trust.md](trust.md)).
-- **Release notes:** show the new version's changelog on the
-  "Update" button. *Backend:* store the release `body` in the index (it is not
-  stored today).
-- **Open after installing:** an "Open" button that uses the generated `.desktop`
-  (`gtk-launch omastore-owner-repo`). Installation still executes nothing;
-  opening is an explicit user action.
-- **Empty state** (*done*): on the first run the catalog is empty. Start
-  `index.start` automatically and show the progress (`job.progress` carries the
-  current repo in `message`).
-- **Rate limit** (*done*): error `-32005` should suggest `gh auth login` and say
-  when the limit resets.
-- **Theme** (*done*): colors from `~/.local/state/omarchy/current/theme/colors.toml`,
-  reloaded when the theme changes (Omarchy replaces the whole directory).
+- **Keyboard first:** Omarchy users live on the keyboard. Still missing: `j/k`
+  in the grid, `i` installs and `u` updates on the app page.
 - **Install from a link:** register an `x-scheme-handler/omastore` handler
   for `omastore://owner/repo` links (e.g. in a README), which opens
   `omastore-gui --open owner/repo`. The `--open` option already exists.

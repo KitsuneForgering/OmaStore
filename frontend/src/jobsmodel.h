@@ -43,6 +43,8 @@ public:
     Q_INVOKABLE QVariantMap forRepo(const QString &repo) const;
     // Running index job (empty if there is none).
     Q_INVOKABLE QVariantMap indexJob() const;
+    // Running self-update of OmaStore (empty if there is none).
+    Q_INVOKABLE QVariantMap selfJob() const;
     // Removes the finished jobs from the list.
     Q_INVOKABLE void clearFinished();
 
@@ -59,6 +61,7 @@ signals:
     void finished(const QVariantMap &job);
 
 private:
+    QVariantMap runningOfKind(QLatin1String kind) const;
     int find(const QString &id) const;
     void bump();
 

@@ -53,7 +53,11 @@ Two processes with separate responsibilities:
 - The C++ layer exposes to QML: an IPC client (`QLocalSocket`) and `QAbstractListModel` models
   (catalog, installed, jobs). No business logic in QML beyond presentation and simple filters.
 - The look follows the active Omarchy theme: `colors.toml` in `~/.local/state/omarchy/current/theme/` (older
-  installations: `~/.config/omarchy/current/theme/`), reloaded when the theme changes.
+  installations: `~/.config/omarchy/current/theme/`), reloaded when the theme changes. `Theme` adjusts the
+  theme's colors to WCAG AAA (text 7:1 on background/surface/selection/hover; borders and focus 3:1): QML uses
+  only `theme.*` colors, never `opacity` or `Qt.lighter/darker` on text or its background, and text on a
+  fill uses the matching pair (`accentFill`/`onAccent`, `dangerFill`/`onDanger`, `focus`/`onFocus`).
+  Animation durations come from `theme.durationShort`/`durationMedium`, which are 0 with reduced motion.
 - The frontend never accesses the network: images come from the daemon (`image.get`, provider `image://omastore/`), the
   QML engine uses a `QNetworkAccessManager` that blocks remote URLs and the README is shown without images.
 - The frontend never looks for `omastored` in `PATH` (which includes `~/.local/bin`, where downloaded apps live):
@@ -72,7 +76,7 @@ Two processes with separate responsibilities:
    extraction/classification rules (assets, categories, README), bump `index.Version`**; otherwise repos
    already stored are never reclassified.
 3. **Extraction** — README (rendered as short + long description), icon, screenshots, license,
-   topics and stars. Prefer the API; clone only if you need files the API does not deliver well.
+   topics, stars and the system dependencies of the repository's PKGBUILD/.SRCINFO. Prefer the API; clone only if you need files the API does not deliver well.
 4. **Classification** — category from the topics; ordering by stars (with recency as tiebreaker).
 5. **Persistence** — write everything in one transaction and record the processed SHA/tag.
 
@@ -91,7 +95,14 @@ Rules:
 - Never execute the downloaded binary during installation.
 - Guard against path traversal when extracting files (zip slip) and against symlinks leaving the destination directory.
 - Escape every field coming from the repository before writing it into the `.desktop`.
-- Nothing is installed outside the user's `$HOME`; no `sudo`.
+- Nothing is installed outside the user's `$HOME`; no `sudo`. The single exception is an app's system
+  dependencies (`internal/sysdeps`): only on the user's request, only through `pkexec /usr/bin/pacman -S --needed`
+  (polkit asks for the password), only package names validated and resolved by pacman from the configured
+  repositories (never AUR, never a helper such as yay). The PKGBUILD/.SRCINFO they come from is parsed, never run.
+- OmaStore updates itself (`install/self.go`, `self.*` methods) only for the per-user installation made by
+  `install.sh` (`$XDG_DATA_HOME/omastore/self/<version>/` + links in `~/.local/bin`); the version comes from the
+  running executable's path. The tarball must have a checksum, nothing from it is run, the links/menu entry/icon
+  switch with rollback, and the running version is kept until the next update. Packages are left to pacman.
 - Uninstalling removes only the paths registered in the database. A path that could not be removed stays
   registered (uninstall returns `ErrIncomplete`), never silently forgotten.
 
@@ -103,6 +114,8 @@ Rules:
 - `assets` — release assets per repo/tag (name, url, arch, format, checksum).
 - `installs` — installed app, version, date, list of created files.
 - `not_apps` — repositories recently found without an app `omastore.toml`; skipped without requests for 7 days.
+- `apps.sysdeps` — `depends`/`optdepends` read from the repository's PKGBUILD/.SRCINFO at index time (JSON).
+- `repos.release_notes` — body of the latest release (markdown, capped at 16 KiB), shown as "What's new".
 
 Repository names are case-insensitive, as on GitHub: lookups by a name the user typed use `COLLATE NOCASE`
 and return the stored spelling; names are validated in one place (`internal/repoid`).
@@ -114,7 +127,7 @@ Schema changes go through numbered migrations in `backend/internal/store/migrati
 ```
 backend/
   cmd/omastored/        # daemon (IPC server)
-  cmd/omastore/         # debug CLI: index, list, show, install, uninstall, update, check
+  cmd/omastore/         # debug CLI: index, list, show, install, uninstall, update, self-update, check, deps, star
   internal/app/         # wires the services; the single entry point for the CLI and the daemon
   internal/github/      # go-github wrapper
   internal/gitrepo/     # shallow clones via go-git + icon/screenshot lookup
@@ -128,6 +141,7 @@ backend/
   internal/imagecache/  # remote images for the frontend
   internal/notify/      # desktop notifications via D-Bus (without running notify-send)
   internal/search/      # BM25 search and "similar apps" (TF-IDF), deterministic
+  internal/sysdeps/     # PKGBUILD/.SRCINFO dependencies (parsed, never run) + pacman check/install via pkexec
   internal/rpc/         # JSON-RPC server, jobs, socket activation
 frontend/
   CMakeLists.txt        # omastore-core lib + app + tests (ctest)
@@ -136,7 +150,7 @@ frontend/
   tests/                # Qt Test with a fake daemon (QLocalServer)
 packaging/              # PKGBUILD, systemd units, the store's .desktop and icon
 docs/                   # ipc.md, authors.md, ideas/, screenshots/
-skills/                 # Claude Code skills for app authors
+skills/                 # agent skills for app authors (install.sh copies them for every agent)
 ```
 
 ## Commands

@@ -141,16 +141,26 @@ QVariantMap JobsModel::forRepo(const QString &repo) const
     return {};
 }
 
-QVariantMap JobsModel::indexJob() const
+QVariantMap JobsModel::runningOfKind(QLatin1String kind) const
 {
     for (const QJsonObject &j : m_jobs) {
-        if (str(j, "state") == Running && str(j, "kind") == QLatin1String("index")) {
+        if (str(j, "state") == Running && str(j, "kind") == kind) {
             QVariantMap m = j.toVariantMap();
             m.insert(QStringLiteral("progress"), progressOf(j));
             return m;
         }
     }
     return {};
+}
+
+QVariantMap JobsModel::indexJob() const
+{
+    return runningOfKind(QLatin1String("index"));
+}
+
+QVariantMap JobsModel::selfJob() const
+{
+    return runningOfKind(QLatin1String("self"));
 }
 
 void JobsModel::clearFinished()

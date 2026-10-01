@@ -64,6 +64,18 @@ Page {
         cellHeight: 190
         ScrollBar.vertical: ScrollBar {}
 
+        populate: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+        }
+        add: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+            NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+        }
+        displaced: Transition {
+            NumberAnimation { properties: "x,y"; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+        }
+
         delegate: Item {
             required property int index
             required property string repo

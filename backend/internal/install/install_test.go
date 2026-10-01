@@ -88,6 +88,7 @@ func newEnv(t *testing.T) *env {
 	in.HTTP = srv.Client()
 	in.GOARCH = "amd64"
 	in.Hooks = false
+	in.TUILauncher = "" // the machine running the tests may be an Omarchy one
 	in.Log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	e.in = in
 	return e

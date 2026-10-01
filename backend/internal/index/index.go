@@ -4,6 +4,7 @@ package index
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -20,13 +21,14 @@ import (
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/gitrepo"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/manifest"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/sysdeps"
 )
 
 // Version is the version of the extraction and classification logic. Bump it
 // when changing rules that affect what is stored (assets, categories, README...):
 // repositories stored with a lower version are reprocessed even without changes
 // on GitHub.
-const Version = 6
+const Version = 9
 
 // GitHub is the subset of the client used by the indexer.
 type GitHub interface {
@@ -715,6 +717,7 @@ func (ix *Indexer) process(ctx context.Context, name string, force, explicit boo
 		PushedAt:      repo.PushedAt,
 		HeadSHA:       sha,
 		LatestTag:     tagOf(rel),
+		ReleaseNotes:  releaseNotes(rel),
 		ETag:          newETag,
 		IndexedAt:     now,
 		IndexVersion:  Version,
@@ -744,6 +747,28 @@ func (ix *Indexer) notApp(ctx context.Context, name, why string, now time.Time) 
 		return outNotApp, nil
 	}
 	return outNotApp, ix.Store.MarkNotApp(ctx, name, Version, now)
+}
+
+// maxReleaseNotes caps the stored release notes (bytes).
+const maxReleaseNotes = 16 << 10
+
+// releaseNotes is the release body, cut at maxReleaseNotes on a line break
+// (or a rune boundary) so the markdown is not split mid-character.
+func releaseNotes(rel *github.Release) string {
+	if rel == nil {
+		return ""
+	}
+	body := strings.TrimSpace(strings.ReplaceAll(rel.Body, "\r\n", "\n"))
+	if len(body) <= maxReleaseNotes {
+		return body
+	}
+	cut := body[:maxReleaseNotes]
+	if i := strings.LastIndexByte(cut, '\n'); i > maxReleaseNotes/2 {
+		cut = cut[:i]
+	} else {
+		cut = strings.ToValidUTF8(cut, "") // drops a rune cut in half
+	}
+	return strings.TrimSpace(cut) + "\n\n…"
 }
 
 func tagOf(rel *github.Release) string {
@@ -850,6 +875,10 @@ func (ix *Indexer) extract(ctx context.Context, repo *github.Repo, sha string, r
 		app.Screenshots = app.Screenshots[:maxScreenshots]
 	}
 
+	if filesKnown {
+		app.SysDeps = ix.sysDeps(ctx, name, sha, repo.Name, files)
+	}
+
 	assets := releaseAssets(rel, m)
 	for _, a := range assets {
 		if (asset.Info{Format: a.Format, Arch: a.Arch}).Installable(ix.goarch()) {
@@ -858,6 +887,30 @@ func (ix *Indexer) extract(ctx context.Context, repo *github.Repo, sha string, r
 		}
 	}
 	return app, assets, nil
+}
+
+// sysDeps reads the system dependencies declared in the repository's best
+// PKGBUILD/.SRCINFO, as JSON ("" if there is none). A failure only loses the
+// dependencies: the app is still indexed.
+func (ix *Indexer) sysDeps(ctx context.Context, name, sha, repoName string, files []string) string {
+	cands := sysdeps.Candidates(files)
+	if len(cands) == 0 {
+		return ""
+	}
+	content, found, err := ix.GH.File(ctx, name, cands[0], sha, sysdeps.MaxFileSize)
+	if err != nil || !found {
+		ix.log().Warn("unreadable package build file", "repo", name, "file", cands[0], "err", err)
+		return ""
+	}
+	set := sysdeps.Parse(cands[0], content, repoName, ix.goarch())
+	if len(set.Deps) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(set)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 // manifestFor fetches and validates the root omastore.toml at commit sha: from

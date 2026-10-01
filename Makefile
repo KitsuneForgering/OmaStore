@@ -116,7 +116,11 @@ install: ## Install into $(DESTDIR)$(PREFIX) (after make release)
 	install -Dm644 packaging/systemd/omastore-index.timer   $(DESTDIR)$(PREFIX)/lib/systemd/user/omastore-index.timer
 	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/omastore/LICENSE
 	install -Dm644 docs/ipc.md $(DESTDIR)$(PREFIX)/share/doc/omastore/ipc.md
-	@# Claude Code skills for app authors; install.sh copies them into ~/.claude/skills.
+	@# Omarchy post-update hook; install.sh writes its own copy, a package cannot write to $$HOME.
+	@install -d $(DESTDIR)$(PREFIX)/share/omastore/omarchy
+	sed -e 's|@BINDIR@|$(PREFIX)/bin|g' -e 's|@DATADIR@|$(PREFIX)/share|g' packaging/omarchy/omastore.hook.in > $(DESTDIR)$(PREFIX)/share/omastore/omarchy/omastore.hook
+	chmod 644 $(DESTDIR)$(PREFIX)/share/omastore/omarchy/omastore.hook
+	@# Skills for app authors; install.sh copies them into the coding agents' skill directories.
 	cd skills && find omastore-* -type f ! -path '*/__pycache__/*' | LC_ALL=C sort | while IFS= read -r f; do \
 		case "$$f" in */scripts/*) mode=755 ;; *) mode=644 ;; esac; \
 		install -Dm$$mode "$$f" "$(DESTDIR)$(PREFIX)/share/omastore/skills/$$f" || exit 1; \

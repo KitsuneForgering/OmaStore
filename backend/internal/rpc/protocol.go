@@ -13,6 +13,7 @@ import (
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/index"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/install"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/sysdeps"
 )
 
 // Protocol version, returned by daemon.hello.
@@ -68,6 +69,10 @@ const (
 	CodeChecksum       = -32008
 	CodeCanceled       = -32009
 	CodeIncomplete     = -32010
+	CodeAuthRequired   = -32011
+	CodeDenied         = -32012
+	CodeUnsupported    = -32013
+	CodeUnavailable    = -32014
 )
 
 // ErrBusy means an equivalent job is already running.
@@ -106,6 +111,16 @@ func toError(err error) *Error {
 		code = CodeCanceled
 	case errors.Is(err, install.ErrIncomplete):
 		code = CodeIncomplete
+	case errors.Is(err, github.ErrNoToken), errors.Is(err, github.ErrStarForbidden):
+		code = CodeAuthRequired
+	case errors.Is(err, sysdeps.ErrDenied):
+		code = CodeDenied
+	case errors.Is(err, sysdeps.ErrNoPacman):
+		code = CodeUnsupported
+	case errors.Is(err, sysdeps.ErrUnavailable):
+		code = CodeUnavailable
+	case errors.Is(err, github.ErrNotFound):
+		code = CodeNotFound
 	}
 	return &Error{Code: code, Message: err.Error()}
 }

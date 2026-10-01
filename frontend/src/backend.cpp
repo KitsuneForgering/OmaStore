@@ -6,10 +6,16 @@
 #include "rpcclient.h"
 
 #include <QClipboard>
+#include <QDir>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QProcess>
 #include <QRegularExpression>
+#include <QSysInfo>
+#include <QUrl>
+#include <QUrlQuery>
 
 #include <utility>
 
@@ -33,9 +39,14 @@ Backend::Backend(RpcClient *rpc, QObject *parent)
         if (m_rpc->isConnected()) {
             loadCategories();
             reloadDetail();
-            if (!m_detailRepo.isEmpty())
-                loadSimilar(m_detailRepo); // detail opened before connecting (e.g. --open)
+            if (!m_detailRepo.isEmpty()) {
+                // Detail opened before connecting (e.g. --open).
+                loadSimilar(m_detailRepo);
+                loadStar(m_detailRepo);
+            }
             maybeIndexOnFirstRun();
+            if (m_selfInstalled.isEmpty())
+                checkSelf();
             if (!m_pendingCheck.isEmpty())
                 sendAuthorCheck(std::exchange(m_pendingCheck, {}));
         }
@@ -63,11 +74,42 @@ Backend::Backend(RpcClient *rpc, QObject *parent)
                 emit indexErrorChanged();
             }
         }
+        if (kind == QLatin1String("self")) {
+            if (state == QLatin1String("done")) {
+                const QVariantMap result = job.value(QStringLiteral("result")).toMap();
+                m_selfInstalled = result.value(QStringLiteral("to")).toString();
+                m_selfGui = result.value(QStringLiteral("gui")).toString();
+                m_selfStatus.insert(QStringLiteral("updateAvailable"), false);
+                emit selfChanged();
+                emit notice(tr("OmaStore %1 is installed. Restart OmaStore to use it.").arg(m_selfInstalled));
+            } else if (state == QLatin1String("failed")) {
+                emit errorOccurred(tr("OmaStore could not update itself; the current version keeps working.\n%1")
+                                       .arg(friendlyError(error.value(QStringLiteral("code")).toInt(),
+                                                          error.value(QStringLiteral("message")).toString())));
+            }
+            return;
+        }
+        if (kind == QLatin1String("deps") && repoOf(job).compare(m_detailRepo, Qt::CaseInsensitive) == 0)
+            loadDeps(m_detailRepo);
+        if (kind != QLatin1String("index") && state != QLatin1String("canceled")) {
+            const QString key = repoOf(job).toLower();
+            const bool had = m_failures.contains(key);
+            if (state == QLatin1String("failed"))
+                m_failures.insert(key, error.value(QStringLiteral("message")).toString());
+            else
+                m_failures.remove(key);
+            if ((had || m_failures.contains(key)) && key == m_detailRepo.toLower())
+                emit detailChanged();
+        }
         if (state == QLatin1String("done")) {
-            if (kind == QLatin1String("install"))
+            if (kind == QLatin1String("install")) {
                 emit notice(tr("%1 installed").arg(repoOf(job)));
-            else if (kind == QLatin1String("update"))
+                loadDeps(repoOf(job), true);
+            } else if (kind == QLatin1String("update")) {
                 emit notice(tr("%1 updated").arg(repoOf(job)));
+            } else if (kind == QLatin1String("deps")) {
+                emit notice(tr("System dependencies of %1 installed").arg(repoOf(job)));
+            }
         } else if (state == QLatin1String("failed")) {
             emit errorOccurred(friendlyError(error.value(QStringLiteral("code")).toInt(),
                                              error.value(QStringLiteral("message")).toString()));
@@ -111,6 +153,14 @@ QString Backend::friendlyError(int code, const QString &message)
     case -32010:
         return tr("Some files could not be removed. They stay recorded, so removing the app again will retry.\n%1")
             .arg(message);
+    case -32011:
+        return tr("Starring needs a GitHub account: run `gh auth login` (or set GITHUB_TOKEN) and restart OmaStore.");
+    case -32012:
+        return tr("The administrator password was not given. Nothing was installed.");
+    case -32013:
+        return tr("System dependencies can only be installed on Arch Linux (pacman).");
+    case -32014:
+        return tr("Some dependencies are not in the pacman repositories (they may be in the AUR). Install them manually.");
     }
     return message;
 }
@@ -134,11 +184,83 @@ void Backend::openDetail(const QString &repo)
         m_detailRepo = repo;
         m_detail.clear();
         m_similar.clear();
+        m_deps.clear();
+        setStar(StarUnknown, false, {});
         emit detailChanged();
         emit similarChanged();
+        emit depsChanged();
     }
     reloadDetail();
     loadSimilar(repo);
+    loadStar(repo);
+}
+
+void Backend::setStar(int state, bool busy, const QString &hint)
+{
+    if (state == m_starState && busy == m_starBusy && hint == m_starHint)
+        return;
+    m_starState = state;
+    m_starBusy = busy;
+    m_starHint = hint;
+    emit starChanged();
+}
+
+void Backend::loadStar(const QString &repo)
+{
+    m_rpc->call(QStringLiteral("star.get"), {{QStringLiteral("repo"), repo}},
+                [this, repo](const QJsonValue &result, const RpcError &err) {
+        if (repo != m_detailRepo || m_starBusy)
+            return;
+        if (!err.ok()) {
+            setStar(StarUnknown, false, err.code == -32011 ? friendlyError(err.code, err.message) : QString());
+            return;
+        }
+        setStar(result.toObject().value(QStringLiteral("starred")).toBool() ? StarYes : StarNo, false, {});
+    });
+}
+
+void Backend::toggleStar()
+{
+    if (m_detailRepo.isEmpty() || m_starBusy || m_starState == StarUnknown)
+        return;
+    const QString repo = m_detailRepo;
+    const bool want = m_starState != StarYes;
+    setStar(m_starState, true, {});
+    m_rpc->call(QStringLiteral("star.set"), {{QStringLiteral("repo"), repo}, {QStringLiteral("starred"), want}},
+                [this, repo, want](const QJsonValue &result, const RpcError &err) {
+        if (repo != m_detailRepo)
+            return;
+        if (!err.ok()) {
+            setStar(m_starState, false, err.code == -32011 ? friendlyError(err.code, err.message) : QString());
+            emit errorOccurred(friendlyError(err.code, err.message));
+            return;
+        }
+        setStar(want ? StarYes : StarNo, false, {});
+        m_detail.insert(QStringLiteral("stars"), result.toObject().value(QStringLiteral("stars")).toInt());
+        emit detailChanged();
+    });
+}
+
+void Backend::loadDeps(const QString &repo, bool suggest)
+{
+    m_rpc->call(QStringLiteral("deps.check"), {{QStringLiteral("repo"), repo}},
+                [this, repo, suggest](const QJsonValue &result, const RpcError &err) {
+        if (!err.ok())
+            return;
+        const QVariantMap deps = result.toObject().toVariantMap();
+        if (repo.compare(m_detailRepo, Qt::CaseInsensitive) == 0) {
+            m_deps = deps;
+            emit depsChanged();
+        }
+        const QStringList packages = deps.value(QStringLiteral("toInstall")).toStringList();
+        if (suggest && !packages.isEmpty())
+            emit depsSuggested(repo, packages);
+    });
+}
+
+void Backend::installDeps(const QString &repo)
+{
+    startJob(QStringLiteral("deps.install"), repo);
 }
 
 void Backend::loadSimilar(const QString &repo)
@@ -157,7 +279,10 @@ void Backend::closeDetail()
     m_detailRepo.clear();
     m_detail.clear();
     m_similar.clear();
+    m_deps.clear();
+    setStar(StarUnknown, false, {});
     emit similarChanged();
+    emit depsChanged();
     m_detailLoading = false;
     emit detailChanged();
 }
@@ -183,6 +308,7 @@ void Backend::reloadDetail()
         m_detail = result.toObject().toVariantMap();
         emit detailChanged();
     });
+    loadDeps(repo); // an index or install may change what is declared or installed
 }
 
 void Backend::startJob(const QString &method, const QString &repo)
@@ -242,6 +368,44 @@ void Backend::cancelJob(const QString &jobId)
     m_rpc->call(QStringLiteral("jobs.cancel"), {{QStringLiteral("job"), jobId}});
 }
 
+void Backend::checkSelf()
+{
+    m_rpc->call(QStringLiteral("self.status"), {}, [this](const QJsonValue &result, const RpcError &err) {
+        if (!err.ok())
+            return; // an older daemon without self.status: nothing to offer
+        const QVariantMap st = result.toObject().toVariantMap();
+        if (st != m_selfStatus) {
+            m_selfStatus = st;
+            emit selfChanged();
+        }
+    });
+}
+
+void Backend::updateSelf()
+{
+    startJob(QStringLiteral("self.update"), {});
+}
+
+void Backend::restartSelf()
+{
+    const QFileInfo gui(m_selfGui);
+    if (m_selfInstalled.isEmpty() || !gui.isAbsolute() || gui.fileName() != QLatin1String("omastore-gui")) {
+        emit errorOccurred(tr("Close and reopen OmaStore to use the new version."));
+        return;
+    }
+    m_rpc->call(QStringLiteral("self.restart"), {}, [this](const QJsonValue &, const RpcError &err) {
+        // A dropped connection means the daemon already went away.
+        if (!err.ok() && err.code != RpcClient::DisconnectedCode) {
+            emit errorOccurred(err.code == -32002
+                                   ? tr("Wait for the running operations to finish, then restart OmaStore.")
+                                   : friendlyError(err.code, err.message));
+            return;
+        }
+        m_rpc->stop(); // no reconnection to the daemon that is leaving
+        emit restartReady(m_selfGui);
+    });
+}
+
 QString Backend::readmeForDisplay(const QString &markdown) const
 {
     return Markdown::forDisplay(markdown);
@@ -285,7 +449,7 @@ QString Backend::normalizeRepo(const QString &input)
     return parts.at(0) + QLatin1Char('/') + repo;
 }
 
-void Backend::checkRepo(const QString &input, const QString &manifest)
+void Backend::checkRepo(const QString &input, const QString &manifest, bool testManifest)
 {
     ++m_authorCheckSeq;
     m_authorCheck.clear();
@@ -300,7 +464,7 @@ void Backend::checkRepo(const QString &input, const QString &manifest)
     m_authorCheckError.clear();
     emit authorCheckChanged();
     QJsonObject params{{QStringLiteral("repo"), repo}};
-    if (!manifest.trimmed().isEmpty())
+    if (testManifest)
         params.insert(QStringLiteral("manifest"), manifest);
     if (!m_rpc->isConnected()) {
         m_pendingCheck = params; // e.g. omastore-gui --check: sent once connected
@@ -332,6 +496,77 @@ void Backend::clearAuthorCheck()
     m_authorCheckBusy = false;
     m_authorCheckError.clear();
     emit authorCheckChanged();
+}
+
+QString Backend::detailFailure() const
+{
+    return m_failures.value(m_detailRepo.toLower());
+}
+
+void Backend::launch()
+{
+    const QString desktop = m_detail.value(QStringLiteral("install")).toMap().value(QStringLiteral("desktopPath")).toString();
+    const QString id = QFileInfo(desktop).completeBaseName();
+    // Absolute paths: never through PATH, which holds the downloaded apps.
+    const QString gtkLaunch = QStringLiteral("/usr/bin/gtk-launch");
+    const QString gio = QStringLiteral("/usr/bin/gio");
+    bool ok = false;
+    if (id.startsWith(QLatin1String("omastore-")) && QFileInfo::exists(desktop)) {
+        if (QFileInfo(gtkLaunch).isExecutable())
+            ok = QProcess::startDetached(gtkLaunch, {id});
+        else if (QFileInfo(gio).isExecutable())
+            ok = QProcess::startDetached(gio, {QStringLiteral("launch"), desktop});
+    }
+    if (!ok)
+        emit errorOccurred(tr("Could not open %1: its menu entry or gtk-launch is missing.").arg(m_detailRepo));
+}
+
+QString Backend::issueUrl() const
+{
+    return buildIssueUrl(m_detail, detailFailure(), QSysInfo::currentCpuArchitecture(),
+                         QCoreApplication::applicationVersion(), QDir::homePath());
+}
+
+QString Backend::buildIssueUrl(const QVariantMap &detail, const QString &failure, const QString &arch,
+                               const QString &storeVersion, const QString &home)
+{
+    const QString repo = normalizeRepo(detail.value(QStringLiteral("repo")).toString());
+    if (repo.isEmpty())
+        return {};
+    // Release files are named after Go's architectures (docs/ipc.md).
+    const QString goarch = arch == QLatin1String("x86_64") ? QStringLiteral("amd64")
+                         : arch == QLatin1String("arm64") ? QStringLiteral("arm64") : arch;
+    QStringList files;
+    for (const QVariant &a : detail.value(QStringLiteral("assets")).toList()) {
+        const QVariantMap m = a.toMap();
+        const QString assetArch = m.value(QStringLiteral("arch")).toString();
+        if (assetArch.isEmpty() || assetArch == goarch)
+            files << m.value(QStringLiteral("name")).toString();
+    }
+    const QString installed = detail.value(QStringLiteral("install")).toMap().value(QStringLiteral("version")).toString();
+    QString error = failure.simplified();
+    if (!home.isEmpty() && home != QLatin1String("/"))
+        error.replace(home, QStringLiteral("~"));
+
+    QStringList body{QStringLiteral("<!-- Describe what happened and what you expected. -->"), QString(),
+                     QString(), QStringLiteral("**Environment** (filled in by OmaStore; edit freely)"),
+                     QStringLiteral("- App version: %1 (latest release: %2)")
+                         .arg(installed.isEmpty() ? QStringLiteral("not installed") : installed,
+                              detail.value(QStringLiteral("latestVersion")).toString()),
+                     QStringLiteral("- Architecture: %1").arg(arch)};
+    if (!files.isEmpty())
+        body << QStringLiteral("- Release files for it: %1").arg(files.join(QStringLiteral(", ")));
+    body << QStringLiteral("- OmaStore: %1").arg(storeVersion.isEmpty() ? QStringLiteral("unknown") : storeVersion);
+    if (!error.isEmpty())
+        body << QStringLiteral("- Error: `%1`").arg(error.replace(QLatin1Char('`'), QLatin1Char('\'')));
+
+    QUrlQuery query;
+    if (!error.isEmpty())
+        query.addQueryItem(QStringLiteral("title"), QStringLiteral("Installing through OmaStore fails"));
+    query.addQueryItem(QStringLiteral("body"), body.join(QLatin1Char('\n')));
+    QUrl url(QStringLiteral("https://github.com/%1/issues/new").arg(repo));
+    url.setQuery(query);
+    return url.toString(QUrl::FullyEncoded);
 }
 
 void Backend::copyText(const QString &text)

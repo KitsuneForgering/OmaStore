@@ -6,9 +6,11 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/asset"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/github"
@@ -21,8 +23,9 @@ type fakeRepo struct {
 	release *github.Release
 	readme  string
 	files   []string
-	toml    string // omastore.toml content (empty = empty file, which counts)
-	noToml  bool   // repository without omastore.toml
+	toml    string            // omastore.toml content (empty = empty file, which counts)
+	noToml  bool              // repository without omastore.toml
+	extra   map[string]string // other files readable through File
 }
 
 // fakeGH simulates the GitHub API in memory and counts the calls.
@@ -118,6 +121,9 @@ func (f *fakeGH) File(ctx context.Context, name, path, ref string, max int) (str
 	r, err := f.get(name)
 	if err != nil {
 		return "", false, err
+	}
+	if c, ok := r.extra[path]; ok {
+		return c, true, nil
 	}
 	if path != "omastore.toml" || r.noToml {
 		return "", false, nil
@@ -287,13 +293,13 @@ func TestNewCommitOrReleaseReprocesses(t *testing.T) {
 	}
 
 	// New release without a push (304 on the repo): the tag reveals the change.
-	r.release = &github.Release{Tag: "v2.0.0", Assets: r.release.Assets}
+	r.release = &github.Release{Tag: "v2.0.0", Body: "## v2\r\n\r\n- New export\r\n", Assets: r.release.Assets}
 	stats, _ = ix.Run(ctx, Options{})
 	if stats.Updated != 1 {
 		t.Errorf("new release: %+v", stats)
 	}
 	d, _ := st.GetApp(ctx, "acme/omaphoto")
-	if d.Repo.LatestTag != "v2.0.0" || d.Repo.HeadSHA != "sha2" {
+	if d.Repo.LatestTag != "v2.0.0" || d.Repo.HeadSHA != "sha2" || d.Repo.ReleaseNotes != "## v2\n\n- New export" {
 		t.Errorf("repo = %+v", d.Repo)
 	}
 }
@@ -769,5 +775,48 @@ func TestRESTChecksManifestFirst(t *testing.T) {
 	}
 	if gh.n("file") != 3 {
 		t.Errorf("expired mark: calls = %v", gh.calls)
+	}
+}
+
+func TestSysDepsFromPKGBUILD(t *testing.T) {
+	ix, gh, st := setup(t)
+	ctx := context.Background()
+	r := gh.repos["acme/omaphoto"]
+	r.files = append(r.files, "packaging/arch/PKGBUILD", "packaging/arch-bin/.SRCINFO")
+	r.extra = map[string]string{
+		"packaging/arch-bin/.SRCINFO": "pkgbase = omaphoto-bin\n\tdepends = gtk4\n\toptdepends = ffmpeg: video\npkgname = omaphoto-bin\n",
+		"packaging/arch/PKGBUILD":     "depends=(should-not-be-read)\n",
+	}
+	if _, err := ix.Run(ctx, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	d, err := st.GetApp(ctx, "acme/omaphoto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"source":"packaging/arch-bin/.SRCINFO","deps":[{"spec":"gtk4"},{"spec":"ffmpeg","reason":"video","optional":true}]}`
+	if d.SysDeps != want {
+		t.Errorf("sysdeps = %s", d.SysDeps)
+	}
+	if lib, _ := st.GetApp(ctx, "acme/omalib"); lib != nil && lib.SysDeps != "" {
+		t.Errorf("repo without PKGBUILD: %q", lib.SysDeps)
+	}
+}
+
+func TestReleaseNotesCap(t *testing.T) {
+	if got := releaseNotes(nil); got != "" {
+		t.Errorf("no release: %q", got)
+	}
+	// Cut on the last line break inside the cap.
+	line := strings.Repeat("x", 99) + "\n"
+	long := strings.Repeat(line, 2*maxReleaseNotes/len(line))
+	got := releaseNotes(&github.Release{Body: long})
+	if len(got) > maxReleaseNotes+8 || !strings.HasSuffix(got, strings.Repeat("x", 99)+"\n\n…") {
+		t.Errorf("line cut: %d bytes, ends %q", len(got), got[len(got)-10:])
+	}
+	// One long line: cut on a rune boundary.
+	got = releaseNotes(&github.Release{Body: strings.Repeat("é", maxReleaseNotes)})
+	if !utf8.ValidString(got) || len(got) > maxReleaseNotes+8 {
+		t.Errorf("rune cut: valid=%v len=%d", utf8.ValidString(got), len(got))
 	}
 }

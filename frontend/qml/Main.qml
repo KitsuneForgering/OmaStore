@@ -19,10 +19,10 @@ ApplicationWindow {
         text: theme.foreground
         button: theme.surface
         buttonText: theme.foreground
-        highlight: theme.accent
-        highlightedText: theme.background
+        highlight: theme.focus
+        highlightedText: theme.onFocus
         placeholderText: theme.muted
-        mid: theme.selection
+        mid: theme.border
         link: theme.accent
         linkVisited: theme.accent
     }
@@ -54,6 +54,8 @@ ApplicationWindow {
             openPublish(startupCheck)
         else if (startupRepo !== "")
             openApp(startupRepo)
+        else if (["discover", "installed", "publish"].indexOf(startupPage) >= 0)
+            window.section = startupPage
     }
 
     Shortcut { sequence: "/"; enabled: window.section !== "publish"; onActivated: catalogPage.focusSearch() }
@@ -84,6 +86,22 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 initialItem: home
+                // Into an app's page: it slides in from the right and fades in;
+                // back: the reverse. Instant with reduced motion.
+                pushEnter: Transition {
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "x"; from: 32; to: 0; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+                }
+                pushExit: Transition {
+                    NumberAnimation { property: "opacity"; from: 1; to: 0; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+                }
+                popEnter: Transition {
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+                }
+                popExit: Transition {
+                    NumberAnimation { property: "opacity"; from: 1; to: 0; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "x"; from: 0; to: 32; duration: theme.durationMedium; easing.type: Easing.OutCubic }
+                }
             }
 
             JobsBar {
@@ -100,6 +118,8 @@ ApplicationWindow {
             id: catalogPage
             anchors.fill: parent
             visible: window.section !== "publish"
+            onVisibleChanged: if (visible) catalogFade.restart()
+            NumberAnimation on opacity { id: catalogFade; from: 0; to: 1; duration: theme.durationMedium; running: false }
             model: window.section === "installed" ? backend.installed : backend.catalog
             installedView: window.section === "installed"
             onAppActivated: (repo) => window.openApp(repo)
@@ -110,6 +130,8 @@ ApplicationWindow {
             id: publishPage
             anchors.fill: parent
             visible: window.section === "publish"
+            onVisibleChanged: if (visible) publishFade.restart()
+            NumberAnimation on opacity { id: publishFade; from: 0; to: 1; duration: theme.durationMedium; running: false }
         }
     }
 
@@ -129,15 +151,18 @@ ApplicationWindow {
         property alias text: toastText.text
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 72
+        anchors.bottomMargin: opacity > 0.99 ? 72 : 56
+        Behavior on anchors.bottomMargin { NumberAnimation { duration: theme.durationMedium; easing.type: Easing.OutCubic } }
         width: Math.min(toastText.implicitWidth + 32, parent.width - 64)
         height: toastText.implicitHeight + 20
         radius: 6
-        color: isError ? theme.danger : theme.surface
-        border.color: theme.selection
+        color: isError ? theme.dangerFill : theme.surface
+        border.color: theme.border
+        Accessible.role: Accessible.AlertMessage
+        Accessible.name: toastText.text
         opacity: 0
         visible: opacity > 0
-        Behavior on opacity { NumberAnimation { duration: 150 } }
+        Behavior on opacity { NumberAnimation { duration: theme.durationMedium } }
 
         Text {
             id: toastText
@@ -145,21 +170,53 @@ ApplicationWindow {
             width: parent.width - 32
             wrapMode: Text.Wrap
             horizontalAlignment: Text.AlignHCenter
-            color: toast.isError ? theme.background : theme.foreground
+            color: toast.isError ? theme.onDanger : theme.foreground
         }
-        Timer { id: toastTimer; interval: 5000; onTriggered: toast.opacity = 0 }
+        // Notices go away after a while (not while the pointer is on them);
+        // errors stay until dismissed, so there is time to read them.
+        Timer {
+            id: toastTimer
+            interval: 6000
+            running: toast.opacity > 0 && !toast.isError && !toastArea.containsMouse
+            onTriggered: toast.opacity = 0
+        }
         function show(msg, err) {
             text = msg
             isError = err
             opacity = 1
             toastTimer.restart()
         }
-        MouseArea { anchors.fill: parent; onClicked: toast.opacity = 0 }
+        MouseArea { id: toastArea; anchors.fill: parent; hoverEnabled: true; onClicked: toast.opacity = 0 }
+    }
+
+    // After an install: offer the missing system dependencies (PKGBUILD
+    // depends and optdepends). The daemon asks for the password via polkit.
+    Dialog {
+        id: depsDialog
+        objectName: "depsDialog"
+        property string repo: ""
+        property var packages: []
+        anchors.centerIn: parent
+        modal: true
+        title: qsTr("Install system dependencies?")
+        standardButtons: Dialog.Yes | Dialog.No
+        Label {
+            width: 400
+            wrapMode: Text.Wrap
+            text: qsTr("%1 needs these packages to work fully:\n\n%2\n\nThey are installed with pacman, which asks for the administrator password.")
+                  .arg(depsDialog.repo).arg(depsDialog.packages.join(", "))
+        }
+        onAccepted: backend.installDeps(repo)
     }
 
     Connections {
         target: backend
         function onErrorOccurred(message) { toast.show(message, true) }
         function onNotice(message) { toast.show(message, false) }
+        function onDepsSuggested(repo, packages) {
+            depsDialog.repo = repo
+            depsDialog.packages = packages
+            depsDialog.open()
+        }
     }
 }

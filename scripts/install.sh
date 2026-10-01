@@ -15,17 +15,18 @@
 #   --source     build from source even if a release exists
 #   --ref REF    branch or tag to build (implies --source; default: $OMASTORE_REF or dev)
 #   --force      install even if an OmaStore is already present
-#   --no-skills  do not copy the Claude Code skills for app authors into ~/.claude/skills
+#   --no-skills  do not copy the skills for app authors into the coding agents' skill directories
+#   --no-hooks   do not add the Omarchy post-update hook that reports app updates
 set -eu
 
 repo_url=https://github.com/KitsuneSemCalda/OmaStore
 ref=${OMASTORE_REF:-dev}
 from_source=false
 force=false
-skills_opt=
+install_opts=
 
 usage() {
-  echo "Usage: sh $0 [--source] [--ref BRANCH_OR_TAG] [--force] [--no-skills]" >&2
+  echo "Usage: sh $0 [--source] [--ref BRANCH_OR_TAG] [--force] [--no-skills] [--no-hooks]" >&2
   exit "${1:-1}"
 }
 
@@ -40,7 +41,8 @@ while [ "$#" -gt 0 ]; do
       ;;
     --ref=*) ref=${1#--ref=}; from_source=true ;;
     --force) force=true ;;
-    --no-skills) skills_opt=--no-skills ;;
+    --no-skills) install_opts="$install_opts --no-skills" ;;
+    --no-hooks) install_opts="$install_opts --no-hooks" ;;
     -h | --help) usage 0 ;;
     *) usage ;;
   esac
@@ -61,12 +63,13 @@ fi
 }
 
 # This script is for the first installation; an existing one is updated
-# through the way it was installed (pacman, make install or install.sh).
+# through the way it was installed (pacman, make install, or OmaStore itself:
+# "Update OmaStore" in the interface or omastore self-update).
 if ! "$force"; then
   for p in "$HOME/.local/bin/omastore-gui" /usr/bin/omastore-gui /usr/local/bin/omastore-gui; do
     if [ -e "$p" ]; then
       echo "OmaStore is already installed: $p" >&2
-      echo 'Update it the way it was installed, or run again with --force.' >&2
+      echo 'Update it from OmaStore itself (omastore self-update), the way it was installed, or run again with --force.' >&2
       exit 1
     fi
   done
@@ -91,7 +94,7 @@ if ! "$from_source"; then
   if printf '%s\n' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
     echo "Installing release $tag."
     curl -fsSL --retry 3 -o "$tmp/install.sh" "$repo_url/releases/download/$tag/install.sh"
-    sh "$tmp/install.sh" $skills_opt
+    sh "$tmp/install.sh" $install_opts
     exit 0
   fi
   echo "No release published yet; building from source ($ref)."
@@ -126,5 +129,5 @@ if ! make -C "$tmp/src" dist VERSION="v$version" >"$log" 2>&1; then
   exit 1
 fi
 
-sh "$tmp/src/packaging/install.sh" $skills_opt "$tmp/src/dist/omastore-$version-x86_64-linux.tar.gz"
+sh "$tmp/src/packaging/install.sh" $install_opts "$tmp/src/dist/omastore-$version-x86_64-linux.tar.gz"
 rm -f "$log"

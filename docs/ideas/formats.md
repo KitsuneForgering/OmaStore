@@ -21,11 +21,16 @@
    ELF binaries (`.rodata` section, via `debug/elf`) for strings such as `/usr/share/<name>`
    or `/usr/lib/<name>` that do not exist on the system. If there are any, mark the
    installation as "may not work outside /usr" and warn in the interface.
-   It only reads the file; nothing is executed.
-4. **Prefer portable tarballs** (which `SelectAsset` already does) and
-   document it in the authors guide.
+   It only reads the file; nothing is executed. The `omastore-check` skill
+   already does a byte search like this (`absolute_usr_refs`); the installer
+   does not.
+
+Preferring portable tarballs is done: asset selection ranks them first and
+the authors guide recommends them.
 
 ## Risks
 
 - Extracting a `.deb` from another distribution may bring library dependencies
   that do not exist on Arch; the warning from item 3 helps, but does not solve it.
+  System dependencies declared in a PKGBUILD are handled since Phase 17
+  (`internal/sysdeps`); a `.deb`'s `Depends` would use Debian names.

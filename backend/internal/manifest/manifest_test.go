@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -196,6 +197,22 @@ func TestIconExtensionIgnoresCase(t *testing.T) {
 		}
 		if m.Icon != icon || len(ps) != 0 {
 			t.Errorf("%s: icon = %q, problems = %v", icon, m.Icon, ps)
+		}
+	}
+}
+
+func TestFreedesktopCategories(t *testing.T) {
+	// Registered names, including those starting with a digit, and X- extensions pass.
+	m, ps, _ := Parse([]byte(`categories = ["Graphics", "2DGraphics", "3DGraphics", "X-Omarchy"]`), true)
+	if len(ps) != 0 || !slices.Equal(m.Categories, []string{"Graphics", "2DGraphics", "3DGraphics", "X-Omarchy"}) {
+		t.Errorf("valid: %v %v", m.Categories, ps)
+	}
+	// Unregistered names are dropped with an error (desktop-file-validate
+	// rejects them too), and so are the reserved ones that need OnlyShowIn.
+	for _, c := range []string{"Photoshop", "graphics", "TrayIcon", "X-", "X_Foo", "Applications"} {
+		m, ps, _ := Parse([]byte(`categories = ["Graphics", "`+c+`"]`), true)
+		if len(ps) != 1 || ps[0].Warning || ps[0].Field != "categories" || len(m.Categories) != 1 {
+			t.Errorf("%s: %v %v", c, m.Categories, ps)
 		}
 	}
 }

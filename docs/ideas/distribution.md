@@ -1,40 +1,35 @@
-# Distribution: releases, AUR and OmaStore itself in the catalog
+# Distribution: the AUR and who manages the store
 
-> **Status:** items 1 and 2 implemented in Phase 14 (`make dist`,
-> `.github/workflows/release.yml`, `packaging/arch-bin/`). Item 3 is still
-> open: the `omastore-<version>-x86_64-linux.tar.gz` tarball follows the
-> store's own rules, but the store installing itself is refused on
-> purpose (the `omastore*` commands are reserved); the store should be
-> managed by pacman.
+Phase 14 delivered the release workflow, the reproducible tarball and the
+`omastore-bin` PKGBUILD (`packaging/arch-bin/`). Two items are still open.
 
 ## Evidence
 
-- The `PKGBUILD` (`packaging/arch/`) produces `omastore-git`, which builds from source
-  and requires `go`, `cmake` and `ninja` on the user's machine. Simulating the
-  build and check steps, the package took a few minutes to build.
-- The project follows its own publishing rules ([`../authors.md`](../authors.md)),
-  but does not publish releases yet: OmaStore could not install itself
-  (or update itself).
+- Neither `omastore-bin` nor `omastore-git` is on the AUR (AUR RPC,
+  2026-09-30). Users install through `install.sh` or `make install`.
+- One machine can end up with two copies: `make install PREFIX=/usr/local`
+  plus `install.sh` in `~/.local`. `/usr/local/bin` comes first in `PATH`, so
+  the terminal keeps running the old copy after `install.sh` updates the other.
+- The store refuses to install itself on purpose: the `omastore*` commands
+  are reserved names, so OmaStore cannot appear in its own catalog and update
+  itself.
 
 ## Proposal
 
-1. **Release workflow** (`.github/workflows/release.yml`, triggered by a `v*`
-   tag): builds backend and frontend for `x86_64` and `aarch64` and publishes
-   `omastore-<version>-<arch>-linux.tar.gz` with the `make install` tree.
-   Add `actions/attest-build-provenance` (see [trust.md](trust.md)).
-2. **Two AUR packages:** `omastore-git` (current) and `omastore-bin`, which downloads
-   the release tarball and checks its sha256. Installs in seconds.
-3. **`omarchy` topic on the repository itself:** the store shows up in the catalog and
-   can update itself like any app. Careful: the `omastore` launcher is a
-   reserved name (the installer refuses it), so the store updating itself
-   needs special handling or should be left to pacman.
+1. **Publish on the AUR** `omastore-bin` (generated per release by
+   `make pkgbuild-bin`, with the tarball's sha256) and `omastore-git`.
+2. **One owner for the installation:** pacman when installed from a package,
+   `install.sh` otherwise. `install.sh` and the interface's About should
+   detect another copy (`/usr/bin`, `/usr/local/bin`, `~/.local/bin`) and say
+   which one runs, instead of silently installing a second one. Self-update
+   through the catalog stays out.
 
 ## Cost
 
-Small for the workflow and `-bin`. Item 3 requires deciding who manages the
-store's own installation (pacman or OmaStore) so there are not two copies.
+Small: an AUR account and pushing the generated PKGBUILDs; a `command -v -a`
+check in `install.sh` and one line in the interface.
 
 ## Risks
 
-- Cross-compiling the Qt frontend for `aarch64` in CI requires an ARM runner or
-  QEMU; start with `x86_64` only.
+- An AUR package needs someone to keep it in sync with each release; the
+  release workflow already produces the PKGBUILD, so this is one push.

@@ -6,10 +6,13 @@ repository must have an `omastore.toml` at its root** (section 6). Without it,
 the repository is not added to the catalog, even with the `omarchy` topic. The
 file may even be empty: its presence is the signal that you want the app in the store.
 
-> Shortcut: the skills in [`skills/`](../skills/) do this with Claude Code:
+> Shortcut: the skills in [`skills/`](../skills/) do this with your coding
+> agent (Claude Code, Codex, OpenCode, Copilot, Gemini, Cursor, Pi, Hermes…):
 > `omastore-manifest` writes the manifest, `omastore-release` sets up the
 > releases and `omastore-check` audits everything. OmaStore's `install.sh`
-> already puts them in `~/.claude/skills` when Claude Code is installed.
+> already puts them in every installed agent's skills directory; the pacman
+> package (and `make install`) only ships them in `/usr/share/omastore/skills`,
+> so copy them from there.
 
 ## 1. Be found
 
@@ -32,7 +35,10 @@ file may even be empty: its presence is the signal that you want the app in the 
 
   Without topics, the category is inferred from the description and falls back
   to *Utility* if nothing matches.
-- The `cli`, `tui` or `terminal` topics make the launcher open in a terminal.
+- The `cli`, `tui` or `terminal` topics make the launcher open in a terminal
+  (on Omarchy, through `omarchy-launch-or-focus-tui`).
+- The body of your latest release is shown on the app's page as "What's new":
+  write release notes for people, not only a list of commits.
 - Archived repositories are left out; forks do not show up in the topic search.
 
 ## 2. Publish a release with a Linux binary
@@ -130,6 +136,27 @@ displayed. The carousel keeps the image's aspect ratio.
   heading when they match (e.g. repo `omaphoto`, heading `# OmaPhoto`).
 - The README is shown on the app page, with relative links converted to
   absolute ones.
+
+## 5b. System dependencies
+
+If your app needs system packages (Qt, GTK, ffmpeg...), keep a `PKGBUILD`, or
+better its `.SRCINFO`, in the repository: at the root or up to three
+directories deep (`packaging/arch/`, `aur/`...). OmaStore reads its `depends`
+and `optdepends` (and `depends_x86_64`/`depends_aarch64`), shows them on the
+app page and offers to install the missing ones with pacman after the app is
+installed.
+
+- The `PKGBUILD` is **never run**: only literal arrays are read. An element
+  with `$var`, `$(...)` or a glob is dropped, so prefer committing a
+  `.SRCINFO` (`makepkg --printsrcinfo > .SRCINFO`), which has the final values.
+- With several files, a `.SRCINFO` wins over the `PKGBUILD` in the same
+  directory, a directory with `bin` in its name (your `-bin` package) wins over
+  others, and shallower wins over deeper. For split packages, the one named
+  after the repository is used (or `<repo>-*`).
+- `makedepends` and `checkdepends` are ignored: the store installs your
+  release binary, it does not build it.
+- Packages only in the AUR are shown as unavailable and never installed by the
+  store; users install them themselves.
 
 ## 6. The `omastore.toml` manifest (required)
 

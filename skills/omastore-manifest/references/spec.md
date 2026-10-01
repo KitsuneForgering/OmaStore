@@ -26,11 +26,15 @@ Main (at least one, otherwise the app does not show up in menus):
 `AudioVideo`, `Audio`, `Video`, `Development`, `Education`, `Game`,
 `Graphics`, `Network`, `Office`, `Science`, `Settings`, `System`, `Utility`.
 
-Common additional ones (combine with a main one): `Photography`, `RasterGraphics`,
-`VectorGraphics`, `2DGraphics`, `Viewer`, `Recorder`, `AudioVideoEditing`,
-`Player`, `TextEditor`, `IDE`, `TerminalEmulator`, `FileManager`,
-`Monitor`, `Calendar`, `Email`, `Chat`, `WebBrowser`, `Emulator`,
-`PackageManager`, `Security`, `Archiving`, `Calculator`.
+Additional ones (combine with a main one): any registered in the
+[Desktop Menu Specification](https://specifications.freedesktop.org/menu-spec/latest/category-registry.html)
+(appendix A), such as `Photography`, `RasterGraphics`, `VectorGraphics`,
+`2DGraphics`, `Viewer`, `Recorder`, `AudioVideoEditing`, `Player`, `TextEditor`,
+`IDE`, `TerminalEmulator`, `FileManager`, `Monitor`, `Calendar`, `Email`, `Chat`,
+`WebBrowser`, `Emulator`, `PackageManager`, `Security`, `Archiving`, `Calculator`.
+Names are case-sensitive. Your own extensions start with `X-` (`X-Omarchy`).
+Anything else is an error, as in `desktop-file-validate`; the reserved
+`Screensaver`, `TrayIcon`, `Applet` and `Shell` are not accepted.
 
 ## How the store picks the asset and the executable
 

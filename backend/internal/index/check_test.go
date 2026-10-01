@@ -125,3 +125,33 @@ func TestSuggestManifestKeepsDeclaredAssets(t *testing.T) {
 		t.Errorf("tomlString = %s", got)
 	}
 }
+
+func TestCheckLocalManifestAndDiscovery(t *testing.T) {
+	ix, gh, _ := setup(t)
+	ctx := context.Background()
+	r, err := ix.Check(ctx, "acme/omaphoto", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.LocalManifest {
+		t.Error("published manifest reported as local")
+	}
+	if c, _ := checkOf(r, "Discovery"); c.Status != CheckOK {
+		t.Errorf("with the omarchy topic: %+v", c)
+	}
+
+	// An empty local manifest is an opt-in too, and is not the published one.
+	gh.repos["acme/omaphoto"].noToml = true
+	gh.repos["acme/omaphoto"].repo.Topics = []string{"photo"}
+	empty := ""
+	r, err = ix.Check(ctx, "acme/omaphoto", &empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.LocalManifest || !r.Compatible() {
+		t.Errorf("local=%v compatible=%v checks=%+v", r.LocalManifest, r.Compatible(), r.Checks)
+	}
+	if c, _ := checkOf(r, "Discovery"); c.Status != CheckWarn || !strings.Contains(c.Fix, "omarchy") {
+		t.Errorf("without the topic: %+v", c)
+	}
+}

@@ -3,8 +3,10 @@ set -eu
 
 repo=https://github.com/KitsuneSemCalda/OmaStore
 
-# --no-skills (anywhere in the arguments) leaves ~/.claude alone.
+# --no-skills (anywhere in the arguments) leaves the coding agents' skill
+# directories alone; --no-hooks leaves Omarchy's hooks alone.
 skills=yes
+hooks=yes
 n=$#
 while [ "$n" -gt 0 ]; do
   arg=$1
@@ -12,6 +14,7 @@ while [ "$n" -gt 0 ]; do
   n=$((n - 1))
   case $arg in
     --no-skills) skills=no ;;
+    --no-hooks) hooks=no ;;
     *) set -- "$@" "$arg" ;;
   esac
 done
@@ -27,19 +30,68 @@ root="$data_home/omastore/self"
 bin="$HOME/.local/bin"
 desktop="$data_home/applications/omastore.desktop"
 icon="$data_home/icons/hicolor/scalable/apps/omastore.svg"
-# Claude Code skills for app authors (omastore-manifest, -release, -check).
-# Copies installed here carry $skill_marker; any other directory is the user's.
-claude_home=${CLAUDE_CONFIG_DIR:-"$HOME/.claude"}
-claude_skills="$claude_home/skills"
+# Skills for app authors (omastore-manifest, -release, -check), for every coding
+# agent Omarchy offers. Same directories as Omarchy's own skills: ~/.agents/skills
+# is the shared one (OpenCode, Copilot, Gemini, Cursor, Crush, Oh My Pi, Grok,
+# Muse, OpenClaw...), plus the agents with a directory of their own. A directory
+# is used only when its agent's home exists. Copies installed here carry
+# $skill_marker; any other directory is the user's.
 skill_marker=.omastore-managed
+agent_homes="${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+${CODEX_HOME:-$HOME/.codex}
+$HOME/.agents
+$HOME/.pi/agent
+$HOME/.hermes"
+# Omarchy's post-update hook: omarchy-update runs every file in this directory
+# with bash, so the ownership mark lives inside the file, not next to it.
+# Omarchy uses $HOME/.config literally, not $XDG_CONFIG_HOME.
+omarchy_config="$HOME/.config/omarchy"
+hook="$omarchy_config/hooks/post-update.d/omastore.hook"
+hook_marker='# omastore-managed'
 
-# Removes the skill copies this script made (never the user's own skills).
-remove_managed_skills() {
-  for dir in "$claude_skills"/omastore-*; do
-    if [ -d "$dir" ] && [ ! -L "$dir" ] && [ -f "$dir/$skill_marker" ]; then
-      rm -rf "$dir"
+# Removes the hook this script installed (never one the user wrote).
+remove_managed_hook() {
+  if [ -f "$hook" ] && [ ! -L "$hook" ] && grep -qxF "$hook_marker" "$hook"; then
+    rm -f "$hook"
+  fi
+}
+
+# Prints the agents' skill directories, one per line: <home>/skills for each
+# agent home, plus Hermes' profiles. With "present", only the agents installed
+# here (whose home exists).
+skill_dirs() {
+  while IFS= read -r home; do
+    if [ "${1:-}" = present ] && [ ! -d "$home" ]; then
+      continue
+    fi
+    printf '%s\n' "$home/skills"
+    case $home in
+      */.hermes)
+        for profile in "$home"/profiles/*/; do
+          [ -d "$profile" ] && printf '%s\n' "${profile%/}/skills"
+        done
+        ;;
+    esac
+  done <<EOF
+$agent_homes
+EOF
+}
+
+# Removes the skill copies this script made in dir (never the user's own skills).
+remove_managed_skills_in() {
+  for skill in "$1"/omastore-*; do
+    if [ -d "$skill" ] && [ ! -L "$skill" ] && [ -f "$skill/$skill_marker" ]; then
+      rm -rf "$skill"
     fi
   done
+}
+
+remove_managed_skills() {
+  while IFS= read -r dir; do
+    [ -n "$dir" ] && remove_managed_skills_in "$dir"
+  done <<EOF
+$(skill_dirs)
+EOF
 }
 
 # Refresh the menu and icon caches, when the tools exist.
@@ -54,7 +106,7 @@ refresh_caches() {
 
 # --uninstall stops OmaStore's processes and removes what this
 # script installed: the launchers that point into $root, the menu entry, the
-# icon, the Claude Code skills it copied, $root itself and the cache. The catalog database and the apps
+# icon, the agent skills it copied, the Omarchy hook, $root itself and the cache. The catalog database and the apps
 # installed through OmaStore are kept.
 if [ "${1:-}" = --uninstall ]; then
   [ "$#" -eq 1 ] || { echo "Usage: sh $0 --uninstall" >&2; exit 1; }
@@ -89,6 +141,7 @@ if [ "${1:-}" = --uninstall ]; then
     rm -f "$desktop" "$icon"
   fi
   remove_managed_skills
+  remove_managed_hook
   rm -rf "$root" "$cache_home/omastore" "$cache_home/OmaStore"
   refresh_caches
   echo 'OmaStore removed. Your catalog and the apps installed through it were kept.'
@@ -127,7 +180,7 @@ elif [ "$#" -eq 1 ]; then
   cp "$1" "$tmp/$archive"
   cp "$1.sha256" "$tmp/$archive.sha256"
 else
-  echo "Usage: sh $0 [--no-skills] [path/to/release-tarball] | --uninstall" >&2
+  echo "Usage: sh $0 [--no-skills] [--no-hooks] [path/to/release-tarball] | --uninstall" >&2
   exit 1
 fi
 digest=$(sed -n "s/^\([0-9a-fA-F]\{64\}\)  \{0,1\}$archive$/\1/p" "$tmp/$archive.sha256")
@@ -189,28 +242,64 @@ install -m644 "$tmp/usr/share/icons/hicolor/scalable/apps/omastore.svg" "$icon"
 refresh_caches
 echo "OmaStore $version installed. Open it from the menu or run $bin/omastore-gui"
 
+# On Omarchy (its config directory exists), omarchy-update also reports the
+# updates of the apps installed through OmaStore. The hook only reads the
+# catalog and sends a notification, and never fails the system update.
+if [ "$hooks" = yes ] && [ -d "$omarchy_config" ]; then
+  if { [ -e "$hook" ] || [ -L "$hook" ]; } && { [ -L "$hook" ] || ! grep -qxF "$hook_marker" "$hook"; }; then
+    echo "Omarchy hook left as is: $hook was not installed by OmaStore." >&2
+  else
+    quoted_cli=$(printf '%s' "$bin/omastore" | sed "s/'/'\\\\''/g")
+    mkdir -p "${hook%/*}"
+    cat > "$tmp/omastore.hook" <<HOOK
+#!/bin/bash
+$hook_marker
+# Installed by OmaStore's install.sh and removed by install.sh --uninstall.
+# After omarchy-update, notifies about updates to the apps installed through
+# OmaStore. It only reads OmaStore's catalog and never fails the update.
+cli='$quoted_cli'
+[[ -x \$cli ]] && timeout 20 "\$cli" update --check --notify >/dev/null 2>&1
+exit 0
+HOOK
+    install -m644 "$tmp/omastore.hook" "$hook"
+    echo "omarchy-update now reports OmaStore app updates ($hook; --no-hooks skips it)"
+  fi
+fi
+
 if "$has_skills"; then
   rm -rf "$root/$version/share/skills"
   mkdir -p "$root/$version/share"
   cp -R "$tmp/usr/share/omastore/skills" "$root/$version/share/skills"
-  # Only with Claude Code present (its directory exists) and not --no-skills.
-  if [ "$skills" = yes ] && [ -d "$claude_home" ]; then
-    remove_managed_skills # a skill dropped from a release does not linger
-    mkdir -p "$claude_skills"
-    done_skills=
-    for src in "$root/$version/share/skills"/omastore-*; do
-      name=${src##*/}
-      dest="$claude_skills/$name"
-      if [ -e "$dest" ] || [ -L "$dest" ]; then
-        echo "Skill $name left as is: $dest was not installed by OmaStore." >&2
-        continue
-      fi
-      cp -R "$src" "$dest"
-      : > "$dest/$skill_marker"
-      done_skills="$done_skills $name"
-    done
-    [ -z "$done_skills" ] || echo "Claude Code skills for app authors installed in $claude_skills:$done_skills"
+  # Into every installed agent's skill directory, unless --no-skills (which is
+  # remembered, so OmaStore's self-update leaves the agents alone too).
+  installed_in=
+  if [ "$skills" = no ]; then
+    : > "$root/.no-skills"
+  else
+    rm -f "$root/.no-skills"
+    while IFS= read -r dir; do
+      [ -n "$dir" ] || continue
+      remove_managed_skills_in "$dir" # a skill dropped from a release does not linger
+      mkdir -p "$dir"
+      for src in "$root/$version/share/skills"/omastore-*; do
+        name=${src##*/}
+        dest="$dir/$name"
+        if [ -e "$dest" ] || [ -L "$dest" ]; then
+          echo "Skill $name left as is: $dest was not installed by OmaStore." >&2
+          continue
+        fi
+        cp -R "$src" "$dest"
+        : > "$dest/$skill_marker"
+      done
+      installed_in="$installed_in
+  $dir"
+    done <<EOF
+$(skill_dirs present)
+EOF
+  fi
+  if [ -n "$installed_in" ]; then
+    echo "Skills for app authors installed for your coding agents in:$installed_in"
   elif [ "$skills" = yes ]; then
-    echo "Claude Code skills for app authors: $root/$version/share/skills (copy them into ~/.claude/skills)"
+    echo "Skills for app authors: $root/$version/share/skills (no coding agent found; copy them into its skills directory)"
   fi
 fi

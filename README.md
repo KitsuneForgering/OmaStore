@@ -16,7 +16,11 @@
 OmaStore is an app store for [Omarchy](https://omarchy.org).
 It shows what each app does, installs the GitHub release into your account and
 creates the menu shortcut. You can also update and remove apps from the
-interface or the command line, without `sudo`.
+interface or the command line, without `sudo`. When an app declares system
+packages in a `PKGBUILD`, the store can install them with pacman for you
+(it asks for your password first).
+
+<p align="center"><img src="docs/screenshots/demo.gif" width="880" alt="OmaStore demo: searching for &quot;virtual machine&quot;, opening OmaVM's page, installing it with one click and launching it"></p>
 
 | Discover | See the details before installing |
 |---|---|
@@ -34,6 +38,12 @@ interface or the command line, without `sudo`.
 - **Know what you are downloading:** the store shows the release and checks its
   published checksum when available. Without one, the interface asks before
   installing; the CLI warns and continues.
+- **The whole app, not only the binary:** the `depends` and `optdepends` of the
+  app's `PKGBUILD` are listed on its page, and the missing ones that the pacman
+  repositories have are installed with one click (AUR packages are never
+  installed for you).
+- **Like it? Star it:** the star button on an app's page stars its repository
+  on GitHub (with `gh auth login` or `GITHUB_TOKEN`).
 
 ## How it works
 
@@ -61,7 +71,11 @@ interface or the command line, without `sudo`.
   - nothing from the package is executed during installation;
   - the installation is fully undone if something fails midway;
   - it never overwrites files that do not belong to the store nor shadows system
-    commands.
+    commands;
+  - the app itself never needs root. The one exception is its system
+    dependencies, installed only when you accept: `pkexec pacman -S --needed`
+    with package names validated and resolved by pacman, from the configured
+    repositories only.
 - **Where apps live:**
   - binaries in `~/.local/share/omastore/apps/<owner>__<repo>/<version>/`;
   - launcher in `~/.local/bin/`;
@@ -89,15 +103,25 @@ The script downloads the latest stable release for Linux x86_64, checks the SHA-
 published alongside the tarball and installs the three executables into a folder in your
 account, with shortcuts in `~/.local/bin` and in the menu. It requires `curl`, `tar`,
 `sha256sum` and the Qt 6 libraries (`qt6-base`, `qt6-declarative`, `qt6-svg`).
-If Claude Code is installed (`~/.claude` exists), the script also copies the
-[skills for app authors](skills/README.md) into `~/.claude/skills`, so Claude can
-write your `omastore.toml`, set up releases and audit your app with the store
-itself. Skills of the same name that you already have are left untouched; pass
+The script also copies the [skills for app authors](skills/README.md) into the
+skills directory of each coding agent you have, the same ones Omarchy uses
+(`~/.agents/skills` for OpenCode, Copilot, Gemini, Cursor, Crush and others, plus
+Claude Code, Codex, Pi and Hermes). Your agent can then write your
+`omastore.toml`, set up releases and audit your app with the store itself.
+Skills of the same name that you already have are left untouched; pass
 `--no-skills` to skip this step.
+On Omarchy, it also adds a hook to `~/.config/omarchy/hooks/post-update.d/`, so
+`omarchy-update` tells you when your OmaStore apps have updates; pass
+`--no-hooks` to skip it. With the pacman package, link it yourself:
+`ln -s /usr/share/omastore/omarchy/omastore.hook ~/.config/omarchy/hooks/post-update.d/`.
 The two-step commands let you inspect `install.sh` before running it.
 The SHA-256 check covers the release tarball; it does not verify `install.sh` itself.
-To update, run the same script again (the skills are updated too). To remove
-it, including the skills it copied (the catalog and the apps installed through
+OmaStore updates itself: when a new release is out, the sidebar offers
+**Update OmaStore** and then **Restart OmaStore** (or run `omastore self-update`).
+The release is checked against its published SHA-256 before anything changes,
+and a failed update leaves the current version as it was. Running the same
+script again also works. To remove
+it, including the skills and the hook it added (the catalog and the apps installed through
 OmaStore are kept):
 
 ```sh
@@ -172,9 +196,12 @@ omastore list --category Graphics
 omastore show pch/rawmakase
 omastore install pch/rawmakase
 omastore update                 # updates all installed apps
-omastore update --check         # only lists what has a new version
+omastore update --check         # only lists what has a new version (OmaStore's own too)
+omastore self-update            # updates OmaStore itself (installations made by install.sh)
 omastore uninstall pch/rawmakase
 omastore check pch/rawmakase    # for authors: what the store sees and what to fix
+omastore deps pch/rawmakase     # system dependencies from its PKGBUILD; --install installs them
+omastore star pch/rawmakase     # star it on GitHub (unstar removes the star)
 ```
 
 ## Architecture

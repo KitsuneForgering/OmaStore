@@ -15,7 +15,9 @@ written to the user's `~/.local` and no app binary is executed.
    repository) and whether an `omastore.toml` is already published or only local.
 
 2. **Run the audit.** It needs the `omastore` CLI (the OmaStore package or
-   `$OMASTORE=/path/omastore`) and an authenticated `gh`:
+   `$OMASTORE=/path/omastore`) and a GitHub token (`GITHUB_TOKEN`, or an
+   authenticated `gh`). A report that says it *could not read* `omastore.toml`
+   is about access (token, rate limit, network), not about the repository:
    ```sh
    # what the store sees today (published manifest):
    python3 <this-skill-dir>/scripts/omastore_check.py owner/repo

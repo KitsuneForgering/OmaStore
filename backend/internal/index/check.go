@@ -43,6 +43,10 @@ type Report struct {
 	// SuggestedManifest is a starter omastore.toml built from the release,
 	// when the repository has no manifest or declares no asset.
 	SuggestedManifest string
+	// LocalManifest means the report used a manifest given by the author
+	// instead of the published one: compatible then means "compatible once
+	// this file is pushed", not "ready".
+	LocalManifest bool
 }
 
 // Compatible reports whether nothing failed.
@@ -64,7 +68,7 @@ func (r *Report) add(status, item, detail, fix string) {
 // database. override, when not nil, is used as the omastore.toml instead of
 // the published one (to test a manifest before pushing it).
 func (ix *Indexer) Check(ctx context.Context, name string, override *string) (*Report, error) {
-	r := &Report{Repo: name}
+	r := &Report{Repo: name, LocalManifest: override != nil}
 	repo, _, _, err := ix.GH.GetRepo(ctx, name, "")
 	if github.IsNotFound(err) {
 		r.add(CheckFail, "Repository", "not found, or private", "make the repository public on GitHub")
@@ -123,6 +127,15 @@ func (ix *Indexer) Check(ctx context.Context, name string, override *string) (*R
 			where = "local, not published yet"
 		}
 		r.add(CheckOK, manifest.FileName, where, "")
+	}
+
+	// Code search for omastore.toml needs a GitHub token; the topic search
+	// also works anonymously, so without the topic many users never find it.
+	if contains(repo.Topics, "omarchy") {
+		r.add(CheckOK, "Discovery", "omarchy topic: found with or without a GitHub token", "")
+	} else {
+		r.add(CheckWarn, "Discovery", "no omarchy topic: only found by manifest search, which needs a GitHub token",
+			"add the omarchy topic to the repository (Settings → Topics)")
 	}
 
 	sha, err := ix.GH.HeadSHA(ctx, name, repo.DefaultBranch, "")

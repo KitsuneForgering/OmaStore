@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"syscall"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/install"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/repoid"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/sysdeps"
 )
 
 func umask(m int) int { return syscall.Umask(m) }
@@ -28,6 +30,12 @@ type Backend interface {
 	Uninstall(ctx context.Context, fullName string) error
 	Image(ctx context.Context, url string) (string, error)
 	Check(ctx context.Context, fullName string, manifest *string) (*index.Report, error)
+	Starred(ctx context.Context, fullName string) (bool, error)
+	Star(ctx context.Context, fullName string, starred bool) (int, error)
+	SysDeps(ctx context.Context, fullName string) (sysdeps.Report, error)
+	InstallSysDeps(ctx context.Context, fullName string) (sysdeps.Report, error)
+	SelfStatus(ctx context.Context) (install.SelfStatus, error)
+	SelfUpdate(ctx context.Context, progress func(install.Progress)) (*install.SelfResult, error)
 }
 
 // DTOs: the JSON format exposed to the frontend, stable and in camelCase,
@@ -70,15 +78,16 @@ type InstallInfo struct {
 // AppDetail is an app's detail.
 type AppDetail struct {
 	AppItem
-	Readme      string       `json:"readme"`
-	Description string       `json:"description"`
-	License     string       `json:"license"`
-	Topics      []string     `json:"topics"`
-	HTMLURL     string       `json:"htmlUrl"`
-	PushedAt    time.Time    `json:"pushedAt,omitzero"`
-	IndexedAt   time.Time    `json:"indexedAt,omitzero"`
-	Assets      []AssetInfo  `json:"assets"`
-	Install     *InstallInfo `json:"install"`
+	Readme       string       `json:"readme"`
+	ReleaseNotes string       `json:"releaseNotes"`
+	Description  string       `json:"description"`
+	License      string       `json:"license"`
+	Topics       []string     `json:"topics"`
+	HTMLURL      string       `json:"htmlUrl"`
+	PushedAt     time.Time    `json:"pushedAt,omitzero"`
+	IndexedAt    time.Time    `json:"indexedAt,omitzero"`
+	Assets       []AssetInfo  `json:"assets"`
+	Install      *InstallInfo `json:"install"`
 }
 
 // IndexResult is the result of an indexing job.
@@ -112,12 +121,49 @@ type CheckReport struct {
 	Tag               string      `json:"tag"`
 	Checks            []CheckItem `json:"checks"`
 	SuggestedManifest string      `json:"suggestedManifest"`
+	// LocalManifest: the author's unpublished manifest was tested; compatible
+	// then means compatible once it is pushed.
+	LocalManifest bool `json:"localManifest"`
+}
+
+// SysDep is a system dependency declared in the app's PKGBUILD/.SRCINFO.
+type SysDep struct {
+	Name     string `json:"name"`
+	Spec     string `json:"spec"` // with the version constraint, if any
+	Reason   string `json:"reason"`
+	Optional bool   `json:"optional"`
+	// Status: "installed", "available" (missing, in a pacman repository),
+	// "unavailable" (missing, not in any repository: AUR) or "unknown" (no pacman).
+	Status  string `json:"status"`
+	Package string `json:"package"` // "repo/name" that would be installed
+}
+
+// DepsReport is the state of an app's system dependencies on this machine.
+type DepsReport struct {
+	Repo      string   `json:"repo"`
+	Source    string   `json:"source"` // file in the repository ("" if none)
+	Pacman    bool     `json:"pacman"` // false: this system has no pacman
+	Deps      []SysDep `json:"deps"`
+	Missing   int      `json:"missing"`   // not installed (available or not)
+	ToInstall []string `json:"toInstall"` // what deps.install would install
+}
+
+func toDeps(repo string, r sysdeps.Report, pacman bool) DepsReport {
+	out := DepsReport{Repo: repo, Source: r.Source, Pacman: pacman, Deps: []SysDep{}, ToInstall: nonNil(r.ToInstall())}
+	for _, d := range r.Deps {
+		out.Deps = append(out.Deps, SysDep{Name: d.Name(), Spec: d.Spec, Reason: d.Reason, Optional: d.Optional,
+			Status: d.Status, Package: d.Package})
+		if d.Status == sysdeps.StatusAvailable || d.Status == sysdeps.StatusUnavailable {
+			out.Missing++
+		}
+	}
+	return out
 }
 
 func toReport(r *index.Report) CheckReport {
 	out := CheckReport{Repo: r.Repo, Compatible: r.Compatible(), Name: r.Name, Summary: r.Summary,
 		Category: r.Category, IconURL: r.IconURL, Screenshots: nonNil(r.Screenshots), Tag: r.Tag,
-		Checks: []CheckItem{}, SuggestedManifest: r.SuggestedManifest}
+		Checks: []CheckItem{}, SuggestedManifest: r.SuggestedManifest, LocalManifest: r.LocalManifest}
 	for _, c := range r.Checks {
 		out.Checks = append(out.Checks, CheckItem{Status: c.Status, Item: c.Item, Detail: c.Detail, Fix: c.Fix})
 	}
@@ -144,7 +190,8 @@ func toDetail(d *store.AppDetail) AppDetail {
 		it.InstalledVersion = d.Install.Version
 	}
 	out := AppDetail{
-		AppItem: toItem(it), Readme: d.Readme, Description: d.Repo.Description, License: d.Repo.License,
+		AppItem: toItem(it), Readme: d.Readme, ReleaseNotes: d.Repo.ReleaseNotes,
+		Description: d.Repo.Description, License: d.Repo.License,
 		Topics: nonNil(d.Repo.Topics), HTMLURL: d.Repo.HTMLURL, PushedAt: d.Repo.PushedAt,
 		IndexedAt: d.Repo.IndexedAt, Assets: []AssetInfo{},
 	}
@@ -164,6 +211,23 @@ func nonNil(s []string) []string {
 		return []string{}
 	}
 	return s
+}
+
+// SelfInfo is OmaStore's own update status.
+type SelfInfo struct {
+	Mode            string `json:"mode"`    // "self", "package" or "dev"
+	Version         string `json:"version"` // running version, "" unless mode is "self"
+	Latest          string `json:"latest"`  // latest release, "" if unknown
+	UpdateAvailable bool   `json:"updateAvailable"`
+	Notes           string `json:"notes"`
+	CheckError      string `json:"checkError,omitempty"` // why the latest release is unknown
+}
+
+// SelfUpdateResult is the result of a self.update job.
+type SelfUpdateResult struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+	GUI  string `json:"gui"` // launcher of the new interface, to restart into
 }
 
 // Method parameters.
@@ -192,6 +256,10 @@ type (
 	}
 	imageParams struct {
 		URL string `json:"url"`
+	}
+	starParams struct {
+		Repo    string `json:"repo"`
+		Starred bool   `json:"starred"`
 	}
 	checkParams struct {
 		Repo     string  `json:"repo"`
@@ -405,6 +473,94 @@ func (s *Server) call(method string, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return toReport(r), nil
+
+	case "star.get":
+		var p repoParams
+		if err := decode(raw, &p); err != nil {
+			return nil, err
+		}
+		if err := p.validate(); err != nil {
+			return nil, err
+		}
+		starred, err := b.Starred(ctx, p.Repo)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]bool{"starred": starred}, nil
+
+	case "star.set":
+		var p starParams
+		if err := decode(raw, &p); err != nil {
+			return nil, err
+		}
+		if err := (repoParams{Repo: p.Repo}).validate(); err != nil {
+			return nil, err
+		}
+		stars, err := b.Star(ctx, p.Repo, p.Starred)
+		if err != nil {
+			return nil, err
+		}
+		s.broadcast("catalog.changed", map[string]string{"repo": p.Repo})
+		return map[string]any{"starred": p.Starred, "stars": stars}, nil
+
+	case "deps.check":
+		var p repoParams
+		if err := decode(raw, &p); err != nil {
+			return nil, err
+		}
+		if err := p.validate(); err != nil {
+			return nil, err
+		}
+		r, err := b.SysDeps(ctx, p.Repo)
+		noPacman := errors.Is(err, sysdeps.ErrNoPacman)
+		if err != nil && !noPacman {
+			return nil, err
+		}
+		return toDeps(p.Repo, r, !noPacman), nil
+
+	case "deps.install":
+		var p repoParams
+		if err := decode(raw, &p); err != nil {
+			return nil, err
+		}
+		if err := p.validate(); err != nil {
+			return nil, err
+		}
+		return s.jobs.start(s.ctx, KindDeps, p.Repo, func(ctx context.Context, report func(progress)) (any, error) {
+			report(progress{Stage: "authorize"})
+			r, err := b.InstallSysDeps(ctx, p.Repo)
+			return toDeps(p.Repo, r, true), err
+		}, nil)
+
+	case "self.status":
+		st, err := b.SelfStatus(ctx)
+		info := SelfInfo{Mode: st.Mode, Version: st.Version, Latest: st.Latest,
+			UpdateAvailable: st.UpdateAvailable, Notes: st.Notes}
+		if err != nil {
+			// The installation mode is still useful without GitHub.
+			s.log.Warn("OmaStore release not checked", "err", err)
+			info.CheckError = err.Error()
+		}
+		return info, nil
+
+	case "self.update":
+		return s.jobs.start(s.ctx, KindSelf, "", func(ctx context.Context, report func(progress)) (any, error) {
+			r, err := b.SelfUpdate(ctx, func(ip install.Progress) {
+				report(progress{Stage: ip.Stage, Done: ip.Done, Total: ip.Total})
+			})
+			if r != nil {
+				return SelfUpdateResult{From: r.From, To: r.To, GUI: r.GUI}, err
+			}
+			return nil, err
+		}, nil)
+
+	case "self.restart":
+		// The daemon exits so the next one starts from the new version.
+		if s.jobs.running() > 0 {
+			return nil, ErrBusy
+		}
+		s.requestRestart()
+		return struct{}{}, nil
 
 	case "image.get":
 		var p imageParams

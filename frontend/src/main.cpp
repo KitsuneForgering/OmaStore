@@ -7,6 +7,7 @@
 #include <QCommandLineParser>
 #include <QGuiApplication>
 #include <QPalette>
+#include <QProcess>
 #include <QQuickWindow>
 #include <QTimer>
 #include <QQmlApplicationEngine>
@@ -18,6 +19,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("OmaStore"));
     app.setOrganizationName(QStringLiteral("OmaStore"));
+    app.setApplicationVersion(QStringLiteral(OMASTORE_VERSION));
     app.setDesktopFileName(QStringLiteral("omastore"));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
@@ -35,7 +37,10 @@ int main(int argc, char *argv[])
     const QCommandLineOption checkOpt(QStringLiteral("check"),
                                       QStringLiteral("Opens the page for app authors and checks owner/repo."),
                                       QStringLiteral("repo"));
-    args.addOptions({openOpt, checkOpt, shotOpt, delayOpt});
+    const QCommandLineOption pageOpt(QStringLiteral("page"),
+                                     QStringLiteral("Opens a page: discover, installed or publish."),
+                                     QStringLiteral("page"));
+    args.addOptions({openOpt, checkOpt, pageOpt, shotOpt, delayOpt});
     args.process(app);
 
     RpcClient rpc;
@@ -51,6 +56,13 @@ int main(int argc, char *argv[])
     applyLinkColor();
     QObject::connect(&theme, &Theme::changed, &app, applyLinkColor);
 
+    // After a self-update: the new interface takes over (it starts the new daemon).
+    QObject::connect(&backend, &Backend::restartReady, &app, [](const QString &gui) {
+        if (!QProcess::startDetached(gui, {}))
+            qWarning("could not start %s", qPrintable(gui));
+        QCoreApplication::quit();
+    });
+
     QQmlApplicationEngine engine;
     OfflineNamFactory nam;
     engine.setNetworkAccessManagerFactory(&nam);
@@ -59,6 +71,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("theme"), &theme);
     engine.rootContext()->setContextProperty(QStringLiteral("startupRepo"), args.value(openOpt));
     engine.rootContext()->setContextProperty(QStringLiteral("startupCheck"), args.value(checkOpt));
+    engine.rootContext()->setContextProperty(QStringLiteral("startupPage"), args.value(pageOpt));
 
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);

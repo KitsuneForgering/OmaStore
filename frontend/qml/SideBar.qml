@@ -32,8 +32,11 @@ Rectangle {
             }
         }
         background: Rectangle {
-            color: item.selected ? theme.selection : (item.hovered ? Qt.darker(theme.surface, 1.15) : "transparent")
+            color: item.selected ? theme.selection : (item.hovered ? theme.hover : "transparent")
             radius: 4
+            border.color: theme.focus
+            border.width: item.visualFocus ? 2 : 0
+            Behavior on color { ColorAnimation { duration: theme.durationShort } }
         }
     }
 
@@ -98,6 +101,58 @@ Rectangle {
             onClicked: root.sectionSelected("publish")
             ToolTip.visible: hovered
             ToolTip.text: qsTr("For developers: get your app into OmaStore")
+        }
+
+        // OmaStore's own update: offered here, finished with a restart.
+        Rectangle {
+            id: selfCard
+            objectName: "selfUpdateCard"
+            readonly property var st: backend.selfStatus
+            readonly property var job: { backend.jobs.revision; return backend.jobs.selfJob() }
+            readonly property bool restart: backend.selfInstalled !== ""
+            visible: restart || !!st.updateAvailable || !!job.id
+            onVisibleChanged: if (visible) selfFade.restart()
+            NumberAnimation on opacity { id: selfFade; from: 0; to: 1; duration: theme.durationMedium; running: false }
+            Layout.fillWidth: true
+            Layout.topMargin: 6
+            implicitHeight: selfColumn.implicitHeight + 20
+            radius: 6
+            color: theme.background
+            border.color: theme.accent
+            border.width: 1
+
+            ColumnLayout {
+                id: selfColumn
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 6
+                Text {
+                    Layout.fillWidth: true
+                    wrapMode: Text.Wrap
+                    color: theme.foreground
+                    text: selfCard.restart ? qsTr("OmaStore %1 is installed.").arg(backend.selfInstalled)
+                          : selfCard.job.id ? qsTr("Updating OmaStore…")
+                          : qsTr("OmaStore %1 is available (you have %2).").arg(selfCard.st.latest).arg(selfCard.st.version)
+                }
+                ProgressBar {
+                    Layout.fillWidth: true
+                    visible: !!selfCard.job.id
+                    indeterminate: !(selfCard.job.total > 0)
+                    value: selfCard.job.total > 0 ? selfCard.job.done / selfCard.job.total : 0
+                    Accessible.name: qsTr("OmaStore update progress")
+                }
+                PrimaryButton {
+                    objectName: "selfUpdateButton"
+                    Layout.fillWidth: true
+                    visible: !selfCard.job.id
+                    enabled: backend.connected
+                    text: selfCard.restart ? qsTr("Restart OmaStore") : qsTr("Update OmaStore")
+                    onClicked: selfCard.restart ? backend.restartSelf() : backend.updateSelf()
+                    ToolTip.visible: hovered && !selfCard.restart && !!selfCard.st.notes
+                    ToolTip.delay: 400
+                    ToolTip.text: qsTr("What's new:\n%1").arg(String(selfCard.st.notes).slice(0, 600))
+                }
+            }
         }
 
         Button {

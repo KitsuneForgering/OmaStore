@@ -3,15 +3,16 @@
 Improvement proposals that are not in `TODO.md` yet. Each file records the
 evidence that motivated the idea, the proposal, the estimated cost and the risks.
 When an idea is accepted, it becomes items in `TODO.md` and the file records
-the decision.
+the decision; once it is fully implemented, the file is removed (the history
+stays in git and in the `TODO.md` phase).
 
 | File | Summary | Priority |
 |---|---|---|
-| [manifest.md](manifest.md) | Optional `omastore.toml` file in the app repo to eliminate heuristics | **done** (Phase 11) |
-| [graphql-discovery.md](graphql-discovery.md) | GraphQL for batch indexing and "awesome" lists as seeds | **done** (Phase 12) |
-| [search-relevance.md](search-relevance.md) | Relevance cutoff and feedback for searches without good results | medium |
-| [on-demand-daemon.md](on-demand-daemon.md) | Daemon that exits when idle, periodic index and update notifications | **done** (Phase 13) |
-| [trust.md](trust.md) | GitHub attestations, reputation signals and optional sandbox | medium |
+| [github-integration.md](github-integration.md) | Sign-in with device flow, sponsor button | medium |
+| [trust.md](trust.md) | Signatures, reputation signals and optional sandbox (provenance accepted: Phase 15/16) | medium |
 | [formats.md](formats.md) | `.deb`/`.rpm` and the limits of relocating packages into `$HOME` | medium |
-| [ux-frontend.md](ux-frontend.md) | Interface: remaining shortcuts, `omastore://` links, pagination, i18n | medium |
-| [distribution.md](distribution.md) | Release workflow, `omastore-bin` on the AUR, the store in its own catalog | **done** (Phase 14), except self-update |
+| [ux-frontend.md](ux-frontend.md) | Remaining shortcuts, `omastore://` links, pagination, i18n | medium |
+| [distribution.md](distribution.md) | Publish on the AUR; one owner for the store's installation | medium |
+| [omarchy-integration.md](omarchy-integration.md) | An OmaStore entry in the Omarchy menu | low (waits on Omarchy) |
+| [search-relevance.md](search-relevance.md) | Relevance cutoff and feedback for searches without good results | low (until the catalog grows) |
+| [omarchy-plugins.md](omarchy-plugins.md) | Omarchy shell plugins as a second catalog section | declined for now (2026-09-30) |

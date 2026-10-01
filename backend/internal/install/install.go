@@ -53,7 +53,10 @@ type Installer struct {
 	GOARCH string
 	// Hooks runs the system's update-desktop-database and gtk-update-icon-cache.
 	Hooks bool
-	Log   *slog.Logger
+	// TUILauncher opens terminal apps through Omarchy (see Desktop); New sets
+	// it when Omarchy's launcher exists.
+	TUILauncher string
+	Log         *slog.Logger
 
 	locks sync.Map // full_name → *sync.Mutex
 
@@ -84,7 +87,11 @@ func New(st *store.Store, p xdg.Paths) (*Installer, error) {
 			return nil, fmt.Errorf("%w: %s", ErrOutsideHome, d)
 		}
 	}
-	return &Installer{Store: st, Paths: p, Hooks: true}, nil
+	in := &Installer{Store: st, Paths: p, Hooks: true}
+	if fi, err := os.Stat(omarchyTUI); err == nil && fi.Mode().IsRegular() && fi.Mode()&0o111 != 0 {
+		in.TUILauncher = omarchyTUI
+	}
+	return in, nil
 }
 
 func (in *Installer) http() *http.Client {
@@ -414,14 +421,16 @@ func (in *Installer) integrate(ctx context.Context, t *tx, d *store.AppDetail, m
 		return nil, err
 	}
 	content := Desktop{
-		Name:       d.Name,
-		Comment:    d.Summary,
-		Exec:       execPath,
-		Icon:       iconName,
-		Terminal:   terminalFor(d, m),
-		Categories: categoriesFor(d, m),
-		Repo:       d.FullName,
-		Version:    d.Repo.LatestTag,
+		Name:        d.Name,
+		Comment:     d.Summary,
+		Exec:        execPath,
+		Icon:        iconName,
+		Terminal:    terminalFor(d, m),
+		TUILauncher: in.TUILauncher,
+		AppID:       "omastore." + strings.ToLower(owner+"."+repo),
+		Categories:  categoriesFor(d, m),
+		Repo:        d.FullName,
+		Version:     d.Repo.LatestTag,
 	}.Render()
 	if err := os.MkdirAll(in.Paths.Applications, 0o755); err != nil {
 		return nil, err
@@ -702,6 +711,8 @@ func (in *Installer) removeRegistered(p string) error {
 // through PATH, which includes ~/.local/bin (where downloaded apps live).
 var (
 	updateDesktopDB = "/usr/bin/update-desktop-database"
+	// omarchyTUI (not a hook) launches a TUI in Omarchy's terminal, or focuses it.
+	omarchyTUI      = "/usr/bin/omarchy-launch-or-focus-tui"
 	updateIconCache = "/usr/bin/gtk-update-icon-cache"
 	hookTimeout     = 20 * time.Second
 	errHookSkipped  = errors.New("tool not installed")
