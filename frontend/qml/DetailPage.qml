@@ -97,14 +97,21 @@ Page {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 8
+                    // Name and repository shrink with the window instead of
+                    // widening the page: a long name wraps, the link elides.
                     Text {
                         objectName: "detailName"
+                        Layout.fillWidth: true
                         text: page.app.name || ""
                         color: theme.foreground
                         font.pixelSize: 28
                         font.bold: true
+                        wrapMode: Text.Wrap
                     }
                     LinkText {
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: implicitWidth
+                        elide: Text.ElideMiddle
                         text: page.app.repo || ""
                         url: page.app.htmlUrl || ""
                         Accessible.description: qsTr("Opens the repository on GitHub")
