@@ -2,10 +2,14 @@
 
 ## Evidence
 
-With the real catalog (25 installable apps), the query `notes` returns
-OMARCHIST, wayscriber and RAWmakase. None of them is a notes app: they all
-match only because the word "note(s)" appears in the README, which has a low
-weight. The user gets results that look random instead of "nothing found".
+With the catalog before Phase 15b (25 installable apps), the query `notes`
+returned OMARCHIST, wayscriber and RAWmakase. None of them is a notes app: they
+all matched only because the word "note(s)" appears in the README, which has a
+low weight. The user gets results that look random instead of "nothing found".
+
+Since Phase 15b only repositories with an `omastore.toml` get in, and the real
+catalog starts near empty. The problem returns as the catalog grows, so this
+waits until there are a few dozen apps to calibrate against.
 
 ## Proposal
 

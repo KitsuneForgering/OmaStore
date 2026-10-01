@@ -1,0 +1,35 @@
+name: An app does not show up or does not install
+description: For app authors and users when a specific app misbehaves in the store.
+labels: [app]
+body:
+  - type: input
+    id: repo
+    attributes:
+      label: Repository
+      placeholder: owner/repo
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is wrong
+      options:
+        - It does not show up in the catalog
+        - It shows up but says there is no Linux binary
+        - The installation fails
+        - It installs but does not start from the menu
+        - Wrong name, icon, screenshots or category
+    validations:
+      required: true
+  - type: textarea
+    id: check
+    attributes:
+      label: Output of `omastore check owner/repo`
+      description: It shows what the store sees in the repository and what to fix. Most problems are explained there.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else

@@ -24,12 +24,14 @@ import (
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/manifest"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/notify"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/sysdeps"
 )
 
 const usage = `usage: omastore [-v] <command> [options]
 
 commands:
-  index [--force] [--prune] [--max N] [--no-batch] [--manifest file] [owner/repo...]
+  index [--force] [--prune] [--max N] [--no-batch] [--search-timeout D] [--manifest file]
+        [owner/repo...]
                                     index the catalog (or only the given repos)
   list [--category C] [--query Q] [--installed] [--all] [--json]
   categories                        list the categories
@@ -42,7 +44,14 @@ commands:
   install owner/repo...             install the latest release
   uninstall owner/repo...           remove an installed app
   update [owner/repo...]            update the given apps (or every installed one)
-  update --check [--notify]         list updates; --notify shows a desktop notification
+  update --check [--notify]         list updates (OmaStore's own too); --notify shows a
+                                    desktop notification
+  self-update [--check]             update OmaStore itself (installations made by install.sh)
+  deps [--install] [--json] owner/repo
+                                    system dependencies from the app's PKGBUILD; --install
+                                    installs the missing ones with pacman (asks for the password)
+  star owner/repo...                star the app's repository on GitHub (needs a token)
+  unstar owner/repo...              remove the star
 
 environment: GITHUB_TOKEN (or gh auth token), OMASTORE_LOG=debug|info|warn|error
 `
@@ -77,15 +86,19 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	cmd, cmdArgs := rest[0], rest[1:]
 	commands := map[string]func(context.Context, *app.App, []string, io.Writer, io.Writer) error{
-		"index":      cmdIndex,
-		"list":       cmdList,
-		"categories": cmdCategories,
-		"show":       cmdShow,
-		"similar":    cmdSimilar,
-		"check":      cmdCheck,
-		"install":    cmdInstall,
-		"uninstall":  cmdUninstall,
-		"update":     cmdUpdate,
+		"index":       cmdIndex,
+		"list":        cmdList,
+		"categories":  cmdCategories,
+		"show":        cmdShow,
+		"similar":     cmdSimilar,
+		"check":       cmdCheck,
+		"install":     cmdInstall,
+		"uninstall":   cmdUninstall,
+		"update":      cmdUpdate,
+		"self-update": cmdSelfUpdate,
+		"deps":        cmdDeps,
+		"star":        cmdStar,
+		"unstar":      cmdStar,
 	}
 	// Commands that need neither the database nor the network.
 	if cmd == "lint-manifest" {
@@ -99,6 +112,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
+	if cmd == "unstar" {
+		cmdArgs = append([]string{"--off"}, cmdArgs...)
+	}
 	fn, ok := commands[cmd]
 	if !ok {
 		if cmd == "help" || cmd == "-h" || cmd == "--help" {
@@ -153,10 +169,6 @@ func cmdIndex(ctx context.Context, a *app.App, args []string, stdout, stderr io.
 	if err := parse(fs, args); err != nil {
 		return err
 	}
-	a.Indexer.Prune = *prune
-	a.Indexer.MaxSearch = *maxSearch
-	a.Indexer.NoBatch = *noBatch
-	a.Indexer.DiscoveryTimeout = *searchTimeout
 	var overrides map[string]string
 	if *manifestFile != "" {
 		if fs.NArg() != 1 {
@@ -172,10 +184,14 @@ func cmdIndex(ctx context.Context, a *app.App, args []string, stdout, stderr io.
 	reqBefore := a.GitHub.Requests()
 	tty := isTerminal(stderr)
 	start := time.Now()
-	stats, err := a.Indexer.Run(ctx, index.Options{
+	stats, err := a.Index(ctx, index.Options{
 		Force:            *force,
 		Only:             fs.Args(),
 		ManifestOverride: overrides,
+		Prune:            *prune,
+		MaxSearch:        *maxSearch,
+		NoBatch:          *noBatch,
+		DiscoveryTimeout: *searchTimeout,
 		Progress: func(p index.Progress) {
 			if !tty {
 				return
@@ -255,10 +271,18 @@ func printReport(w io.Writer, r *index.Report) {
 	if r.SuggestedManifest != "" {
 		fmt.Fprintf(w, "\nSuggested omastore.toml:\n\n%s", r.SuggestedManifest)
 	}
-	if r.Compatible() {
-		fmt.Fprintln(w, "\nResult: compatible with OmaStore")
-	} else {
+	switch {
+	case !r.Compatible():
 		fmt.Fprintln(w, "\nResult: not compatible with OmaStore yet")
+	case r.LocalManifest:
+		fmt.Fprintln(w, "\nResult: compatible with this local manifest; push it to the root of the default branch,")
+		fmt.Fprintln(w, "then run the check again without --manifest")
+	default:
+		fmt.Fprintln(w, "\nResult: compatible with OmaStore")
+		fmt.Fprintf(w, "  Listed after a catalog refresh finds it (without the omarchy topic, only by clients with a\n"+
+			"  GitHub token; a repository checked before the manifest existed may wait up to 7 days).\n"+
+			"  Add it to your own catalog now: omastore index %s\n", r.Repo)
+		fmt.Fprintf(w, "  The check reads the release, it does not download or run the app: omastore install %s\n", r.Repo)
 	}
 }
 
@@ -272,7 +296,7 @@ func cmdList(ctx context.Context, a *app.App, args []string, stdout, stderr io.W
 	fs := newFlags("list", stderr)
 	var f store.Filter
 	fs.StringVar(&f.Category, "category", "", "filter by category")
-	fs.StringVar(&f.Query, "query", "", "busca por texto")
+	fs.StringVar(&f.Query, "query", "", "search text")
 	fs.BoolVar(&f.InstalledOnly, "installed", false, "installed only")
 	fs.BoolVar(&f.All, "all", false, "include apps without an installable binary")
 	asJSON := fs.Bool("json", false, "JSON output")
@@ -405,7 +429,7 @@ func cmdLintManifest(args []string, stdout, stderr io.Writer) error {
 }
 
 func cmdCategories(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
-	cats, err := a.Store.Categories(ctx)
+	cats, err := a.Categories(ctx)
 	if err != nil {
 		return err
 	}
@@ -425,7 +449,7 @@ func cmdShow(ctx context.Context, a *app.App, args []string, stdout, stderr io.W
 		fmt.Fprintln(stderr, "usage: omastore show [--json] owner/repo")
 		return errUsage
 	}
-	d, err := a.Store.GetApp(ctx, fs.Arg(0))
+	d, err := a.GetApp(ctx, fs.Arg(0))
 	if err != nil {
 		return fmt.Errorf("%s: %w", fs.Arg(0), err)
 	}
@@ -461,7 +485,32 @@ func cmdShow(ctx context.Context, a *app.App, args []string, stdout, stderr io.W
 		fmt.Fprintf(stdout, "installed:   %s on %s\n", d.Install.Version, d.Install.InstalledAt.Local().Format(time.DateTime))
 		fmt.Fprintf(stdout, "executable:  %s\n", d.Install.ExecPath)
 	}
+	if d.Repo.ReleaseNotes != "" {
+		fmt.Fprintf(stdout, "\nrelease notes (%s):\n%s\n", d.Repo.LatestTag, indent(d.Repo.ReleaseNotes, 0))
+	}
 	return nil
+}
+
+// indent prefixes each line of s with two spaces; with max > 0, it keeps only
+// the first max non-empty lines and says how many were left out.
+func indent(s string, max int) string {
+	var lines []string
+	for _, l := range strings.Split(s, "\n") {
+		if max > 0 {
+			if strings.TrimSpace(l) == "" {
+				continue
+			}
+			if len(lines) == max {
+				lines = append(lines, "  …")
+				break
+			}
+		}
+		if l != "" {
+			l = "  " + l
+		}
+		lines = append(lines, l)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func orDash(s string) string {
@@ -536,13 +585,95 @@ func cmdInstall(ctx context.Context, a *app.App, args []string, stdout, stderr i
 	}
 	var errs []error
 	for _, name := range args {
-		inst, err := a.Installer.Install(ctx, name, progressPrinter(stderr, name))
+		inst, err := a.Install(ctx, name, progressPrinter(stderr, name))
 		endLine(stderr)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
 			continue
 		}
 		fmt.Fprintf(stdout, "%s %s installed: %s\n", name, inst.Version, inst.ExecPath)
+		if rep, err := a.SysDeps(ctx, name); err == nil && len(rep.ToInstall()) > 0 {
+			fmt.Fprintf(stdout, "  %d system dependencies missing: omastore deps --install %s\n", len(rep.ToInstall()), name)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func cmdDeps(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
+	fs := newFlags("deps", stderr)
+	doInstall := fs.Bool("install", false, "install the missing dependencies (pacman, through pkexec)")
+	asJSON := fs.Bool("json", false, "JSON output")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(stderr, "usage: omastore deps [--install] [--json] owner/repo")
+		return errUsage
+	}
+	name := fs.Arg(0)
+	rep, err := a.SysDeps(ctx, name)
+	if *doInstall && err == nil {
+		if pkgs := rep.ToInstall(); len(pkgs) > 0 {
+			fmt.Fprintf(stderr, "installing %s (asks for the administrator password)\n", strings.Join(pkgs, " "))
+		}
+		rep, err = a.InstallSysDeps(ctx, name)
+	}
+	if err != nil && !errors.Is(err, sysdeps.ErrNoPacman) && !errors.Is(err, sysdeps.ErrUnavailable) {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	if *asJSON {
+		if werr := writeJSON(stdout, rep); werr != nil {
+			return werr
+		}
+		return err
+	}
+	if len(rep.Deps) == 0 {
+		fmt.Fprintf(stdout, "%s declares no system dependencies\n", name)
+		return nil
+	}
+	fmt.Fprintf(stdout, "from %s:\n", rep.Source)
+	for _, d := range rep.Deps {
+		kind := "depends"
+		if d.Optional {
+			kind = "optional"
+		}
+		detail := d.Status
+		if d.Package != "" {
+			detail += " (" + d.Package + ")"
+		}
+		line := fmt.Sprintf("  %-9s %-30s %s", kind, d.Spec, detail)
+		if d.Reason != "" {
+			line += " — " + d.Reason
+		}
+		fmt.Fprintln(stdout, line)
+	}
+	if pkgs := rep.ToInstall(); len(pkgs) > 0 && !*doInstall {
+		fmt.Fprintf(stdout, "missing: run omastore deps --install %s\n", name)
+	}
+	return err
+}
+
+func cmdStar(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
+	fs := newFlags("star", stderr)
+	off := fs.Bool("off", false, "remove the star")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	if err := needRepos("star", fs.Args(), stderr); err != nil {
+		return err
+	}
+	var errs []error
+	for _, name := range fs.Args() {
+		stars, err := a.Star(ctx, name, !*off)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", name, err))
+			continue
+		}
+		verb := "starred"
+		if *off {
+			verb = "unstarred"
+		}
+		fmt.Fprintf(stdout, "%s %s (%d stars)\n", name, verb, stars)
 	}
 	return errors.Join(errs...)
 }
@@ -553,7 +684,7 @@ func cmdUninstall(ctx context.Context, a *app.App, args []string, stdout, stderr
 	}
 	var errs []error
 	for _, name := range args {
-		if err := a.Installer.Uninstall(ctx, name); err != nil {
+		if err := a.Uninstall(ctx, name); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
 			continue
 		}
@@ -564,6 +695,20 @@ func cmdUninstall(ctx context.Context, a *app.App, args []string, stdout, stderr
 
 // newNotifier creates the desktop notifier (replaced in tests).
 var newNotifier = func() notify.Notifier { return notify.DBus{AppName: "OmaStore", Icon: "omastore"} }
+
+// guiPath is omastore-gui next to this executable (never looked up in PATH,
+// which holds the downloaded apps), or "" if there is none. Replaced in tests.
+var guiPath = func() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	gui := filepath.Join(filepath.Dir(exe), "omastore-gui")
+	if st, err := os.Stat(gui); err != nil || !st.Mode().IsRegular() || st.Mode()&0o111 == 0 {
+		return ""
+	}
+	return gui
+}
 
 func cmdUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
 	fs := newFlags("update", stderr)
@@ -581,7 +726,7 @@ func cmdUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io
 	}
 	names := fs.Args()
 	if len(names) == 0 {
-		insts, err := a.Store.ListInstalls(ctx)
+		insts, err := a.ListInstalls(ctx)
 		if err != nil {
 			return err
 		}
@@ -595,7 +740,7 @@ func cmdUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io
 	}
 	var errs []error
 	for _, name := range names {
-		inst, err := a.Installer.Update(ctx, name, progressPrinter(stderr, name))
+		inst, err := a.Update(ctx, name, progressPrinter(stderr, name))
 		switch {
 		case errors.Is(err, install.ErrUpToDate):
 			fmt.Fprintf(stdout, "%s is already at %s\n", name, inst.Version)
@@ -613,11 +758,16 @@ func cmdUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io
 // checkUpdates lists the installed apps with a newer version in the catalog and,
 // with notify, shows a desktop notification (once per set of versions).
 func checkUpdates(ctx context.Context, a *app.App, notifyUser bool, stdout io.Writer) error {
-	items, err := a.Store.ListApps(ctx, store.Filter{InstalledOnly: true, All: true})
+	items, err := a.ListApps(ctx, store.Filter{InstalledOnly: true, All: true})
 	if err != nil {
 		return err
 	}
 	var ups []notify.Update
+	// OmaStore itself: only reported when it can update itself, and never
+	// failing the check (the Omarchy hook runs it offline too).
+	if st, err := a.SelfStatus(ctx); err == nil && st.UpdateAvailable {
+		ups = append(ups, notify.Update{Repo: install.SelfRepo, Name: "OmaStore", From: st.Version, To: st.Latest})
+	}
 	for _, it := range items {
 		if it.LatestTag != "" && it.InstalledVersion != it.LatestTag {
 			ups = append(ups, notify.Update{Repo: it.FullName, Name: it.Name, From: it.InstalledVersion, To: it.LatestTag})
@@ -632,18 +782,70 @@ func checkUpdates(ctx context.Context, a *app.App, notifyUser bool, stdout io.Wr
 		return nil
 	}
 	for _, u := range ups {
+		if u.Repo == install.SelfRepo {
+			fmt.Fprintf(stdout, "OmaStore: %s → %s (omastore self-update)\n", u.From, u.To)
+			continue
+		}
 		fmt.Fprintf(stdout, "%s: %s → %s\n", u.Repo, u.From, u.To)
+		if d, err := a.GetApp(ctx, u.Repo); err == nil && d.Repo.ReleaseNotes != "" {
+			fmt.Fprintln(stdout, indent(d.Repo.ReleaseNotes, 3))
+		}
 	}
 	if !notifyUser {
 		return nil
 	}
-	key, summary, body := notify.UpdatesMessage(ups)
-	sent, err := notify.Once(ctx, newNotifier(), filepath.Join(a.Paths.StateDir, "notified-updates"), key, summary, body)
+	key, msg := notify.UpdatesMessage(ups, guiPath())
+	sent, err := notify.Once(ctx, newNotifier(), filepath.Join(a.Paths.StateDir, "notified-updates"), key, msg)
 	if err != nil {
 		return err
 	}
 	if !sent {
 		fmt.Fprintln(stdout, "(already notified)")
 	}
+	return nil
+}
+
+func cmdSelfUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
+	fs := newFlags("self-update", stderr)
+	check := fs.Bool("check", false, "only tell whether a newer OmaStore exists")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return errUsage
+	}
+	st, err := a.SelfStatus(ctx)
+	switch st.Mode {
+	case install.SelfPackage:
+		fmt.Fprintln(stdout, "OmaStore was installed by a package; update it with pacman")
+		return nil
+	case install.SelfDev:
+		fmt.Fprintln(stdout, "this is a development build of OmaStore; it does not update itself")
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("latest OmaStore release: %w", err)
+	}
+	if !st.UpdateAvailable {
+		fmt.Fprintf(stdout, "OmaStore %s is up to date\n", st.Version)
+		return nil
+	}
+	if *check {
+		fmt.Fprintf(stdout, "OmaStore %s → %s\n", st.Version, st.Latest)
+		if st.Notes != "" {
+			fmt.Fprintln(stdout, indent(st.Notes, 3))
+		}
+		return nil
+	}
+	r, err := a.SelfUpdate(ctx, progressPrinter(stderr, "OmaStore"))
+	endLine(stderr)
+	if errors.Is(err, install.ErrUpToDate) {
+		fmt.Fprintf(stdout, "OmaStore %s is up to date\n", r.From)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "OmaStore updated from %s to %s; reopen it to use the new version\n", r.From, r.To)
 	return nil
 }

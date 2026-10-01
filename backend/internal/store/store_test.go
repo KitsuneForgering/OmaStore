@@ -37,7 +37,7 @@ func TestOpenIsIdempotent(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		s, err := Open(context.Background(), path)
 		if err != nil {
-			t.Fatalf("abertura %d: %v", i, err)
+			t.Fatalf("open %d: %v", i, err)
 		}
 		s.Close()
 	}
@@ -140,7 +140,7 @@ func TestListApps(t *testing.T) {
 	}
 	q, _ := s.ListApps(ctx, Filter{Query: "VM"})
 	if len(q) != 1 || q[0].FullName != "a/vm" {
-		t.Errorf("busca: %+v", q)
+		t.Errorf("search: %+v", q)
 	}
 	pct, _ := s.ListApps(ctx, Filter{Query: "%"})
 	if len(pct) != 0 {
@@ -305,5 +305,111 @@ func TestInstallsStampChanges(t *testing.T) {
 	c, _ := s.InstallsStamp(ctx)
 	if a == b || b == c {
 		t.Errorf("stamps %q %q %q", a, b, c)
+	}
+}
+
+func TestLookupsIgnoreCase(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	seed(t, s, "pch/rawmakase", 10, "Graphics", true)
+	if err := s.SaveInstall(ctx, Install{FullName: "pch/rawmakase", Version: "v1.0.0", InstalledAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	d, err := s.GetApp(ctx, "PCH/Rawmakase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.FullName != "pch/rawmakase" || len(d.Assets) != 1 || d.Install == nil {
+		t.Errorf("detail = %q, %d assets, install %v", d.FullName, len(d.Assets), d.Install)
+	}
+	in, err := s.GetInstall(ctx, "Pch/RAWMAKASE")
+	if err != nil || in.FullName != "pch/rawmakase" {
+		t.Errorf("install = %+v, %v", in, err)
+	}
+	if _, err := s.GetApp(ctx, "pch/other"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestCatalogStampIgnoresTouch(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	seed(t, s, "a/b", 1, "Utility", true)
+	before, err := s.CatalogStamp(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.TouchRepo(ctx, "a/b", time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if after, _ := s.CatalogStamp(ctx); after != before {
+		t.Errorf("touch changed the stamp: %q → %q", before, after)
+	}
+	if err := s.UpdateStats(ctx, "a/b", 5, "d", nil, "", 5, time.Now().Add(2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if after, _ := s.CatalogStamp(ctx); after == before {
+		t.Error("new stars did not change the stamp")
+	}
+}
+
+func TestNotApps(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	now := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	fresh := func(name string, version int, since time.Time) bool {
+		t.Helper()
+		ok, err := s.NotAppFresh(ctx, name, version, since)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+	if err := s.MarkNotApp(ctx, "x/theme", 6, now); err != nil {
+		t.Fatal(err)
+	}
+	if !fresh("X/Theme", 6, now.Add(-time.Hour)) {
+		t.Error("mark not found (case must not matter)")
+	}
+	if fresh("x/theme", 7, now.Add(-time.Hour)) || fresh("x/theme", 6, now.Add(time.Hour)) {
+		t.Error("a mark from another indexer version or older than since must not count")
+	}
+	// Becoming an app clears the mark.
+	seed(t, s, "x/theme", 1, "Utility", true)
+	if fresh("x/theme", 6, now.Add(-time.Hour)) {
+		t.Error("SaveIndexed did not clear the mark")
+	}
+	s.MarkNotApp(ctx, "y/old", 6, now.Add(-60*24*time.Hour))
+	if err := s.PruneNotApps(ctx, now.Add(-30*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if fresh("y/old", 6, time.Time{}) {
+		t.Error("old mark not pruned")
+	}
+}
+
+func TestAddStarsAndSysDeps(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
+	if err := s.SaveIndexed(ctx, Repo{FullName: "acme/Photo", Stars: 1, IndexedAt: now},
+		App{Name: "Photo", SysDeps: `{"deps":[{"spec":"gtk4"}]}`}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := s.AddStars(ctx, "ACME/photo", 1, now.Add(time.Minute)); err != nil || n != 2 {
+		t.Errorf("star: %d %v", n, err)
+	}
+	for range 3 {
+		s.AddStars(ctx, "acme/Photo", -1, now.Add(time.Minute))
+	}
+	d, err := s.GetApp(ctx, "acme/Photo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Repo.Stars != 0 || d.SysDeps != `{"deps":[{"spec":"gtk4"}]}` {
+		t.Errorf("stars = %d, sysdeps = %q", d.Repo.Stars, d.SysDeps)
+	}
+	if _, err := s.AddStars(ctx, "acme/none", 1, now); !errors.Is(err, ErrNotFound) {
+		t.Errorf("missing repo: %v", err)
 	}
 }

@@ -64,14 +64,15 @@ func (a *App) ListApps(ctx context.Context, f store.Filter) ([]store.ListItem, e
 // Similar returns the apps most similar to fullName, honoring the filter
 // (by default, installable only).
 func (a *App) Similar(ctx context.Context, fullName string, limit int) ([]store.ListItem, error) {
-	if _, err := a.Store.GetApp(ctx, fullName); err != nil {
+	d, err := a.Store.GetApp(ctx, fullName)
+	if err != nil {
 		return nil, err
 	}
 	ix, err := a.searchIndex(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return a.pick(ctx, store.Filter{}, ix.Similar(fullName, 0), 0, limit)
+	return a.pick(ctx, store.Filter{}, ix.Similar(d.FullName, 0), 0, limit)
 }
 
 // pick returns, in ranked order, the items that pass the filter.

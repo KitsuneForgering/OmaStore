@@ -1,0 +1,8 @@
+#!/bin/bash
+# OmaStore's Omarchy post-update hook, for a system install (package or
+# make install). Link it to enable it:
+#   ln -s @DATADIR@/omastore/omarchy/omastore.hook ~/.config/omarchy/hooks/post-update.d/
+# After omarchy-update, notifies about updates to the apps installed through
+# OmaStore. It only reads OmaStore's catalog and never fails the update.
+[[ -x @BINDIR@/omastore ]] && timeout 20 @BINDIR@/omastore update --check --notify >/dev/null 2>&1
+exit 0

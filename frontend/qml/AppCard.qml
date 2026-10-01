@@ -19,11 +19,19 @@ Rectangle {
     readonly property var job: { backend.jobs.revision; return backend.jobs.forRepo(repo) }
 
     radius: 8
-    color: area.containsMouse || activeFocus ? Qt.lighter(theme.surface, 1.15) : theme.surface
-    border.color: activeFocus ? theme.accent : "transparent"
+    color: area.containsMouse || activeFocus ? theme.hover : theme.surface
+    border.color: activeFocus ? theme.focus : "transparent"
     border.width: 2
+    Behavior on color { ColorAnimation { duration: theme.durationShort } }
+    Behavior on border.color { ColorAnimation { duration: theme.durationShort } }
     Keys.onReturnPressed: activated()
     Keys.onEnterPressed: activated()
+    Keys.onSpacePressed: activated()
+    Accessible.role: Accessible.Button
+    Accessible.name: name
+    Accessible.description: summary + (updateAvailable ? " — " + qsTr("update available")
+                                       : installedVersion !== "" ? " — " + qsTr("installed") : "")
+    Accessible.onPressAction: activated()
 
     MouseArea {
         id: area
@@ -72,7 +80,6 @@ Rectangle {
             Layout.fillHeight: true
             text: card.summary
             color: theme.foreground
-            opacity: 0.85
             wrapMode: Text.Wrap
             maximumLineCount: 3
             elide: Text.ElideRight

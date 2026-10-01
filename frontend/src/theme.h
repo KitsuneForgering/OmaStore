@@ -7,7 +7,14 @@
 #include <QTimer>
 
 // Colors of the active Omarchy theme (colors.toml), reloaded automatically
-// when the user switches themes. Without Omarchy, uses a default dark palette.
+// when the user switches themes. Without Omarchy, uses a default palette that
+// follows the system's light/dark preference.
+//
+// Every color meant for text is adjusted to WCAG AAA against the backgrounds
+// it is drawn on (7:1: background, surface, selection, hover), keeping its hue
+// and only moving its lightness; borders and the focus ring get at least 3:1
+// (WCAG 1.4.11). Fills that carry text come with their text color (onAccent,
+// onDanger), also at 7:1.
 class Theme : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool dark READ dark NOTIFY changed)
@@ -22,6 +29,26 @@ class Theme : public QObject {
     Q_PROPERTY(QColor danger READ danger NOTIFY changed)
     Q_PROPERTY(QColor success READ success NOTIFY changed)
     Q_PROPERTY(QColor warning READ warning NOTIFY changed)
+    // Background of a hovered item (text on it keeps 7:1).
+    Q_PROPERTY(QColor hover READ hover NOTIFY changed)
+    // Boundary of inputs, cards and dividers that must be seen (3:1).
+    Q_PROPERTY(QColor border READ border NOTIFY changed)
+    // Keyboard focus ring and selected-text highlight (3:1 against every
+    // background), and the text on it (7:1).
+    Q_PROPERTY(QColor focus READ focus NOTIFY changed)
+    Q_PROPERTY(QColor onFocus READ onFocus NOTIFY changed)
+    // Primary button / highlight fill and the text on it (7:1).
+    Q_PROPERTY(QColor accentFill READ accentFill NOTIFY changed)
+    Q_PROPERTY(QColor onAccent READ onAccent NOTIFY changed)
+    // Error message fill and the text on it (7:1).
+    Q_PROPERTY(QColor dangerFill READ dangerFill NOTIFY changed)
+    Q_PROPERTY(QColor onDanger READ onDanger NOTIFY changed)
+    // Animation durations in ms; 0 when the user asked for reduced motion
+    // (gtk-enable-animations=false in the GTK settings, or
+    // OMASTORE_REDUCE_MOTION=1), so every transition becomes instant (WCAG 2.3.3).
+    Q_PROPERTY(bool reducedMotion READ reducedMotion NOTIFY changed)
+    Q_PROPERTY(int durationShort READ durationShort NOTIFY changed)
+    Q_PROPERTY(int durationMedium READ durationMedium NOTIFY changed)
 
 public:
     // dirs: theme directories in order of preference. Empty = Omarchy's
@@ -34,18 +61,43 @@ public:
     // by Omarchy themes).
     static QHash<QString, QString> parseColors(const QByteArray &toml);
 
+    // WCAG 2 relative luminance and contrast ratio (1 to 21).
+    static double luminance(const QColor &c);
+    static double contrast(const QColor &a, const QColor &b);
+    // c with its lightness moved (toward white on dark backgrounds, toward
+    // black on light ones) until its contrast with every color in bgs is at
+    // least target; unchanged if it already is.
+    static QColor ensureContrast(const QColor &c, const QList<QColor> &bgs, double target);
+
+    // Minimum contrast for text (WCAG AAA, 1.4.6) and for UI boundaries (1.4.11).
+    static constexpr double TextContrast = 7.0;
+    static constexpr double UiContrast = 3.0;
+
     bool dark() const { return m_dark; }
     QString name() const { return m_name; }
-    QColor accent() const { return color("accent"); }
-    QColor background() const { return color("background"); }
-    QColor surface() const { return color("lighter_background"); }
-    QColor surfaceAlt() const { return color("selection"); }
-    QColor foreground() const { return color("foreground"); }
-    QColor muted() const { return color("muted"); }
-    QColor selection() const { return color("selection"); }
-    QColor danger() const { return color("red"); }
-    QColor success() const { return color("green"); }
-    QColor warning() const { return color("yellow"); }
+    QColor accent() const { return m_ui.value(QStringLiteral("accent")); }
+    QColor background() const { return m_ui.value(QStringLiteral("background")); }
+    QColor surface() const { return m_ui.value(QStringLiteral("surface")); }
+    QColor surfaceAlt() const { return selection(); }
+    QColor foreground() const { return m_ui.value(QStringLiteral("foreground")); }
+    QColor muted() const { return m_ui.value(QStringLiteral("muted")); }
+    QColor selection() const { return m_ui.value(QStringLiteral("selection")); }
+    QColor danger() const { return m_ui.value(QStringLiteral("danger")); }
+    QColor success() const { return m_ui.value(QStringLiteral("success")); }
+    QColor warning() const { return m_ui.value(QStringLiteral("warning")); }
+    QColor hover() const { return m_ui.value(QStringLiteral("hover")); }
+    QColor border() const { return m_ui.value(QStringLiteral("border")); }
+    QColor focus() const { return m_ui.value(QStringLiteral("focus")); }
+    QColor onFocus() const { return m_ui.value(QStringLiteral("onFocus")); }
+    QColor accentFill() const { return m_ui.value(QStringLiteral("accentFill")); }
+    QColor onAccent() const { return m_ui.value(QStringLiteral("onAccent")); }
+    QColor dangerFill() const { return m_ui.value(QStringLiteral("dangerFill")); }
+    QColor onDanger() const { return m_ui.value(QStringLiteral("onDanger")); }
+    bool reducedMotion() const { return m_reducedMotion; }
+    int durationShort() const { return m_reducedMotion ? 0 : 120; }
+    int durationMedium() const { return m_reducedMotion ? 0 : 220; }
+    // Whether the environment asks for reduced motion (see reducedMotion).
+    static bool prefersReducedMotion();
 
     Q_INVOKABLE void reload();
 
@@ -55,10 +107,13 @@ signals:
 private:
     QColor color(const char *key) const;
     void watch();
+    void derive();
 
     QStringList m_dirs;
-    QHash<QString, QColor> m_colors;
+    QHash<QString, QColor> m_colors; // as read from colors.toml
+    QHash<QString, QColor> m_ui;     // derived, accessible colors
     bool m_dark = true;
+    bool m_reducedMotion = false;
     QString m_name;
     QFileSystemWatcher m_watcher;
     QTimer m_debounce;

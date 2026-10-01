@@ -9,7 +9,7 @@ Rectangle {
     visible: implicitHeight > 0
     color: theme.surface
     clip: true
-    Behavior on implicitHeight { NumberAnimation { duration: 120 } }
+    Behavior on implicitHeight { NumberAnimation { duration: theme.durationShort; easing.type: Easing.OutCubic } }
 
     ListView {
         id: list
@@ -35,7 +35,10 @@ Rectangle {
                 elide: Text.ElideRight
                 color: theme.foreground
                 text: kind === "index" ? qsTr("Indexing catalog") + (message ? " — " + message : "")
-                      : (kind === "update" ? qsTr("Updating %1") : qsTr("Installing %1")).arg(repo)
+                      : kind === "self" ? qsTr("Updating OmaStore")
+                      : (kind === "update" ? qsTr("Updating %1")
+                         : kind === "deps" ? qsTr("Installing dependencies of %1")
+                         : qsTr("Installing %1")).arg(repo)
             }
             ProgressBar {
                 Layout.fillWidth: true

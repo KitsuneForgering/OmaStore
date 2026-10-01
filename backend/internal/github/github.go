@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/repoid"
 	gh "github.com/google/go-github/v92/github"
 )
 
@@ -154,11 +155,7 @@ func isNotModified(err error) bool { return statusOf(err) == http.StatusNotModif
 
 // SplitFullName splits "owner/repo".
 func SplitFullName(fullName string) (owner, repo string, err error) {
-	owner, repo, ok := strings.Cut(fullName, "/")
-	if !ok || owner == "" || repo == "" || strings.Contains(repo, "/") {
-		return "", "", fmt.Errorf("invalid repository name: %q", fullName)
-	}
-	return owner, repo, nil
+	return repoid.Split(fullName)
 }
 
 // SearchByTopic returns the repositories (owner/repo) with the topic, sorted
@@ -278,6 +275,7 @@ func (c *Client) HeadSHA(ctx context.Context, fullName, ref, lastSHA string) (st
 type Release struct {
 	Tag         string
 	Name        string
+	Body        string // release notes (markdown), as the author wrote them
 	PublishedAt time.Time
 	Prerelease  bool
 	Assets      []ReleaseAsset
@@ -310,6 +308,7 @@ func (c *Client) LatestRelease(ctx context.Context, fullName string) (*Release, 
 	out := &Release{
 		Tag:         r.GetTagName(),
 		Name:        r.GetName(),
+		Body:        r.GetBody(),
 		PublishedAt: r.GetPublishedAt().Time,
 		Prerelease:  r.GetPrerelease(),
 	}
@@ -471,4 +470,66 @@ func (c *Client) SearchManifests(ctx context.Context, max int) ([]string, error)
 		}
 		opts.Page = resp.NextPage
 	}
+}
+
+// ErrStarForbidden means the token cannot star repositories (a fine-grained
+// token without the "Starring" permission, or a revoked one).
+var ErrStarForbidden = errors.New("the GitHub token is not allowed to star repositories")
+
+// Authenticated reports whether the client has a token.
+func (c *Client) Authenticated() bool { return c.authenticated }
+
+// IsStarred reports whether the authenticated user starred the repository.
+func (c *Client) IsStarred(ctx context.Context, fullName string) (bool, error) {
+	owner, name, err := c.starTarget(fullName)
+	if err != nil {
+		return false, err
+	}
+	starred, _, err := call(ctx, func() (bool, *gh.Response, error) {
+		return c.gh.Activity.IsStarred(ctx, owner, name)
+	})
+	if err != nil {
+		return false, starError(fullName, err)
+	}
+	return starred, nil
+}
+
+// SetStarred stars (or unstars) the repository as the authenticated user.
+// Both are idempotent on GitHub.
+func (c *Client) SetStarred(ctx context.Context, fullName string, starred bool) error {
+	owner, name, err := c.starTarget(fullName)
+	if err != nil {
+		return err
+	}
+	_, _, err = call(ctx, func() (struct{}, *gh.Response, error) {
+		var resp *gh.Response
+		var err error
+		if starred {
+			resp, err = c.gh.Activity.Star(ctx, owner, name)
+		} else {
+			resp, err = c.gh.Activity.Unstar(ctx, owner, name)
+		}
+		return struct{}{}, resp, err
+	})
+	if err != nil {
+		return starError(fullName, err)
+	}
+	return nil
+}
+
+func (c *Client) starTarget(fullName string) (owner, name string, err error) {
+	if !c.authenticated {
+		return "", "", ErrNoToken
+	}
+	return SplitFullName(fullName)
+}
+
+func starError(fullName string, err error) error {
+	switch statusOf(err) {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return fmt.Errorf("star %s: %w: %v", fullName, ErrStarForbidden, err)
+	case http.StatusNotFound:
+		return fmt.Errorf("star %s: %w", fullName, ErrNotFound)
+	}
+	return fmt.Errorf("star %s: %w", fullName, err)
 }

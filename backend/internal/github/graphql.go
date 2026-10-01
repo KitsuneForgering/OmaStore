@@ -10,9 +10,10 @@ import (
 	"time"
 )
 
-// ErrNoToken means the operation requires authentication (GraphQL does not
-// allow anonymous access). Callers should fall back to the REST API.
-var ErrNoToken = errors.New("GraphQL requires a GitHub token")
+// ErrNoToken means the operation requires authentication (GraphQL, code
+// search and starring do not allow anonymous access). The indexer falls back
+// to the REST API.
+var ErrNoToken = errors.New("a GitHub token is required (set GITHUB_TOKEN or run `gh auth login`)")
 
 // batchSize is how many repositories go in each GraphQL query and
 // batchParallel how many queries run at once. Measured with ~230 real
@@ -49,7 +50,7 @@ const repoFields = `
 	defaultBranchRef { name target { oid } }
 	manifest: object(expression: "HEAD:omastore.toml") { ... on Blob { text byteSize isBinary isTruncated } }
 	latestRelease {
-		tagName name isPrerelease isDraft publishedAt
+		tagName name description isPrerelease isDraft publishedAt
 		releaseAssets(first: 100) { nodes { name size downloadUrl contentType digest } }
 	}`
 
@@ -91,6 +92,7 @@ type gqlRepo struct {
 	LatestRelease *struct {
 		TagName       string    `json:"tagName"`
 		Name          string    `json:"name"`
+		Description   string    `json:"description"`
 		IsPrerelease  bool      `json:"isPrerelease"`
 		IsDraft       bool      `json:"isDraft"`
 		PublishedAt   time.Time `json:"publishedAt"`
@@ -137,7 +139,7 @@ func (g *gqlRepo) snapshot() *Snapshot {
 		s.HeadSHA = b.Target.OID
 	}
 	if lr := g.LatestRelease; lr != nil && !lr.IsPrerelease && !lr.IsDraft {
-		rel := &Release{Tag: lr.TagName, Name: lr.Name, PublishedAt: lr.PublishedAt}
+		rel := &Release{Tag: lr.TagName, Name: lr.Name, Body: lr.Description, PublishedAt: lr.PublishedAt}
 		for _, a := range lr.ReleaseAssets.Nodes {
 			rel.Assets = append(rel.Assets, ReleaseAsset{Name: a.Name, URL: a.DownloadURL, Size: a.Size,
 				ContentType: a.ContentType, Digest: a.Digest})

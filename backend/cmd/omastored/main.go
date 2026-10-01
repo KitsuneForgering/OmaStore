@@ -97,6 +97,9 @@ loop:
 			break loop
 		case err = <-errc:
 			break loop
+		case <-srv.Restart():
+			log.Info("restart requested; shutting down")
+			break loop
 		case <-idleC:
 			if d := srv.IdleFor(); d >= idle {
 				log.Info("idle; shutting down", "idle-for", d.Round(time.Second))

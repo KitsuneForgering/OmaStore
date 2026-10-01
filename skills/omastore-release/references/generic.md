@@ -19,11 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write       # provenance attestation
+      attestations: write
     env:
       VERSION: ${{ github.ref_name }}
       APP: myapp
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Replace with your project's build; the result must be an
       # executable at out/myapp.
       - run: ./build.sh
@@ -35,7 +37,10 @@ jobs:
           install -m755 "out/$APP" "dist/$dir/bin/$APP"
           tar -C dist -czf "dist/$dir.tar.gz" "$dir"
           (cd dist && sha256sum ./*.tar.gz > checksums.txt)
-      - uses: softprops/action-gh-release@v2
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/*.tar.gz
+      - uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: |

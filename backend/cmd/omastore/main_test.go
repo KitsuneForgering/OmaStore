@@ -40,7 +40,8 @@ func seedStore(t *testing.T, p xdg.Paths) {
 	}
 	defer st.Close()
 	err = st.SaveIndexed(context.Background(),
-		store.Repo{FullName: "acme/omaphoto", Stars: 7, LatestTag: "v1", Topics: []string{"photo"}},
+		store.Repo{FullName: "acme/omaphoto", Stars: 7, LatestTag: "v1", Topics: []string{"photo"},
+			ReleaseNotes: "## Changes\n\n- one\n- two\n- three\n- four"},
 		store.App{Name: "OmaPhoto", Summary: "Photo editor", Category: "Graphics", Installable: true, Score: 7},
 		[]store.Asset{{Tag: "v1", Name: "omaphoto-linux-amd64", URL: "https://x", Format: "binary", Arch: "amd64"}})
 	if err != nil {
@@ -91,7 +92,8 @@ func TestListAndShow(t *testing.T) {
 		t.Errorf("show json: %d %q", code, out)
 	}
 	code, out, _ = runCLI("show", "acme/omaphoto")
-	if code != 0 || !strings.Contains(out, "OmaPhoto (acme/omaphoto)") || !strings.Contains(out, "no checksum") {
+	if code != 0 || !strings.Contains(out, "OmaPhoto (acme/omaphoto)") || !strings.Contains(out, "no checksum") ||
+		!strings.Contains(out, "release notes (v1):\n  ## Changes\n\n  - one\n") {
 		t.Errorf("show: %q", out)
 	}
 	if code, _, errOut := runCLI("show", "x/y"); code != 1 || !strings.Contains(errOut, "not found") {
@@ -153,8 +155,8 @@ screenshots = ["../outside.png"]
 
 type fakeNotifier struct{ sent *[]string }
 
-func (f fakeNotifier) Notify(ctx context.Context, summary, body string) error {
-	*f.sent = append(*f.sent, summary+"|"+body)
+func (f fakeNotifier) Notify(ctx context.Context, msg notify.Message) error {
+	*f.sent = append(*f.sent, msg.Summary+"|"+msg.Body+"|"+strings.Join(msg.Exec, " "))
 	return nil
 }
 
@@ -166,6 +168,9 @@ func TestUpdateCheck(t *testing.T) {
 	old := newNotifier
 	newNotifier = func() notify.Notifier { return fakeNotifier{&sent} }
 	defer func() { newNotifier = old }()
+	oldGUI := guiPath
+	guiPath = func() string { return "/usr/bin/omastore-gui" }
+	defer func() { guiPath = oldGUI }()
 
 	if code, out, _ := runCLI("update", "--check"); code != 0 || !strings.Contains(out, "everything is up to date") {
 		t.Errorf("none installed: %d %q", code, out)
@@ -175,8 +180,8 @@ func TestUpdateCheck(t *testing.T) {
 	st.Close()
 
 	code, out, _ := runCLI("update", "--check", "--notify")
-	if code != 0 || !strings.Contains(out, "acme/omaphoto: v0 → v1") || len(sent) != 1 ||
-		!strings.Contains(sent[0], "1 update") {
+	if code != 0 || !strings.Contains(out, "acme/omaphoto: v0 → v1\n  ## Changes\n  - one\n  - two\n  …\n") || len(sent) != 1 ||
+		!strings.Contains(sent[0], "1 update") || !strings.HasSuffix(sent[0], "|/usr/bin/omastore-gui --open acme/omaphoto") {
 		t.Errorf("with an update: %d %q %v", code, out, sent)
 	}
 	// Same set: does not notify again.

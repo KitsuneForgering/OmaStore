@@ -76,9 +76,44 @@ var mainCategories = map[string]bool{
 	"Settings": true, "System": true, "Utility": true,
 }
 
-// reAdditional accepts additional categories besides the main ones (a common
-// subset of the specification); they only go into the .desktop file.
-var reAdditional = regexp.MustCompile(`^[A-Z][A-Za-z0-9]{1,39}$`)
+// additionalCategories are the freedesktop additional categories (Desktop
+// Menu Specification, appendix A, plus the desktops desktop-file-validate
+// registers). The reserved ones (Screensaver, TrayIcon, Applet, Shell) are
+// left out: they need OnlyShowIn. They only go into the .desktop file.
+var additionalCategories = map[string]bool{}
+
+func init() {
+	for _, c := range strings.Fields(`
+		Building Debugger IDE GUIDesigner Profiling RevisionControl Translation
+		Calendar ContactManagement Database Dictionary Chart Email Finance FlowChart PDA
+		ProjectManagement Presentation Spreadsheet WordProcessor
+		2DGraphics VectorGraphics RasterGraphics 3DGraphics Scanning OCR Photography
+		Publishing Viewer TextTools DesktopSettings HardwareSettings Printing PackageManager
+		Dialup InstantMessaging Chat IRCClient Feed FileTransfer HamRadio News P2P
+		RemoteAccess Telephony TelephonyTools VideoConference WebBrowser WebDevelopment
+		Midi Mixer Sequencer Tuner TV AudioVideoEditing Player Recorder DiscBurning
+		ActionGame AdventureGame ArcadeGame BoardGame BlocksGame CardGame KidsGame
+		LogicGame RolePlaying Shooter Simulation SportsGame StrategyGame
+		Art Construction Music Languages ArtificialIntelligence Astronomy Biology
+		Chemistry ComputerScience DataVisualization Economy Electricity Geography Geology
+		Geoscience History Humanities ImageProcessing Literature Maps Math
+		NumericalAnalysis MedicalSoftware Physics Robotics Spirituality Sports
+		ParallelComputing Amusement Archiving Compression Electronics Emulator
+		Engineering FileTools FileManager TerminalEmulator Filesystem Monitor Security
+		Accessibility Calculator Clock TextEditor Documentation Adult Core
+		KDE GNOME XFCE DDE LXQt COSMIC GTK Qt Motif Java ConsoleOnly`) {
+		additionalCategories[c] = true
+	}
+}
+
+// reExtension accepts the specification's own extensions ("X-Omarchy").
+var reExtension = regexp.MustCompile(`^X-[A-Za-z0-9-]{1,38}$`)
+
+// validCategory reports whether c is a registered freedesktop category or an
+// X- extension.
+func validCategory(c string) bool {
+	return mainCategories[c] || additionalCategories[c] || reExtension.MatchString(c)
+}
 
 var archAliases = map[string]string{
 	"x86_64": "amd64", "amd64": "amd64", "x64": "amd64",
@@ -220,8 +255,8 @@ func (m *Manifest) sanitize() []Problem {
 		switch {
 		case seen[c]:
 			continue
-		case !mainCategories[c] && !reAdditional.MatchString(c):
-			errf("categories", "invalid category %q", c)
+		case !validCategory(c):
+			errf("categories", "%q is not a freedesktop category (see the Desktop Menu Specification; extensions start with X-)", c)
 			continue
 		case len(cats) == maxCategories:
 			warnf("categories", "only the first %d are used", maxCategories)

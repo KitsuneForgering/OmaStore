@@ -13,7 +13,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/index"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/asset"
 )
 
 var elfBin = []byte("\x7fELF\x02\x01\x01\x00fake-binary")
@@ -113,7 +113,7 @@ func TestExtractTarGz(t *testing.T) {
 		{name: "app-1.0/app-copy", typ: tar.TypeLink, link: "app-1.0/app"},
 		{name: "app-1.0/fifo", typ: tar.TypeFifo},
 	}))
-	if err := Extract(arc, index.FormatTarGz, dest, ""); err != nil {
+	if err := Extract(arc, asset.FormatTarGz, dest, ""); err != nil {
 		t.Fatal(err)
 	}
 	st, err := os.Stat(filepath.Join(dest, "app-1.0/app"))
@@ -157,7 +157,7 @@ func TestExtractRejectsUnsafe(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			dest := filepath.Join(root, "out")
-			err := Extract(writeTemp(t, tarGz(t, entries)), index.FormatTarGz, dest, "")
+			err := Extract(writeTemp(t, tarGz(t, entries)), asset.FormatTarGz, dest, "")
 			if !errors.Is(err, ErrUnsafePath) {
 				t.Errorf("err = %v, want ErrUnsafePath", err)
 			}
@@ -174,7 +174,7 @@ func TestExtractZip(t *testing.T) {
 		{name: "bin/tool", body: string(elfBin), mode: 0o755},
 		{name: "bin/tool-link", link: "tool"},
 	}))
-	if err := Extract(arc, index.FormatZip, dest, ""); err != nil {
+	if err := Extract(arc, asset.FormatZip, dest, ""); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dest, "bin/tool")); !bytes.Equal(b, elfBin) {
@@ -187,7 +187,7 @@ func TestExtractZip(t *testing.T) {
 		"absolute symlink": {{name: "l", link: "/etc/passwd"}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			err := Extract(writeTemp(t, zipBytes(t, entries)), index.FormatZip, t.TempDir(), "")
+			err := Extract(writeTemp(t, zipBytes(t, entries)), asset.FormatZip, t.TempDir(), "")
 			if !errors.Is(err, ErrUnsafePath) {
 				t.Errorf("err = %v", err)
 			}
@@ -204,7 +204,7 @@ func TestExtractPkgOnlyUsr(t *testing.T) {
 		{name: "usr/bin/rawmakase", body: string(elfBin), mode: 0o755},
 		{name: "usr/share/icons/hicolor/scalable/apps/rawmakase.svg", body: "<svg/>"},
 	}))
-	if err := Extract(arc, index.FormatPkg, dest, ""); err != nil {
+	if err := Extract(arc, asset.FormatPkg, dest, ""); err != nil {
 		t.Fatal(err)
 	}
 	for _, gone := range []string{".PKGINFO", ".INSTALL", "etc"} {
@@ -220,14 +220,14 @@ func TestExtractPkgOnlyUsr(t *testing.T) {
 
 func TestExtractBinary(t *testing.T) {
 	dest := t.TempDir()
-	if err := Extract(writeTemp(t, elfBin), index.FormatBinary, dest, "omavm"); err != nil {
+	if err := Extract(writeTemp(t, elfBin), asset.FormatBinary, dest, "omavm"); err != nil {
 		t.Fatal(err)
 	}
 	st, _ := os.Stat(filepath.Join(dest, "omavm"))
 	if st.Mode().Perm() != 0o755 {
 		t.Errorf("modo = %v", st.Mode())
 	}
-	if err := Extract(writeTemp(t, elfBin), index.FormatBinary, dest, "../x"); !errors.Is(err, ErrUnsafePath) {
+	if err := Extract(writeTemp(t, elfBin), asset.FormatBinary, dest, "../x"); !errors.Is(err, ErrUnsafePath) {
 		t.Errorf("malicious name: %v", err)
 	}
 }

@@ -26,7 +26,7 @@ jobs:
       APP: myapp                # binary name ([[bin]] or crate name)
       ARCH: ${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       # The app's system dependencies, if any:
       # - run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev
@@ -49,6 +49,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write       # provenance attestation
+      attestations: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -56,7 +58,10 @@ jobs:
           path: dist
           merge-multiple: true
       - run: cd dist && sha256sum ./*.tar.gz > checksums.txt
-      - uses: softprops/action-gh-release@v2
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/*.tar.gz
+      - uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: |

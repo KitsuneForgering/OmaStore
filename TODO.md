@@ -152,7 +152,7 @@ result), with no external service or LLM.
 - [x] Portuguese queries: pt→en dictionary of app terms ("editor de fotos", "voz para texto", "calendário")
 - [x] Calibrated on the real catalog (34 repos): similarity threshold 0.12 (real pairs > 0.2; noise 0.09–0.16)
 
-## Phase 11 — `omastore.toml` manifest (see `docs/ideas/manifest.md`)
+## Phase 11 — `omastore.toml` manifest
 
 - [x] Parser and validation (optional fields; paths go through the same locks)
 - [x] The indexer reads the manifest from the tree and overrides the heuristics (name, summary, categories, icon, screenshots, terminal)
@@ -161,7 +161,7 @@ result), with no external service or LLM.
 - [x] Migration 0003 (`apps.manifest`); the installer uses the declared asset/exec/terminal/categories; an `exec` that is a symlink pointing outside is refused
 - [x] An invalid manifest never breaks indexing; it is only fetched when it shows up in the tree
 
-## Phase 12 — Batch discovery (see `docs/ideas/graphql-discovery.md`)
+## Phase 12 — Batch discovery
 
 - [x] Batched GraphQL query of the cache-check fields (with token); REST still used without a token
 - [x] Repos without a release skip README/tree
@@ -170,7 +170,7 @@ result), with no external service or LLM.
 - [x] `omastore index` shows the number of requests; `--no-batch` forces REST; nonexistent repos outside the catalog count as "skipped"
 - [x] `aorumbayev/awesome-omarchy` list in the seeds: installable catalog from 15 → 25 apps
 
-## Phase 13 — On-demand daemon (see `docs/ideas/on-demand-daemon.md`)
+## Phase 13 — On-demand daemon
 
 - [x] Exit when idle (no connections and no jobs) when socket-activated
 - [x] `omastore update --check` and desktop notification via D-Bus
@@ -202,9 +202,9 @@ result), with no external service or LLM.
 - [x] **High — reliable uninstallation:** `install.removeRegistered` only logs failures, but `Uninstall` deletes the database record even when a file was not removed (`backend/internal/install/install.go`). Distinguish a missing file, a file changed by third parties and an I/O failure; keep the pending paths in the database to allow a retry. On update, also handle failures when cleaning up files from the previous version.
 - [ ] **Medium — stale responses in the interface:** `Backend::reloadDetail` and `loadSimilar` discard responses for another repository, but accept stale responses for the same repository (`frontend/src/backend.cpp`). Use a per-request generation id and test out-of-order responses, as `CatalogModel` already does.
 - [ ] **Medium — checksum state name:** `AssetInfo.verified` only means a digest or checksum file is available before the download (`backend/internal/rpc/methods.go`, `frontend/qml/DetailPage.qml`). Rename the field and the displayed text so they do not suggest a completed verification; keep provenance as a separate state in Phase 15 and update `docs/ipc.md`.
-- [ ] **Medium — repository identity:** `github.SplitFullName`, `rpc.repoParams.validate` and `install.splitName` accept different sets of `owner/repo` names. Use a single validation before API calls and local path operations; cover invalid and valid names in shared tests.
-- [ ] **Medium — format boundary:** `install` imports `index` only for constants, architecture classification and format preference (`backend/internal/install/{install,extract}.go`). Move these asset concepts into a neutral module used by both, without making the installer depend on the indexing pipeline.
-- [ ] **Medium — single entry point for use cases:** the CLI calls `Indexer` and `Installer` directly and changes indexer options, while the daemon uses `app.App` methods (`backend/cmd/omastore/main.go`, `backend/internal/app/backend.go`). Pass options per call and route both interfaces through the same application methods, especially before adding the Phase 15 policy.
+- [x] **Medium — repository identity:** `github.SplitFullName`, `rpc.repoParams.validate` and `install.splitName` accept different sets of `owner/repo` names. Use a single validation before API calls and local path operations; cover invalid and valid names in shared tests.
+- [x] **Medium — format boundary:** `install` imports `index` only for constants, architecture classification and format preference (`backend/internal/install/{install,extract}.go`). Move these asset concepts into a neutral module used by both, without making the installer depend on the indexing pipeline.
+- [x] **Medium — single entry point for use cases:** the CLI calls `Indexer` and `Installer` directly and changes indexer options, while the daemon uses `app.App` methods (`backend/cmd/omastore/main.go`, `backend/internal/app/backend.go`). Pass options per call and route both interfaces through the same application methods, especially before adding the Phase 15 policy.
 - [x] **Low — first indexing:** `Backend::maybeIndexOnFirstRun` marks the query as done before the response (`frontend/src/backend.cpp`). Allow a retry after a transient error so a fresh installation is not left with an empty catalog until the user acts.
 - [ ] **Low — errors in the indexer tests:** replace the `stats, _ = ix.Run(...)` calls in `backend/internal/index/index_test.go` with explicit error checks; an indexing failure should not show up only as an unexpected statistic.
 
@@ -229,6 +229,16 @@ result), with no external service or LLM.
 - [x] Installer: one HTTP client (connection reuse) and downloads that abort after 60 s without data
 - [x] Frontend: friendly text for `-32010` (incomplete uninstall); today the backend message is shown
 
+## Maintenance fixes — project analysis (2026-09-29)
+
+- [x] Anonymous indexing made no progress: repositories without a manifest were not recorded, so every run checked the same ones until the rate limit. `not_apps` skips them for 7 days (index.Version-aware) and a new repository costs one request (manifest first, on the default branch) instead of two
+- [x] Repository names are case-insensitive (`omastore show PCH/Rawmakase` failed): `COLLATE NOCASE` lookups in `GetApp`/`GetInstall`, one validation in `internal/repoid`
+- [x] Per-app install lock across processes (`flock`, like the index lock): the CLI and the daemon never change the same app at once; the second gets `-32002`
+- [x] Notifications never block: per-connection send queue; a client that stops reading is disconnected instead of stalling the indexer (which reports progress under its lock)
+- [x] `catalog.changed` and the search index follow `changed_at`, not `indexed_at`: a run that changed nothing no longer notifies the clients
+- [x] The CLI goes through `app.App` like the daemon; per-run indexer settings live in `index.Options`
+- [x] Asset rules in `internal/asset`, used by the indexer and the installer
+
 ## Phase 16 — Two audiences: people who use Omarchy and people who make apps
 
 The catalog starts empty until authors adopt `omastore.toml` (0 repositories on
@@ -241,15 +251,36 @@ leave users at a blank screen.
 - [x] Empty catalog explains how apps join, shows why the last refresh failed (rate limit → `gh auth login`) and invites authors to the publish page
 - [x] App page: "Is this your app?" link to the checker; explanation when the release has no binary for this machine
 - [ ] Published catalog snapshot (built by a scheduled workflow, attested) so a first run without a GitHub token shows the catalog with ~1 request
-- [ ] Open PRs with the suggested manifest in the apps that were installable before Phase 15b; target: 5 apps from 3 authors
+- [ ] Open PRs with the suggested manifest in the apps that were installable before Phase 15b; target: 5 apps from 3 authors (2026-09-30: ZacharyZhang-NY/OmaPhoto#12, pch/rawmakase#27, michaelmonetized/omadesign#188)
 - [ ] Phase 15 ordering: show provenance as a badge and a warning first; require it only once the catalog has enough apps (or as a user setting)
+
+## Phase 17 — Stars and system dependencies
+
+- [x] `star.get`/`star.set` (+ `omastore star`/`unstar`): the detail page's star button stars the repository on GitHub; `-32011` without a token or with one that may not star
+- [x] `internal/sysdeps`: `depends`/`optdepends` (and `_<arch>`) from `.SRCINFO` or a statically parsed `PKGBUILD` (never run; split packages; expansions dropped); stored in `apps.sysdeps` (migration 0007, `index.Version` 7)
+- [x] `deps.check`: missing ones via `pacman -T`, repository package via `pacman -Sddp`; `deps.install` job: `pkexec pacman -S --needed --noconfirm`, one at a time; AUR-only deps are listed, never installed
+- [x] Frontend: dependency list on the detail page, "Install N dependencies" button and a dialog after an install with missing dependencies
+- [ ] Verify `pkexec` from the socket-activated (systemd `--user`) daemon on a real session: polkit must find the graphical agent for a process outside the login session (on Omarchy that agent is the shell's own, `omarchy.polkit`)
+- [ ] Read `.PKGINFO` `depend` lines from `.pkg.tar.zst` assets when the repository has no PKGBUILD
+
+## Phase 18 — Omarchy and GitHub integration
+
+From `docs/ideas/omarchy-integration.md` and `docs/ideas/github-integration.md` (accepted 2026-09-30).
+
+- [x] `post-update` hook: `packaging/install.sh` writes `~/.config/omarchy/hooks/post-update.d/omastore.hook` (`omastore update --check --notify`, never fails the update); ownership by a `# omastore-managed` line inside the file (Omarchy runs every file there); `--no-hooks`; removed by `--uninstall`; a user's own hook is left alone; packages ship `/usr/share/omastore/omarchy/omastore.hook` to link
+- [x] Update notifications with the Omarchy shell's hints (`omarchy-glyph`, `omarchy-exec-argv`): one update opens `omastore-gui --open owner/repo`, several open `--page installed`; the GUI is the `omastore-gui` next to the CLI, never from `PATH`
+- [x] Terminal apps through `/usr/bin/omarchy-launch-or-focus-tui --app-id=omastore.<owner>.<repo>` when it exists; only when the launcher path and app id are shell-safe (Omarchy runs the command with `eval`), otherwise `Terminal=true`
+- [x] Release notes: release body (REST `body`, GraphQL `description`) in `repos.release_notes` (migration 0008, `index.Version` 8, capped at 16 KiB), `releaseNotes` in `AppDetail`, "What's new" on the app page, `omastore show` and `update --check`
+- [x] "Report a problem": prefilled GitHub issue URL from an allow-list of fields (versions, architecture, release files, OmaStore version, error with `$HOME` as `~`); also offered after a failed install/update
+- [x] "Open" button for installed apps (`/usr/bin/gtk-launch`, falling back to `gio launch`)
+- [ ] Check on a real Omarchy session: the notification click opens the GUI, and a TUI app opens and is focused on a second launch
+- [x] Manifest categories from the freedesktop registry (main + additional + `X-` extensions) instead of a capitalized-word regex, which refused `2DGraphics` and let unregistered names into the `.desktop`; same list in the skill's validator; `index.Version` 9
+- [ ] The OmaStore version in reports comes from the frontend's CMake `project(VERSION)`: take it from the release tag instead (`make dist VERSION=...`)
 
 ## Future ideas
 
-Detailed proposals, with evidence and cost, live in [`docs/ideas/`](docs/ideas/README.md).
+Detailed proposals, with evidence and cost, live in [`docs/ideas/`](docs/ideas/README.md)
+(signatures and the sandbox are in `trust.md`). Not written up yet:
 
-
-- [ ] Signature verification (minisign/cosign) in addition to checksums
 - [ ] Automatic background updates (update notifications already exist: Phase 13; installing on its own is still missing, opt-in)
-- [ ] Flatpak/AppImage support with sandbox integration
 - [ ] Ratings/flagging of problematic apps

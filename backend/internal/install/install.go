@@ -22,9 +22,11 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/asset"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/flock"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/gitrepo"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/index"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/manifest"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/repoid"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/xdg"
 )
@@ -36,6 +38,7 @@ var (
 	ErrUpToDate       = errors.New("app is already at the latest version")
 	ErrConflict       = errors.New("file already exists and does not belong to OmaStore")
 	ErrOutsideHome    = errors.New("path outside $HOME")
+	ErrBusy           = errors.New("another OmaStore process is changing this app")
 	// ErrIncomplete means some registered files could not be removed; they
 	// stay recorded so a later attempt can remove them.
 	ErrIncomplete = errors.New("some files could not be removed")
@@ -50,7 +53,10 @@ type Installer struct {
 	GOARCH string
 	// Hooks runs the system's update-desktop-database and gtk-update-icon-cache.
 	Hooks bool
-	Log   *slog.Logger
+	// TUILauncher opens terminal apps through Omarchy (see Desktop); New sets
+	// it when Omarchy's launcher exists.
+	TUILauncher string
+	Log         *slog.Logger
 
 	locks sync.Map // full_name → *sync.Mutex
 
@@ -81,7 +87,11 @@ func New(st *store.Store, p xdg.Paths) (*Installer, error) {
 			return nil, fmt.Errorf("%w: %s", ErrOutsideHome, d)
 		}
 	}
-	return &Installer{Store: st, Paths: p, Hooks: true}, nil
+	in := &Installer{Store: st, Paths: p, Hooks: true}
+	if fi, err := os.Stat(omarchyTUI); err == nil && fi.Mode().IsRegular() && fi.Mode()&0o111 != 0 {
+		in.TUILauncher = omarchyTUI
+	}
+	return in, nil
 }
 
 func (in *Installer) http() *http.Client {
@@ -134,11 +144,28 @@ func (in *Installer) goarch() string {
 	return runtime.GOARCH
 }
 
-func (in *Installer) lock(fullName string) func() {
-	m, _ := in.locks.LoadOrStore(strings.ToLower(fullName), &sync.Mutex{})
+// lock serializes the operations on an app: a mutex inside this process and
+// a file lock against the others (the CLI while the daemon installs). Another
+// process holding it makes the operation fail with ErrBusy instead of waiting
+// for a download of unknown length.
+func (in *Installer) lock(fullName string) (func(), error) {
+	owner, repo, err := splitName(fullName)
+	if err != nil {
+		return nil, err
+	}
+	key := strings.ToLower(owner + "__" + repo)
+	m, _ := in.locks.LoadOrStore(key, &sync.Mutex{})
 	mu := m.(*sync.Mutex)
 	mu.Lock()
-	return mu.Unlock
+	unlockFile, err := flock.TryLock(filepath.Join(filepath.Dir(in.Paths.AppsDir), "locks", key+".lock"))
+	if err != nil {
+		mu.Unlock()
+		if errors.Is(err, flock.ErrLocked) {
+			return nil, fmt.Errorf("%s: %w", fullName, ErrBusy)
+		}
+		return nil, err
+	}
+	return func() { unlockFile(); mu.Unlock() }, nil
 }
 
 // within reports whether p is inside root (or is root).
@@ -150,16 +177,10 @@ func within(root, p string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// reName validates owner and repo with GitHub's naming rules, so they cannot
-// turn into dangerous path components.
-var reName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
-
+// splitName validates the name with repoid, so owner and repo cannot turn
+// into dangerous path components.
 func splitName(fullName string) (owner, repo string, err error) {
-	owner, repo, ok := strings.Cut(fullName, "/")
-	if !ok || !reName.MatchString(owner) || !reName.MatchString(repo) || repo == ".." || strings.Contains(repo, "..") {
-		return "", "", fmt.Errorf("invalid repository name: %q", fullName)
-	}
-	return owner, repo, nil
+	return repoid.Split(fullName)
 }
 
 var reVersionUnsafe = regexp.MustCompile(`[^A-Za-z0-9._+-]`)
@@ -191,7 +212,7 @@ func SelectAsset(assets []store.Asset, goarch string, m *manifest.Manifest) (sto
 	}
 	var cands []store.Asset
 	for _, a := range assets {
-		if (index.AssetInfo{Format: a.Format, Arch: a.Arch}).Installable(goarch) {
+		if (asset.Info{Format: a.Format, Arch: a.Arch}).Installable(goarch) {
 			cands = append(cands, a)
 		}
 	}
@@ -203,7 +224,7 @@ func SelectAsset(assets []store.Asset, goarch string, m *manifest.Manifest) (sto
 		if ei != ej {
 			return ei
 		}
-		ri, rj := index.FormatRank(cands[i].Format), index.FormatRank(cands[j].Format)
+		ri, rj := asset.FormatRank(cands[i].Format), asset.FormatRank(cands[j].Format)
 		if ri != rj {
 			return ri < rj
 		}
@@ -214,7 +235,11 @@ func SelectAsset(assets []store.Asset, goarch string, m *manifest.Manifest) (sto
 
 // Install installs (or reinstalls/updates) the latest release of fullName.
 func (in *Installer) Install(ctx context.Context, fullName string, progress func(Progress)) (*store.Install, error) {
-	defer in.lock(fullName)()
+	unlock, err := in.lock(fullName)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
 	report := func(p Progress) {
 		if progress != nil {
 			progress(p)
@@ -231,7 +256,7 @@ func (in *Installer) Install(ctx context.Context, fullName string, progress func
 		return nil, err
 	}
 	m := manifest.Decode(d.Manifest)
-	asset, ok := SelectAsset(d.Assets, in.goarch(), m)
+	sel, ok := SelectAsset(d.Assets, in.goarch(), m)
 	if !d.Installable || !ok {
 		return nil, fmt.Errorf("%s: %w", fullName, ErrNotInstallable)
 	}
@@ -250,8 +275,8 @@ func (in *Installer) Install(ctx context.Context, fullName string, progress func
 	}
 	defer os.RemoveAll(tmp)
 	archive := filepath.Join(tmp, "asset")
-	report(Progress{Stage: StageDownload, Total: asset.Size})
-	sum256, sum512, err := in.download(ctx, asset.URL, archive, func(done, total int64) {
+	report(Progress{Stage: StageDownload, Total: sel.Size})
+	sum256, sum512, err := in.download(ctx, sel.URL, archive, func(done, total int64) {
 		report(Progress{Stage: StageDownload, Done: done, Total: total})
 	})
 	if err != nil {
@@ -260,14 +285,14 @@ func (in *Installer) Install(ctx context.Context, fullName string, progress func
 
 	// 2. Checksum verification, when the release publishes one.
 	report(Progress{Stage: StageVerify})
-	want, err := in.expected(ctx, asset.Digest, asset.ChecksumURL, asset.Name)
+	want, err := in.expected(ctx, sel.Digest, sel.ChecksumURL, sel.Name)
 	if err != nil {
 		return nil, err
 	}
 	if want == "" {
-		in.log().Warn("release without checksum; installing without verification", "repo", fullName, "asset", asset.Name)
+		in.log().Warn("release without checksum; installing without verification", "repo", fullName, "asset", sel.Name)
 	} else if err := verify(want, sum256, sum512); err != nil {
-		return nil, fmt.Errorf("%s: %w", asset.Name, err)
+		return nil, fmt.Errorf("%s: %w", sel.Name, err)
 	}
 
 	// 3. Extraction into a staging area inside the app directory.
@@ -279,15 +304,15 @@ func (in *Installer) Install(ctx context.Context, fullName string, progress func
 	staging := filepath.Join(appDir, ".staging-"+randSuffix())
 	defer os.RemoveAll(staging)
 	binName := strings.ToLower(repo)
-	if asset.Format == index.FormatAppImage {
+	if sel.Format == asset.FormatAppImage {
 		binName += ".AppImage"
 	}
-	if err := Extract(archive, asset.Format, staging, binName); err != nil {
-		return nil, fmt.Errorf("extract %s: %w", asset.Name, err)
+	if err := Extract(archive, sel.Format, staging, binName); err != nil {
+		return nil, fmt.Errorf("extract %s: %w", sel.Name, err)
 	}
-	execAbs, err := in.findExec(staging, repo, asset.Format, asset.Tag, m)
+	execAbs, err := in.findExec(staging, repo, sel.Format, sel.Tag, m)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", asset.Name, err)
+		return nil, fmt.Errorf("%s: %w", sel.Name, err)
 	}
 	execRel, _ := filepath.Rel(staging, execAbs)
 	// The path goes into the .desktop Exec key and the launcher, which are
@@ -396,14 +421,16 @@ func (in *Installer) integrate(ctx context.Context, t *tx, d *store.AppDetail, m
 		return nil, err
 	}
 	content := Desktop{
-		Name:       d.Name,
-		Comment:    d.Summary,
-		Exec:       execPath,
-		Icon:       iconName,
-		Terminal:   terminalFor(d, m),
-		Categories: categoriesFor(d, m),
-		Repo:       d.FullName,
-		Version:    d.Repo.LatestTag,
+		Name:        d.Name,
+		Comment:     d.Summary,
+		Exec:        execPath,
+		Icon:        iconName,
+		Terminal:    terminalFor(d, m),
+		TUILauncher: in.TUILauncher,
+		AppID:       "omastore." + strings.ToLower(owner+"."+repo),
+		Categories:  categoriesFor(d, m),
+		Repo:        d.FullName,
+		Version:     d.Repo.LatestTag,
 	}.Render()
 	if err := os.MkdirAll(in.Paths.Applications, 0o755); err != nil {
 		return nil, err
@@ -460,7 +487,7 @@ func (in *Installer) checkCommandName(cmd string) error {
 // if it exists in the package; otherwise, the FindExecutable heuristic.
 func (in *Installer) findExec(staging, repo, format, tag string, m *manifest.Manifest) (string, error) {
 	t, ok := m.Target(in.goarch())
-	if ok && t.Exec != "" && format != index.FormatBinary && format != index.FormatAppImage {
+	if ok && t.Exec != "" && format != asset.FormatBinary && format != asset.FormatAppImage {
 		p, err := declaredExec(staging, manifest.Expand(t.Exec, tag))
 		if err == nil {
 			return p, nil
@@ -602,7 +629,11 @@ func (in *Installer) Update(ctx context.Context, fullName string, progress func(
 // them cannot be removed, the record is kept with just those paths and the
 // error wraps ErrIncomplete, so uninstalling again retries them.
 func (in *Installer) Uninstall(ctx context.Context, fullName string) error {
-	defer in.lock(fullName)()
+	unlock, err := in.lock(fullName)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	inst, err := in.Store.GetInstall(ctx, fullName)
 	if errors.Is(err, store.ErrNotFound) {
 		return fmt.Errorf("%s: %w", fullName, ErrNotInstalled)
@@ -680,6 +711,8 @@ func (in *Installer) removeRegistered(p string) error {
 // through PATH, which includes ~/.local/bin (where downloaded apps live).
 var (
 	updateDesktopDB = "/usr/bin/update-desktop-database"
+	// omarchyTUI (not a hook) launches a TUI in Omarchy's terminal, or focuses it.
+	omarchyTUI      = "/usr/bin/omarchy-launch-or-focus-tui"
 	updateIconCache = "/usr/bin/gtk-update-icon-cache"
 	hookTimeout     = 20 * time.Second
 	errHookSkipped  = errors.New("tool not installed")

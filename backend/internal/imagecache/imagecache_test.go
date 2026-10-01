@@ -74,7 +74,7 @@ func TestGet(t *testing.T) {
 	}
 	for _, bad := range []string{"http://x/a.png", "file:///etc/passwd", "nothing"} {
 		if _, err := c.Get(ctx, bad); err == nil {
-			t.Errorf("%q aceito", bad)
+			t.Errorf("%q accepted", bad)
 		}
 	}
 }

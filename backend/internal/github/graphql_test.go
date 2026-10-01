@@ -22,7 +22,7 @@ const gqlRepoJSON = `{
   "repositoryTopics": {"nodes": [{"topic": {"name": "photo"}}]},
   "defaultBranchRef": {"name": "main", "target": {"oid": "5a02a0e6"}},
   "manifest": {"text": "kind = \"app\"\n", "byteSize": 13, "isBinary": false, "isTruncated": false},
-  "latestRelease": {"tagName": "v0.1.6", "name": "", "isPrerelease": false, "isDraft": false,
+  "latestRelease": {"tagName": "v0.1.6", "name": "", "description": "- Fixes", "isPrerelease": false, "isDraft": false,
     "publishedAt": "2026-09-28T05:42:15Z",
     "releaseAssets": {"nodes": [{"name": "rawmakase-0.1.6-x86_64-linux.tar.gz", "size": 10,
       "downloadUrl": "https://github.com/pch/rawmakase/releases/download/v0.1.6/r.tar.gz",
@@ -77,7 +77,7 @@ func TestSnapshots(t *testing.T) {
 	}
 	s := got["pch/rawmakase"]
 	if s.HeadSHA != "5a02a0e6" || s.Repo.Stars != 116 || s.Repo.License != "MIT" || s.Repo.DefaultBranch != "main" ||
-		len(s.Repo.Topics) != 1 || s.Release == nil || s.Release.Tag != "v0.1.6" ||
+		len(s.Repo.Topics) != 1 || s.Release == nil || s.Release.Tag != "v0.1.6" || s.Release.Body != "- Fixes" ||
 		s.Release.Assets[0].Digest != "sha256:abc" || s.Release.Assets[0].Size != 10 ||
 		s.Manifest == nil || *s.Manifest != "kind = \"app\"\n" {
 		t.Errorf("snapshot = %+v", s)

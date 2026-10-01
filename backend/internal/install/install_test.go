@@ -20,7 +20,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/index"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/asset"
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/flock"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/manifest"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/xdg"
@@ -87,21 +88,22 @@ func newEnv(t *testing.T) *env {
 	in.HTTP = srv.Client()
 	in.GOARCH = "amd64"
 	in.Hooks = false
+	in.TUILauncher = "" // the machine running the tests may be an Omarchy one
 	in.Log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	e.in = in
 	return e
 }
 
 // publish stores in the store a release of acme/omaphoto with the given asset.
-func (e *env) publish(t *testing.T, tag string, asset []byte, format string, digest bool) {
+func (e *env) publish(t *testing.T, tag string, data []byte, format string, digest bool) {
 	t.Helper()
 	name := "omaphoto-" + tag + "-x86_64-linux." + format
-	e.files["/dl/"+name] = asset
+	e.files["/dl/"+name] = data
 	e.files["/icon.png"] = pngBytes(300, 200)
-	a := store.Asset{Tag: tag, Name: name, URL: e.url + "/dl/" + name, Arch: index.ArchAMD64,
-		Format: format, Size: int64(len(asset))}
+	a := store.Asset{Tag: tag, Name: name, URL: e.url + "/dl/" + name, Arch: asset.ArchAMD64,
+		Format: format, Size: int64(len(data))}
 	if digest {
-		a.Digest = "sha256:" + sha(asset)
+		a.Digest = "sha256:" + sha(data)
 	}
 	err := e.st.SaveIndexed(context.Background(),
 		store.Repo{FullName: "acme/omaphoto", LatestTag: tag, Topics: []string{"omarchy", "photo"}},
@@ -123,7 +125,7 @@ func appTarGz(t *testing.T, version string) []byte {
 func TestInstallUpdateUninstall(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	e.publish(t, "v1.0.0", appTarGz(t, "1"), index.FormatTarGz, true)
+	e.publish(t, "v1.0.0", appTarGz(t, "1"), asset.FormatTarGz, true)
 
 	var stages []string
 	inst, err := e.in.Install(ctx, "acme/omaphoto", func(p Progress) {
@@ -187,7 +189,7 @@ func TestInstallUpdateUninstall(t *testing.T) {
 	}
 
 	// Update to v2: swaps the launcher and removes the old version.
-	e.publish(t, "v2.0.0", appTarGz(t, "2"), index.FormatTarGz, true)
+	e.publish(t, "v2.0.0", appTarGz(t, "2"), asset.FormatTarGz, true)
 	inst2, err := e.in.Update(ctx, "acme/omaphoto", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -227,7 +229,7 @@ func TestInstallUpdateUninstall(t *testing.T) {
 func TestInstallChecksumMismatch(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	e.publish(t, "v1", appTarGz(t, "1"), index.FormatTarGz, false)
+	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, false)
 	d, _ := e.st.GetApp(ctx, "acme/omaphoto")
 	a := d.Assets[0]
 	a.Digest = "sha256:" + strings.Repeat("0", 64)
@@ -243,14 +245,14 @@ func TestInstallChecksumMismatch(t *testing.T) {
 func TestInstallChecksumFile(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	asset := appTarGz(t, "1")
-	e.publish(t, "v1", asset, index.FormatTarGz, false)
+	data := appTarGz(t, "1")
+	e.publish(t, "v1", data, asset.FormatTarGz, false)
 	d, _ := e.st.GetApp(ctx, "acme/omaphoto")
 	a := d.Assets[0]
 	a.ChecksumURL = e.url + "/checksums.txt"
 	e.st.SaveIndexed(ctx, d.Repo, d.App, []store.Asset{a})
 
-	e.files["/checksums.txt"] = []byte(sha([]byte("other")) + "  other.tar.gz\n" + sha(asset) + " *" + a.Name + "\n")
+	e.files["/checksums.txt"] = []byte(sha([]byte("other")) + "  other.tar.gz\n" + sha(data) + " *" + a.Name + "\n")
 	if _, err := e.in.Install(ctx, "acme/omaphoto", nil); err != nil {
 		t.Fatalf("checksum certo: %v", err)
 	}
@@ -286,7 +288,7 @@ func assertClean(t *testing.T, e *env) {
 func TestInstallRollbackOnConflict(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	e.publish(t, "v1", appTarGz(t, "1"), index.FormatTarGz, true)
+	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
 	// A third-party .desktop with the same name: the installation must fail
 	// without leaving anything behind and without touching the existing file.
 	os.MkdirAll(e.paths.Applications, 0o755)
@@ -310,7 +312,7 @@ func TestInstallRollbackOnConflict(t *testing.T) {
 func TestInstallRollbackRestoresPrevious(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	e.publish(t, "v1", appTarGz(t, "1"), index.FormatTarGz, true)
+	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
 	first, err := e.in.Install(ctx, "acme/omaphoto", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -318,7 +320,7 @@ func TestInstallRollbackRestoresPrevious(t *testing.T) {
 	before, _ := os.ReadFile(first.DesktopPath)
 
 	// v2 fails at the last step: everything must point to v1 again.
-	e.publish(t, "v2", appTarGz(t, "2"), index.FormatTarGz, true)
+	e.publish(t, "v2", appTarGz(t, "2"), asset.FormatTarGz, true)
 	testHookBeforeSave = func() error { return errors.New("simulated failure") }
 	defer func() { testHookBeforeSave = nil }()
 	_, err = e.in.Install(ctx, "acme/omaphoto", nil)
@@ -357,7 +359,7 @@ func TestInstallNotInstallable(t *testing.T) {
 func TestInstallBinaryAndPkg(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	e.publish(t, "v1", elfBin, index.FormatBinary, true)
+	e.publish(t, "v1", elfBin, asset.FormatBinary, true)
 	inst, err := e.in.Install(ctx, "acme/omaphoto", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -371,7 +373,7 @@ func TestInstallBinaryAndPkg(t *testing.T) {
 		{name: "usr/bin/omaphoto", body: string(elfBin), mode: 0o755},
 		{name: "usr/share/icons/hicolor/scalable/apps/omaphoto.svg", body: `<svg xmlns="http://www.w3.org/2000/svg"/>`},
 	})
-	e.publish(t, "v2", pkg, index.FormatPkg, true)
+	e.publish(t, "v2", pkg, asset.FormatPkg, true)
 	inst, err = e.in.Install(ctx, "acme/omaphoto", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -391,7 +393,7 @@ func TestInstallBinaryAndPkg(t *testing.T) {
 
 func TestInstallRefusesForeignBinLink(t *testing.T) {
 	e := newEnv(t)
-	e.publish(t, "v1", appTarGz(t, "1"), index.FormatTarGz, true)
+	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
 	os.MkdirAll(e.paths.BinDir, 0o755)
 	os.WriteFile(filepath.Join(e.paths.BinDir, "omaphoto"), []byte("#!/bin/sh\n"), 0o755)
 	_, err := e.in.Install(context.Background(), "acme/omaphoto", nil)
@@ -408,7 +410,7 @@ func TestInstallRefusesShadowingCommands(t *testing.T) {
 	defer func() { systemBinDirs = old }()
 	os.WriteFile(filepath.Join(dir, "omaphoto"), []byte("x"), 0o755)
 
-	e.publish(t, "v1", appTarGz(t, "1"), index.FormatTarGz, true)
+	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
 	_, err := e.in.Install(context.Background(), "acme/omaphoto", nil)
 	if !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "shadowed") {
 		t.Fatalf("err = %v", err)
@@ -431,10 +433,10 @@ func TestNewRejectsOutsideHome(t *testing.T) {
 
 func TestSelectAsset(t *testing.T) {
 	assets := []store.Asset{
-		{Name: "a.AppImage", Format: index.FormatAppImage, Arch: "amd64"},
-		{Name: "a-linux.tar.gz", Format: index.FormatTarGz},
-		{Name: "a-amd64", Format: index.FormatBinary, Arch: "amd64"},
-		{Name: "a-arm64.tar.gz", Format: index.FormatTarGz, Arch: "arm64"},
+		{Name: "a.AppImage", Format: asset.FormatAppImage, Arch: "amd64"},
+		{Name: "a-linux.tar.gz", Format: asset.FormatTarGz},
+		{Name: "a-amd64", Format: asset.FormatBinary, Arch: "amd64"},
+		{Name: "a-arm64.tar.gz", Format: asset.FormatTarGz, Arch: "arm64"},
 	}
 	if a, _ := SelectAsset(assets, "amd64", nil); a.Name != "a-amd64" {
 		t.Errorf("amd64 → %s", a.Name)
@@ -453,7 +455,7 @@ func TestSelectAsset(t *testing.T) {
 func TestSplitNameAndVersion(t *testing.T) {
 	for _, bad := range []string{"a", "a/../b", "../a/b", "a/b/c", "a/.hidden", "a/b c"} {
 		if _, _, err := splitName(bad); err == nil {
-			t.Errorf("%q aceito", bad)
+			t.Errorf("%q accepted", bad)
 		}
 	}
 	if v := sanitizeVersion("../v1.0/x"); strings.Contains(v, "/") || strings.HasPrefix(v, ".") {
@@ -466,8 +468,8 @@ func TestSplitNameAndVersion(t *testing.T) {
 
 func TestSelectAssetPrefersManifest(t *testing.T) {
 	assets := []store.Asset{
-		{Tag: "v2", Name: "a-2-x86_64.tar.gz", Format: index.FormatTarGz, Arch: "amd64"},
-		{Tag: "v2", Name: "A-2-x86_64.AppImage", Format: index.FormatAppImage, Arch: "amd64"},
+		{Tag: "v2", Name: "a-2-x86_64.tar.gz", Format: asset.FormatTarGz, Arch: "amd64"},
+		{Tag: "v2", Name: "A-2-x86_64.AppImage", Format: asset.FormatAppImage, Arch: "amd64"},
 	}
 	m, _, _ := manifest.Parse([]byte("[linux.x86_64]\nasset = \"A-{version}-x86_64.AppImage\"\n"), true)
 	if a, _ := SelectAsset(assets, "amd64", m); a.Name != "A-2-x86_64.AppImage" {
@@ -490,7 +492,7 @@ func TestInstallWithManifest(t *testing.T) {
 		{name: "app/bin/real-app", body: string(elfBin) + "real", mode: 0o755},
 		{name: "app/evil", typ: tar.TypeSymlink, link: "real-app"},
 	})
-	e.publish(t, "v1", pkg, index.FormatTarGz, true)
+	e.publish(t, "v1", pkg, asset.FormatTarGz, true)
 	d, _ := e.st.GetApp(ctx, "acme/omaphoto")
 	m, _, _ := manifest.Parse([]byte(`
 categories = ["Graphics", "Photography"]
@@ -525,7 +527,7 @@ func TestDeclaredExecRejectsEscapes(t *testing.T) {
 	}
 	for _, bad := range []string{"bin/sh", "../x", "bin"} {
 		if _, err := declaredExec(dir, bad); err == nil {
-			t.Errorf("%q aceito", bad)
+			t.Errorf("%q accepted", bad)
 		}
 	}
 }
@@ -537,7 +539,7 @@ func TestInstallExecWithVersionPlaceholder(t *testing.T) {
 		{name: "tool-3.1.0-x86_64-linux/bin/tool-cli", body: string(elfBin), mode: 0o755},
 		{name: "tool-3.1.0-x86_64-linux/bin/helper", body: string(elfBin) + "h", mode: 0o755},
 	})
-	e.publish(t, "v3.1.0", pkg, index.FormatTarGz, true)
+	e.publish(t, "v3.1.0", pkg, asset.FormatTarGz, true)
 	d, _ := e.st.GetApp(ctx, "acme/omaphoto")
 	m, _, _ := manifest.Parse([]byte("[linux.x86_64]\nexec = \"tool-{version}-x86_64-linux/bin/tool-cli\"\n"), true)
 	d.App.Manifest = m.Encode()
@@ -558,7 +560,7 @@ func TestInstallRejectsControlCharsInExecPath(t *testing.T) {
 	e := newEnv(t)
 	e.publish(t, "v1", tarGz(t, []entry{
 		{name: "omaphoto\n1/omaphoto", body: string(elfBin), mode: 0o755},
-	}), index.FormatTarGz, true)
+	}), asset.FormatTarGz, true)
 	_, err := e.in.Install(context.Background(), "acme/omaphoto", nil)
 	if !errors.Is(err, ErrUnsafePath) {
 		t.Fatalf("err = %v, want ErrUnsafePath", err)
@@ -584,5 +586,26 @@ func TestDownloadRefusesRedirectToHTTP(t *testing.T) {
 	}
 	if plainHits.Load() != 0 {
 		t.Error("the plain http URL was requested")
+	}
+}
+
+func TestInstallBusyInAnotherProcess(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
+	// Another process (the CLI, say) holds the app's lock.
+	unlock, err := flock.TryLock(filepath.Join(filepath.Dir(e.in.Paths.AppsDir), "locks", "acme__omaphoto.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.in.Install(ctx, "ACME/OmaPhoto", nil); !errors.Is(err, ErrBusy) {
+		t.Fatalf("install: %v", err)
+	}
+	if err := e.in.Uninstall(ctx, "acme/omaphoto"); !errors.Is(err, ErrBusy) {
+		t.Fatalf("uninstall: %v", err)
+	}
+	unlock()
+	if _, err := e.in.Install(ctx, "ACME/OmaPhoto", nil); err != nil {
+		t.Fatalf("install after unlock: %v", err)
 	}
 }

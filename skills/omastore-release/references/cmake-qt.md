@@ -22,7 +22,7 @@ jobs:
     steps:
       - name: Dependencies
         run: pacman -Syu --noconfirm --needed base-devel git cmake ninja qt6-base qt6-declarative
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build and package
         run: |
           ver="${VERSION#v}"
@@ -44,12 +44,17 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write       # provenance attestation
+      attestations: write
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist
-      - uses: softprops/action-gh-release@v2
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/*.tar.gz
+      - uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: |

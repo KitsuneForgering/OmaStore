@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/asset"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/github"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/manifest"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
@@ -66,7 +67,7 @@ func TestCheckWithoutManifestSuggestsOne(t *testing.T) {
 	if err != nil || len(problems) > 0 || m == nil {
 		t.Fatalf("suggestion does not lint: %v %v\n%s", err, problems, s)
 	}
-	if tg, _ := m.Target(ArchAMD64); !manifest.MatchAsset(tg.Asset, "v1.0.0", "omaphoto-1.0.0-x86_64-linux.tar.gz") {
+	if tg, _ := m.Target(asset.ArchAMD64); !manifest.MatchAsset(tg.Asset, "v1.0.0", "omaphoto-1.0.0-x86_64-linux.tar.gz") {
 		t.Errorf("pattern %q does not match the release", tg.Asset)
 	}
 }
@@ -116,11 +117,41 @@ func TestCheckOverrideAndFailures(t *testing.T) {
 }
 
 func TestSuggestManifestKeepsDeclaredAssets(t *testing.T) {
-	m := &manifest.Manifest{Kind: manifest.KindApp, Linux: map[string]manifest.Target{ArchAMD64: {Asset: "x"}}}
-	if s := suggestManifest(&github.Repo{FullName: "a/b"}, store.App{}, nil, ArchAMD64, m, true); s != "" {
+	m := &manifest.Manifest{Kind: manifest.KindApp, Linux: map[string]manifest.Target{asset.ArchAMD64: {Asset: "x"}}}
+	if s := suggestManifest(&github.Repo{FullName: "a/b"}, store.App{}, nil, asset.ArchAMD64, m, true); s != "" {
 		t.Errorf("suggestion for a complete manifest: %q", s)
 	}
 	if got := tomlString("a\"b\\c\n"); got != `"a\"b\\c\u000A"` {
 		t.Errorf("tomlString = %s", got)
+	}
+}
+
+func TestCheckLocalManifestAndDiscovery(t *testing.T) {
+	ix, gh, _ := setup(t)
+	ctx := context.Background()
+	r, err := ix.Check(ctx, "acme/omaphoto", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.LocalManifest {
+		t.Error("published manifest reported as local")
+	}
+	if c, _ := checkOf(r, "Discovery"); c.Status != CheckOK {
+		t.Errorf("with the omarchy topic: %+v", c)
+	}
+
+	// An empty local manifest is an opt-in too, and is not the published one.
+	gh.repos["acme/omaphoto"].noToml = true
+	gh.repos["acme/omaphoto"].repo.Topics = []string{"photo"}
+	empty := ""
+	r, err = ix.Check(ctx, "acme/omaphoto", &empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.LocalManifest || !r.Compatible() {
+		t.Errorf("local=%v compatible=%v checks=%+v", r.LocalManifest, r.Compatible(), r.Checks)
+	}
+	if c, _ := checkOf(r, "Discovery"); c.Status != CheckWarn || !strings.Contains(c.Fix, "omarchy") {
+		t.Errorf("without the topic: %+v", c)
 	}
 }

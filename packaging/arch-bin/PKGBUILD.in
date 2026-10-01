@@ -13,6 +13,7 @@ optdepends=(
   'github-cli: authentication to avoid the GitHub rate limit (gh auth login)'
   'desktop-file-utils: refresh the .desktop cache after installing apps'
   'gtk-update-icon-cache: refresh the icon cache after installing apps'
+  'polkit: install the system dependencies declared by apps (pkexec)'
 )
 provides=("$_pkgname")
 conflicts=("$_pkgname" "$_pkgname-git")
