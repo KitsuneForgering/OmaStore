@@ -40,6 +40,7 @@ qt_add_qml_module(omastore-gui
         qml/JobsBar.qml
         qml/SideBar.qml
         qml/PrimaryButton.qml
+        qml/LinkText.qml
         qml/PublishPage.qml
 )
 

@@ -15,6 +15,13 @@ All notable changes to OmaStore are listed here. The format follows
   SHA-256, the switch is all or nothing, and the previous version stays until
   the next update. Package installations keep updating through pacman.
 - Demo GIF in the README.
+- Accessibility: every text color meets WCAG AAA (7:1) on any Omarchy theme,
+  light or dark. The theme's own colors are adjusted when needed, keeping
+  their hue; borders and the focus ring get at least 3:1. Without Omarchy the
+  palette follows the system's light/dark preference. Links and the similar
+  apps are reachable from the keyboard with a visible focus ring, cards and
+  screenshots have names for screen readers, and error messages stay until
+  dismissed.
 - Star button on an app's page: liking an app stars its repository on GitHub
   (and removes the star when pressed again). Needs `gh auth login` or
   `GITHUB_TOKEN`; CLI: `omastore star`/`omastore unstar`.

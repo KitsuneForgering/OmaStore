@@ -32,8 +32,10 @@ Rectangle {
             }
         }
         background: Rectangle {
-            color: item.selected ? theme.selection : (item.hovered ? Qt.darker(theme.surface, 1.15) : "transparent")
+            color: item.selected ? theme.selection : (item.hovered ? theme.hover : "transparent")
             radius: 4
+            border.color: theme.focus
+            border.width: item.visualFocus ? 2 : 0
         }
     }
 

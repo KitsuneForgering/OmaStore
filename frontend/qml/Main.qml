@@ -19,10 +19,10 @@ ApplicationWindow {
         text: theme.foreground
         button: theme.surface
         buttonText: theme.foreground
-        highlight: theme.accent
-        highlightedText: theme.background
+        highlight: theme.focus
+        highlightedText: theme.onFocus
         placeholderText: theme.muted
-        mid: theme.selection
+        mid: theme.border
         link: theme.accent
         linkVisited: theme.accent
     }
@@ -135,8 +135,10 @@ ApplicationWindow {
         width: Math.min(toastText.implicitWidth + 32, parent.width - 64)
         height: toastText.implicitHeight + 20
         radius: 6
-        color: isError ? theme.danger : theme.surface
-        border.color: theme.selection
+        color: isError ? theme.dangerFill : theme.surface
+        border.color: theme.border
+        Accessible.role: Accessible.AlertMessage
+        Accessible.name: toastText.text
         opacity: 0
         visible: opacity > 0
         Behavior on opacity { NumberAnimation { duration: 150 } }
@@ -147,16 +149,23 @@ ApplicationWindow {
             width: parent.width - 32
             wrapMode: Text.Wrap
             horizontalAlignment: Text.AlignHCenter
-            color: toast.isError ? theme.background : theme.foreground
+            color: toast.isError ? theme.onDanger : theme.foreground
         }
-        Timer { id: toastTimer; interval: 5000; onTriggered: toast.opacity = 0 }
+        // Notices go away after a while (not while the pointer is on them);
+        // errors stay until dismissed, so there is time to read them.
+        Timer {
+            id: toastTimer
+            interval: 6000
+            running: toast.opacity > 0 && !toast.isError && !toastArea.containsMouse
+            onTriggered: toast.opacity = 0
+        }
         function show(msg, err) {
             text = msg
             isError = err
             opacity = 1
             toastTimer.restart()
         }
-        MouseArea { anchors.fill: parent; onClicked: toast.opacity = 0 }
+        MouseArea { id: toastArea; anchors.fill: parent; hoverEnabled: true; onClicked: toast.opacity = 0 }
     }
 
     // After an install: offer the missing system dependencies (PKGBUILD

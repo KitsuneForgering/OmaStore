@@ -68,7 +68,6 @@ Page {
     component Body: Text {
         Layout.fillWidth: true
         color: theme.foreground
-        opacity: 0.85
         wrapMode: Text.Wrap
         lineHeight: 1.3
     }
@@ -102,19 +101,6 @@ Page {
                 flat: true
                 onClicked: backend.copyText(code.text)
             }
-        }
-    }
-
-    component LinkText: Text {
-        property string url: ""
-        color: theme.accent
-        font.underline: linkArea.containsMouse
-        MouseArea {
-            id: linkArea
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: Qt.openUrlExternally(parent.url)
         }
     }
 
@@ -187,7 +173,12 @@ Page {
                     font.family: "monospace"
                     wrapMode: TextEdit.WrapAnywhere
                     color: theme.foreground
-                    background: Rectangle { color: theme.background; border.color: theme.selection; radius: 6 }
+                    background: Rectangle {
+                        color: theme.background
+                        border.color: manifestArea.activeFocus ? theme.focus : theme.border
+                        border.width: manifestArea.activeFocus ? 2 : 1
+                        radius: 6
+                    }
                 }
                 BusyIndicator {
                     Layout.alignment: Qt.AlignHCenter
@@ -284,7 +275,6 @@ Page {
                                 Layout.fillWidth: true
                                 text: page.report.summary || ""
                                 color: theme.foreground
-                                opacity: 0.85
                                 wrapMode: Text.Wrap
                                 maximumLineCount: 2
                                 elide: Text.ElideRight

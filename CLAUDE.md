@@ -53,7 +53,10 @@ Two processes with separate responsibilities:
 - The C++ layer exposes to QML: an IPC client (`QLocalSocket`) and `QAbstractListModel` models
   (catalog, installed, jobs). No business logic in QML beyond presentation and simple filters.
 - The look follows the active Omarchy theme: `colors.toml` in `~/.local/state/omarchy/current/theme/` (older
-  installations: `~/.config/omarchy/current/theme/`), reloaded when the theme changes.
+  installations: `~/.config/omarchy/current/theme/`), reloaded when the theme changes. `Theme` adjusts the
+  theme's colors to WCAG AAA (text 7:1 on background/surface/selection/hover; borders and focus 3:1): QML uses
+  only `theme.*` colors, never `opacity` or `Qt.lighter/darker` on text or its background, and text on a
+  fill uses the matching pair (`accentFill`/`onAccent`, `dangerFill`/`onDanger`, `focus`/`onFocus`).
 - The frontend never accesses the network: images come from the daemon (`image.get`, provider `image://omastore/`), the
   QML engine uses a `QNetworkAccessManager` that blocks remote URLs and the README is shown without images.
 - The frontend never looks for `omastored` in `PATH` (which includes `~/.local/bin`, where downloaded apps live):

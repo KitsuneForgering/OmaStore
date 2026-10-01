@@ -104,17 +104,10 @@ Page {
                         font.pixelSize: 28
                         font.bold: true
                     }
-                    Text {
+                    LinkText {
                         text: page.app.repo || ""
-                        color: theme.accent
-                        font.underline: repoArea.containsMouse
-                        MouseArea {
-                            id: repoArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: if (page.app.htmlUrl) Qt.openUrlExternally(page.app.htmlUrl)
-                        }
+                        url: page.app.htmlUrl || ""
+                        Accessible.description: qsTr("Opens the repository on GitHub")
                     }
                     Text {
                         Layout.fillWidth: true
@@ -188,9 +181,13 @@ Page {
                             model: page.app.screenshots || []
                             Rectangle {
                                 required property string modelData
+                                required property int index
                                 radius: 6
                                 color: theme.surface
                                 Image {
+                                    Accessible.role: Accessible.Graphic
+                                    Accessible.name: qsTr("Screenshot %1 of %2 of %3").arg(parent.index + 1)
+                                                         .arg(previewCarousel.count).arg(page.app.name || "")
                                     anchors.fill: parent
                                     anchors.margins: 4
                                     asynchronous: true
@@ -310,35 +307,19 @@ Page {
                                 text: page.app.license || qsTr("Not specified")
                                 color: theme.foreground
                             }
-                            Text {
+                            LinkText {
                                 visible: !!page.app.htmlUrl
                                 text: qsTr("View on GitHub ↗")
-                                color: theme.accent
-                                font.underline: githubArea.containsMouse
-                                MouseArea {
-                                    id: githubArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: Qt.openUrlExternally(page.app.htmlUrl)
-                                }
+                                url: page.app.htmlUrl || ""
                             }
                             // A prefilled issue on the app's repository; nothing is
                             // sent until the user submits it in the browser.
-                            Text {
+                            LinkText {
                                 objectName: "reportLink"
                                 visible: !!page.app.htmlUrl
                                 Layout.topMargin: -8
                                 text: qsTr("Report a problem ↗")
-                                color: theme.accent
-                                font.underline: reportArea.containsMouse
-                                MouseArea {
-                                    id: reportArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: Qt.openUrlExternally(backend.issueUrl())
-                                }
+                                onActivated: Qt.openUrlExternally(backend.issueUrl())
                             }
                         }
                     }
@@ -384,18 +365,10 @@ Page {
                             font.pixelSize: 12
                             wrapMode: Text.Wrap
                         }
-                        Text {
+                        LinkText {
                             text: qsTr("Report this problem to the author ↗")
-                            color: theme.accent
                             font.pixelSize: 12
-                            font.underline: failureReportArea.containsMouse
-                            MouseArea {
-                                id: failureReportArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: Qt.openUrlExternally(backend.issueUrl())
-                            }
+                            onActivated: Qt.openUrlExternally(backend.issueUrl())
                         }
                     }
                     ColumnLayout {
@@ -469,6 +442,8 @@ Page {
                                         color: modelData.status === "installed" ? theme.muted
                                              : modelData.status === "unavailable" ? theme.warning : theme.accent
                                         font.pixelSize: 12
+                                        // The check mark alone says nothing to a screen reader.
+                                        Accessible.name: modelData.status === "installed" ? qsTr("installed") : text
                                     }
                                 }
                             }
@@ -507,23 +482,15 @@ Page {
                         font.pixelSize: 12
                         wrapMode: Text.Wrap
                     }
-                    Text {
+                    LinkText {
                         objectName: "authorCheckLink"
                         Layout.fillWidth: true
                         visible: !!page.app.repo
                         text: page.app.installable ? qsTr("Is this your app? Check how it looks to the store →")
                                                    : qsTr("Is this your app? See what is missing →")
-                        color: theme.accent
                         font.pixelSize: 12
-                        font.underline: authorArea.containsMouse
                         wrapMode: Text.Wrap
-                        MouseArea {
-                            id: authorArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: page.publishRequested(page.app.repo)
-                        }
+                        onActivated: page.publishRequested(page.app.repo)
                     }
                 }
             }
@@ -619,11 +586,21 @@ Page {
                     Repeater {
                         model: backend.similar
                         delegate: Rectangle {
+                            id: simCard
                             required property var modelData
                             width: 220
                             height: 64
                             radius: 6
-                            color: simArea.containsMouse ? Qt.lighter(theme.surface, 1.15) : theme.surface
+                            color: simArea.containsMouse || activeFocus ? theme.hover : theme.surface
+                            border.color: theme.focus
+                            border.width: activeFocus ? 2 : 0
+                            activeFocusOnTab: true
+                            Accessible.role: Accessible.Button
+                            Accessible.name: qsTr("%1, %2").arg(modelData.name).arg(modelData.category)
+                            Accessible.onPressAction: page.appActivated(modelData.repo)
+                            Keys.onReturnPressed: page.appActivated(modelData.repo)
+                            Keys.onEnterPressed: page.appActivated(modelData.repo)
+                            Keys.onSpacePressed: page.appActivated(modelData.repo)
                             RowLayout {
                                 anchors.fill: parent
                                 anchors.margins: 10

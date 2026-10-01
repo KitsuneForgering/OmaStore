@@ -143,6 +143,9 @@ private slots:
         QVERIFY(content && controls && carousel && hero && panel && strip && readme &&
                 previous && next && position && install && name);
         QTRY_COMPARE(position->property("text").toString(), QStringLiteral("1 / 2"));
+        // The screenshots arrive before the layouts are polished: measure after.
+        QTRY_VERIFY(carousel->height() > 0 && strip->height() > 0);
+        QTRY_VERIFY(leftTop(strip, page).y() > leftTop(carousel, page).y() + carousel->height());
 
         const QPointF contentPos = leftTop(content, page);
         const QPointF controlsPos = leftTop(controls, page);
@@ -165,7 +168,7 @@ private slots:
         QVERIFY(readme->width() <= 900);
         QVERIFY(readme->property("font").value<QFont>().pixelSize() >= 17);
         QVERIFY(readme->property("lineHeight").toReal() >= 1.5);
-        QVERIFY(contrast(readme->property("color").value<QColor>(), theme.background()) >= 4.5);
+        QVERIFY(contrast(readme->property("color").value<QColor>(), theme.background()) >= 7);
         if (width >= 720) {
             QCOMPARE(hero->property("columns").toInt(), 2);
             QVERIFY(carousel->width() >= hero->width() * 0.55);
@@ -180,11 +183,12 @@ private slots:
         auto *buttonBackground = install->property("background").value<QQuickItem *>();
         QVERIFY(buttonText && buttonBackground);
         QCOMPARE(name->property("color").value<QColor>(), theme.foreground());
-        QCOMPARE(buttonText->property("color").value<QColor>(), theme.background());
-        QCOMPARE(buttonBackground->property("color").value<QColor>(), theme.accent());
-        QVERIFY(contrast(name->property("color").value<QColor>(), theme.background()) >= 4.5);
+        QCOMPARE(buttonText->property("color").value<QColor>(), theme.onAccent());
+        QCOMPARE(buttonBackground->property("color").value<QColor>(), theme.accentFill());
+        // WCAG AAA (7:1) for text.
+        QVERIFY(contrast(name->property("color").value<QColor>(), theme.background()) >= 7);
         QVERIFY(contrast(buttonText->property("color").value<QColor>(),
-                         buttonBackground->property("color").value<QColor>()) >= 4.5);
+                         buttonBackground->property("color").value<QColor>()) >= 7);
 
         carousel->setProperty("currentIndex", 1);
         QTRY_COMPARE(position->property("text").toString(), QStringLiteral("2 / 2"));

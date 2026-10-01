@@ -7,6 +7,8 @@ Item {
     property string name: ""
     implicitWidth: 64
     implicitHeight: 64
+    // Decorative: the app's name is always written next to it.
+    Accessible.ignored: true
 
     Rectangle {
         anchors.fill: parent
