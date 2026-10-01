@@ -15,7 +15,7 @@
 #   --source     build from source even if a release exists
 #   --ref REF    branch or tag to build (implies --source; default: $OMASTORE_REF or dev)
 #   --force      install even if an OmaStore is already present
-#   --no-skills  do not copy the Claude Code skills for app authors into ~/.claude/skills
+#   --no-skills  do not copy the skills for app authors into the coding agents' skill directories
 #   --no-hooks   do not add the Omarchy post-update hook that reports app updates
 set -eu
 

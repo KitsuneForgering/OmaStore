@@ -1,7 +1,9 @@
 # Skills for app authors
 
-[Claude Code](https://claude.com/claude-code) skills that help make an app
-compatible with OmaStore. The store only indexes repositories with an
+Agent skills (`SKILL.md`) that help make an app compatible with OmaStore, for
+any coding agent that reads skills: Claude Code, Codex, OpenCode, GitHub
+Copilot, Gemini CLI, Cursor, Crush, Pi/Oh My Pi, Grok, Hermes and the other
+agents Omarchy offers. The store only indexes repositories with an
 `omastore.toml` at the root declaring an app (plugins and themes are left out).
 
 | Skill | What for |
@@ -12,34 +14,41 @@ compatible with OmaStore. The store only indexes repositories with an
 
 ## Installation
 
-OmaStore's `install.sh` does this for you: when `~/.claude` exists, it copies
-these skills into `~/.claude/skills` (and updates or removes them with the
-store). It never replaces a skill of the same name that it did not install; its
-copies carry a `.omastore-managed` file. Use `--no-skills` to opt out.
+OmaStore's `install.sh` does this for you. It copies these skills into the
+same directories Omarchy links its own skills into, for each agent installed
+(whose directory exists):
+
+| Directory | Agents |
+|---|---|
+| `~/.agents/skills` | the shared one: OpenCode, GitHub Copilot, Gemini CLI, Cursor, Crush, Oh My Pi, Grok, Muse, OpenClaw… |
+| `~/.claude/skills` (or `$CLAUDE_CONFIG_DIR/skills`) | Claude Code |
+| `~/.codex/skills` (or `$CODEX_HOME/skills`) | Codex |
+| `~/.pi/agent/skills` | Pi |
+| `~/.hermes/skills` and `~/.hermes/profiles/*/skills` | Hermes |
+
+OmaStore's self-update and `install.sh` runs keep them current, and
+`install.sh --uninstall` removes them. A skill of the same name that OmaStore
+did not install is never replaced; its copies carry a `.omastore-managed`
+file. `--no-skills` opts out, and the choice is remembered by the self-update.
 
 The pacman packages and `make install` put them in
-`/usr/share/omastore/skills/`; copy them from there:
+`/usr/share/omastore/skills/`; copy them into your agent's directory, for
+example the shared one:
 
 ```sh
-mkdir -p ~/.claude/skills
-cp -r /usr/share/omastore/skills/omastore-* ~/.claude/skills/
+mkdir -p ~/.agents/skills
+cp -r /usr/share/omastore/skills/omastore-* ~/.agents/skills/
 ```
 
-By hand, in your app's project (just for it):
+By hand, just for your app's project (Claude Code reads `.claude/skills`,
+most other agents `.agents/skills`):
 
 ```sh
-mkdir -p .claude/skills
-cp -r /path/to/OmaStore/skills/omastore-* .claude/skills/
+mkdir -p .agents/skills
+cp -r /path/to/OmaStore/skills/omastore-* .agents/skills/
 ```
 
-Or for all your projects:
-
-```sh
-mkdir -p ~/.claude/skills
-cp -r /path/to/OmaStore/skills/omastore-* ~/.claude/skills/
-```
-
-Then just ask Claude, for example: "get this app ready for OmaStore" or
+Then ask your agent, for example: "get this app ready for OmaStore" or
 "why doesn't my app show up in OmaStore?".
 
 ## Maintenance

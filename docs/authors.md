@@ -6,12 +6,13 @@ repository must have an `omastore.toml` at its root** (section 6). Without it,
 the repository is not added to the catalog, even with the `omarchy` topic. The
 file may even be empty: its presence is the signal that you want the app in the store.
 
-> Shortcut: the skills in [`skills/`](../skills/) do this with Claude Code:
+> Shortcut: the skills in [`skills/`](../skills/) do this with your coding
+> agent (Claude Code, Codex, OpenCode, Copilot, Gemini, Cursor, Pi, Hermes…):
 > `omastore-manifest` writes the manifest, `omastore-release` sets up the
 > releases and `omastore-check` audits everything. OmaStore's `install.sh`
-> already puts them in `~/.claude/skills` when Claude Code is installed; the
-> pacman package (and `make install`) only ships them in
-> `/usr/share/omastore/skills`, so copy them from there.
+> already puts them in every installed agent's skills directory; the pacman
+> package (and `make install`) only ships them in `/usr/share/omastore/skills`,
+> so copy them from there.
 
 ## 1. Be found
 

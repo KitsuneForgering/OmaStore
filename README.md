@@ -103,10 +103,12 @@ The script downloads the latest stable release for Linux x86_64, checks the SHA-
 published alongside the tarball and installs the three executables into a folder in your
 account, with shortcuts in `~/.local/bin` and in the menu. It requires `curl`, `tar`,
 `sha256sum` and the Qt 6 libraries (`qt6-base`, `qt6-declarative`, `qt6-svg`).
-If Claude Code is installed (`~/.claude` exists), the script also copies the
-[skills for app authors](skills/README.md) into `~/.claude/skills`, so Claude can
-write your `omastore.toml`, set up releases and audit your app with the store
-itself. Skills of the same name that you already have are left untouched; pass
+The script also copies the [skills for app authors](skills/README.md) into the
+skills directory of each coding agent you have, the same ones Omarchy uses
+(`~/.agents/skills` for OpenCode, Copilot, Gemini, Cursor, Crush and others, plus
+Claude Code, Codex, Pi and Hermes). Your agent can then write your
+`omastore.toml`, set up releases and audit your app with the store itself.
+Skills of the same name that you already have are left untouched; pass
 `--no-skills` to skip this step.
 On Omarchy, it also adds a hook to `~/.config/omarchy/hooks/post-update.d/`, so
 `omarchy-update` tells you when your OmaStore apps have updates; pass

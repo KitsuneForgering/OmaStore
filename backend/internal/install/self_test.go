@@ -22,6 +22,7 @@ func newSelfEnv(t *testing.T, cur, next string) *selfEnv {
 	t.Helper()
 	e := newEnv(t)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("CODEX_HOME", "")
 	root := e.in.SelfRoot()
 	for _, b := range selfBinaries {
 		p := filepath.Join(root, cur, "bin", b)
@@ -39,7 +40,11 @@ func newSelfEnv(t *testing.T, cur, next string) *selfEnv {
 	os.MkdirAll(filepath.Join(skills, "omastore-check"), 0o755)
 	os.WriteFile(filepath.Join(skills, "omastore-check", "SKILL.md"), []byte("old skill"), 0o644)
 	os.WriteFile(filepath.Join(skills, "omastore-check", skillMarker), nil, 0o644)
-	os.MkdirAll(filepath.Join(skills, "omastore-release"), 0o755) // the user's own: no marker
+	os.MkdirAll(filepath.Join(skills, "omastore-release"), 0o755)             // the user's own: no marker
+	gone := filepath.Join(e.paths.Home, ".agents", "skills", "omastore-gone") // dropped by the release
+	os.MkdirAll(gone, 0o755)
+	os.WriteFile(filepath.Join(gone, skillMarker), nil, 0o644)
+	os.MkdirAll(filepath.Join(e.paths.Home, ".hermes", "profiles", "work"), 0o755)
 	os.WriteFile(filepath.Join(skills, "omastore-release", "SKILL.md"), []byte("mine"), 0o644)
 
 	name := SelfAssetName(next, "amd64")
@@ -143,6 +148,20 @@ func TestSelfUpdate(t *testing.T) {
 	}
 	if got := readFile(t, filepath.Join(skills, "omastore-release", "SKILL.md")); got != "mine" {
 		t.Errorf("the user's skill was replaced: %q", got)
+	}
+	// Every installed agent gets them (Omarchy's directories), missing ones too.
+	for _, dir := range []string{".agents/skills", ".hermes/profiles/work/skills"} {
+		p := filepath.Join(s.paths.Home, dir, "omastore-release", "SKILL.md")
+		if got := readFile(t, p); got != "new release skill" {
+			t.Errorf("%s = %q", p, got)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(s.paths.Home, ".codex")); !os.IsNotExist(err) {
+		t.Errorf("an agent that is not installed got a skills directory: %v", err)
+	}
+	// A skill the release dropped goes, when it is ours.
+	if _, err := os.Stat(filepath.Join(s.paths.Home, ".agents", "skills", "omastore-gone")); !os.IsNotExist(err) {
+		t.Errorf("dropped skill kept: %v", err)
 	}
 	if left, _ := filepath.Glob(filepath.Join(s.root, ".staging-*")); len(left) > 0 {
 		t.Errorf("staging left behind: %v", left)
@@ -273,5 +292,20 @@ func TestNewerVersion(t *testing.T) {
 		if _, got := SelfTag(tag); got != ok {
 			t.Errorf("SelfTag(%q) = %v", tag, got)
 		}
+	}
+}
+
+func TestSelfUpdateKeepsNoSkills(t *testing.T) {
+	s := newSelfEnv(t, "0.1.0", "0.2.0")
+	os.WriteFile(filepath.Join(s.root, selfNoSkills), nil, 0o644)
+	if _, err := s.in.SelfUpdate(context.Background(), s.cur, s.rel, nil); err != nil {
+		t.Fatal(err)
+	}
+	skills := filepath.Join(s.paths.Home, ".claude", "skills")
+	if got := readFile(t, filepath.Join(skills, "omastore-check", "SKILL.md")); got != "old skill" {
+		t.Errorf("install.sh --no-skills was ignored: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(s.paths.Home, ".agents", "skills", "omastore-check")); !os.IsNotExist(err) {
+		t.Errorf("skill installed despite --no-skills: %v", err)
 	}
 }

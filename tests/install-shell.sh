@@ -57,13 +57,13 @@ sha256sum "$fixture/omastore-1.2.3-x86_64-linux.tar.gz" | \
   sed 's| .*/|  |' > "$fixture/checksum"
 cp "$fixture/checksum" "$fixture/omastore-1.2.3-x86_64-linux.tar.gz.sha256"
 
-# Without Claude Code (~/.claude), the skills stay only next to the app.
-sh "$project/packaging/install.sh" > "$fixture/no-claude-log"
+# Without any coding agent, the skills stay only next to the app.
+sh "$project/packaging/install.sh" > "$fixture/no-agent-log"
 root="$XDG_DATA_HOME/omastore/self"
 [ -f "$root/1.2.3/share/skills/omastore-check/SKILL.md" ]
 [ -x "$root/1.2.3/share/skills/omastore-check/scripts/run.sh" ]
-[ ! -e "$HOME/.claude" ]
-grep -F 'share/skills' "$fixture/no-claude-log" >/dev/null
+for home in .claude .codex .agents .pi .hermes; do [ ! -e "$HOME/$home" ]; done
+grep -F 'no coding agent found' "$fixture/no-agent-log" >/dev/null
 
 # Without Omarchy (~/.config/omarchy), no post-update hook.
 hook="$HOME/.config/omarchy/hooks/post-update.d/omastore.hook"
@@ -82,23 +82,37 @@ bash "$hook"
 printf '#!/bin/sh\nexit 3\n' > "$root/1.2.3/bin/omastore"
 bash "$hook"
 
-# With Claude Code, they are copied into ~/.claude/skills, except where the
-# user already has a skill of the same name.
+# With coding agents, they are copied into each installed agent's skill
+# directory (the shared ~/.agents/skills, Claude Code, Codex, Pi, Hermes and
+# its profiles), except where the user already has a skill of the same name.
 claude_skills="$HOME/.claude/skills"
-mkdir -p "$claude_skills/omastore-release"
+agent_skills="$claude_skills
+$HOME/.codex/skills
+$HOME/.agents/skills
+$HOME/.pi/agent/skills
+$HOME/.hermes/skills
+$HOME/.hermes/profiles/work/skills"
+mkdir -p "$claude_skills/omastore-release" "$HOME/.codex" "$HOME/.agents" "$HOME/.pi/agent" \
+  "$HOME/.hermes/profiles/work"
 printf 'mine\n' > "$claude_skills/omastore-release/SKILL.md"
 sh "$project/packaging/install.sh" > "$fixture/skills-log" 2>&1
-[ -f "$claude_skills/omastore-check/SKILL.md" ]
-[ -f "$claude_skills/omastore-check/.omastore-managed" ]
+printf '%s\n' "$agent_skills" | while IFS= read -r dir; do
+  [ -f "$dir/omastore-check/SKILL.md" ] || { echo "skill missing in $dir" >&2; exit 1; }
+  [ -f "$dir/omastore-check/.omastore-managed" ]
+  grep -F "$dir" "$fixture/skills-log" >/dev/null
+done
 [ "$(cat "$claude_skills/omastore-release/SKILL.md")" = mine ]
 [ ! -e "$claude_skills/omastore-release/.omastore-managed" ]
+[ -f "$HOME/.codex/skills/omastore-release/.omastore-managed" ]
 grep -F 'omastore-release left as is' "$fixture/skills-log" >/dev/null
 
 # --no-skills leaves ~/.claude alone; a normal run restores a deleted copy.
 rm -rf "$claude_skills/omastore-check"
 sh "$project/packaging/install.sh" --no-skills > /dev/null
 [ ! -e "$claude_skills/omastore-check" ]
+[ -f "$root/.no-skills" ] # so OmaStore's self-update leaves the agents alone too
 sh "$project/packaging/install.sh" > "$fixture/reinstall-log"
+[ ! -e "$root/.no-skills" ]
 bash -o pipefail -c 'cat "$1" | bash' _ "$project/packaging/install.sh" \
   > "$fixture/piped-log"
 sh "$project/packaging/install.sh" "$fixture/omastore-1.2.3-x86_64-linux.tar.gz" \
@@ -160,7 +174,8 @@ fi
 for p in "$HOME/.local/bin/omastored" "$HOME/.local/bin/omastore-gui" \
   "$XDG_DATA_HOME/applications/omastore.desktop" \
   "$XDG_DATA_HOME/icons/hicolor/scalable/apps/omastore.svg" "$root" "$XDG_CACHE_HOME/omastore" \
-  "$claude_skills/omastore-check" "$hook"; do
+  "$claude_skills/omastore-check" "$HOME/.agents/skills/omastore-check" \
+  "$HOME/.hermes/profiles/work/skills/omastore-check" "$hook"; do
   if [ -e "$p" ] || [ -L "$p" ]; then
     echo "Left behind by --uninstall: $p" >&2
     exit 1

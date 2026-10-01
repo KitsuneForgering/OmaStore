@@ -49,8 +49,10 @@ const (
 	// selfMarker in the self directory means install.sh also created the menu
 	// entry and the icon, which the update may then replace.
 	selfMarker = ".managed"
-	// skillMarker marks the Claude Code skill copies install.sh made.
+	// skillMarker marks the agent skill copies install.sh made.
 	skillMarker = ".omastore-managed"
+	// selfNoSkills in the self directory: install.sh ran with --no-skills.
+	selfNoSkills = ".no-skills"
 )
 
 // SelfInstall describes the running OmaStore.
@@ -198,7 +200,7 @@ type SelfResult struct {
 
 // SelfUpdate installs rel over the running OmaStore cur, the way install.sh
 // would: verified tarball, new version directory, then the ~/.local/bin links,
-// the menu entry, the icon and the skill copies switched over. Nothing from
+// the menu entry, the icon and the agents' skill copies switched over. Nothing from
 // the tarball is run. The previous version stays on disk (running processes
 // use it) until the next update.
 func (in *Installer) SelfUpdate(ctx context.Context, cur SelfInstall, rel SelfRelease, progress func(Progress)) (*SelfResult, error) {
@@ -327,7 +329,7 @@ func (in *Installer) SelfUpdate(ctx context.Context, cur SelfInstall, rel SelfRe
 		in.log().Warn("self-update backups not removed", "err", err)
 	}
 	if hasSkills {
-		in.refreshSkills(filepath.Join(dest, "share", "skills"))
+		in.refreshSkills(cur.Root, filepath.Join(dest, "share", "skills"))
 	}
 	in.runHooks(ctx)
 	in.pruneSelf(cur.Root, version, cur.Version)
@@ -387,40 +389,87 @@ func (in *Installer) selfMenuEntry(t *tx, tree string) error {
 	return nil
 }
 
-// refreshSkills replaces the Claude Code skill copies install.sh made (the
-// directories carrying skillMarker); the user's own skills are never touched.
-func (in *Installer) refreshSkills(src string) {
-	claude := os.Getenv("CLAUDE_CONFIG_DIR")
-	if claude == "" {
-		claude = filepath.Join(in.Paths.Home, ".claude")
+// skillDirs are the coding agents' skill directories install.sh copies the
+// author skills into, for the agents installed here (whose home exists): the
+// shared ~/.agents/skills (OpenCode, Copilot, Gemini, Cursor, Crush, Oh My
+// Pi, Grok, Muse, OpenClaw...), Claude Code, Codex, Pi and Hermes with its
+// profiles. The same directories Omarchy links its own skills into.
+func (in *Installer) skillDirs() []string {
+	envOr := func(env, rel string) string {
+		if v := os.Getenv(env); v != "" {
+			return v
+		}
+		return filepath.Join(in.Paths.Home, rel)
 	}
-	dir := filepath.Join(claude, "skills")
-	if !within(in.Paths.Home, dir) {
+	homes := []string{envOr("CLAUDE_CONFIG_DIR", ".claude"), envOr("CODEX_HOME", ".codex"),
+		filepath.Join(in.Paths.Home, ".agents"), filepath.Join(in.Paths.Home, ".pi", "agent"),
+		filepath.Join(in.Paths.Home, ".hermes")}
+	profiles, _ := filepath.Glob(filepath.Join(in.Paths.Home, ".hermes", "profiles", "*"))
+	homes = append(homes, profiles...)
+	var dirs []string
+	for _, h := range homes {
+		if st, err := os.Stat(h); err != nil || !st.IsDir() || !within(in.Paths.Home, h) {
+			continue
+		}
+		dirs = append(dirs, filepath.Join(h, "skills"))
+	}
+	return dirs
+}
+
+// refreshSkills brings the agents' skill copies to the release's set, as
+// install.sh does: copies are added or replaced, the ones a release dropped
+// are removed, and a directory not made by OmaStore (no skillMarker) is the
+// user's and never touched. Nothing happens when install.sh ran with
+// --no-skills (selfNoSkills in the self directory).
+func (in *Installer) refreshSkills(root, src string) {
+	if _, err := os.Stat(filepath.Join(root, selfNoSkills)); err == nil {
 		return
 	}
 	entries, err := os.ReadDir(src)
 	if err != nil {
 		return
 	}
+	want := map[string]bool{}
 	for _, e := range entries {
-		dest := filepath.Join(dir, e.Name())
-		st, err := os.Lstat(dest)
+		if e.IsDir() && strings.HasPrefix(e.Name(), "omastore-") {
+			want[e.Name()] = true
+		}
+	}
+	ours := func(p string) bool {
+		st, err := os.Lstat(p)
 		if err != nil || !st.IsDir() {
-			continue // only copies that exist and are ours are refreshed
+			return false
 		}
-		if _, err := os.Stat(filepath.Join(dest, skillMarker)); err != nil {
+		_, err = os.Stat(filepath.Join(p, skillMarker))
+		return err == nil
+	}
+	for _, dir := range in.skillDirs() {
+		old, _ := filepath.Glob(filepath.Join(dir, "omastore-*"))
+		for _, p := range old {
+			if !want[filepath.Base(p)] && ours(p) {
+				os.RemoveAll(p)
+			}
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			in.log().Warn("skills not installed", "dir", dir, "err", err)
 			continue
 		}
-		tmp := dest + ".omastore-new-" + randSuffix()
-		if err := os.CopyFS(tmp, os.DirFS(filepath.Join(src, e.Name()))); err != nil {
-			os.RemoveAll(tmp)
-			in.log().Warn("skill not refreshed", "skill", e.Name(), "err", err)
-			continue
-		}
-		os.WriteFile(filepath.Join(tmp, skillMarker), nil, 0o644)
-		if err := os.RemoveAll(dest); err != nil || os.Rename(tmp, dest) != nil {
-			os.RemoveAll(tmp)
-			in.log().Warn("skill not refreshed", "skill", e.Name())
+		for name := range want {
+			dest := filepath.Join(dir, name)
+			if _, err := os.Lstat(dest); err == nil && !ours(dest) {
+				continue // the user's own skill of the same name
+			}
+			tmp := dest + ".omastore-new-" + randSuffix()
+			if err := os.CopyFS(tmp, os.DirFS(filepath.Join(src, name))); err != nil {
+				os.RemoveAll(tmp)
+				in.log().Warn("skill not installed", "skill", name, "dir", dir, "err", err)
+				continue
+			}
+			os.WriteFile(filepath.Join(tmp, skillMarker), nil, 0o644)
+			if err := os.RemoveAll(dest); err != nil || os.Rename(tmp, dest) != nil {
+				os.RemoveAll(tmp)
+				in.log().Warn("skill not installed", "skill", name, "dir", dir)
+			}
 		}
 	}
 }

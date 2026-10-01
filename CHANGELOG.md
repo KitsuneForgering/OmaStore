@@ -15,6 +15,12 @@ All notable changes to OmaStore are listed here. The format follows
   SHA-256, the switch is all or nothing, and the previous version stays until
   the next update. Package installations keep updating through pacman.
 - Demo GIF in the README.
+- The skills for app authors are installed for every coding agent Omarchy
+  offers, in the same directories Omarchy uses for its own skills:
+  `~/.agents/skills` (OpenCode, Copilot, Gemini, Cursor, Crush, Oh My Pi,
+  Grok, Muse, OpenClaw…), Claude Code, Codex, Pi and Hermes with its
+  profiles — only for the agents installed. Self-update keeps them current,
+  `--uninstall` removes them and `--no-skills` is remembered.
 - Accessibility: every text color meets WCAG AAA (7:1) on any Omarchy theme,
   light or dark. The theme's own colors are adjusted when needed, keeping
   their hue; borders and the focus ring get at least 3:1. Without Omarchy the

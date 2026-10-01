@@ -401,14 +401,14 @@ Page {
             }
 
             Body {
-                objectName: "claudeHint"
-                text: qsTr("Using Claude Code? OmaStore's install.sh adds its author skills to ~/.claude/skills; with the pacman package, copy them from /usr/share/omastore/skills. Then open your app's project and ask “get this app ready for OmaStore”.")
+                objectName: "agentsHint"
+                text: qsTr("Using a coding agent (Claude Code, Codex, OpenCode, Copilot, Gemini, Cursor, Pi, Hermes…)? OmaStore's install.sh adds its author skills to every installed agent; with the pacman package, copy them from /usr/share/omastore/skills. Then open your app's project and ask “get this app ready for OmaStore”.")
             }
             Flow {
                 Layout.fillWidth: true
                 spacing: 24
                 LinkText { text: qsTr("Full authors guide ↗"); url: page.guideUrl }
-                LinkText { text: qsTr("Claude Code skills for authors ↗"); url: page.skillsUrl }
+                LinkText { text: qsTr("Agent skills for authors ↗"); url: page.skillsUrl }
             }
         }
     }

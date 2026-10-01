@@ -150,7 +150,7 @@ frontend/
   tests/                # Qt Test with a fake daemon (QLocalServer)
 packaging/              # PKGBUILD, systemd units, the store's .desktop and icon
 docs/                   # ipc.md, authors.md, ideas/, screenshots/
-skills/                 # Claude Code skills for app authors
+skills/                 # agent skills for app authors (install.sh copies them for every agent)
 ```
 
 ## Commands
