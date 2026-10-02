@@ -10,6 +10,9 @@ export XDG_DATA_HOME="$HOME/.local/share"
 # Never touch the real user's directories (--uninstall deletes the cache).
 export XDG_CACHE_HOME="$HOME/.cache" XDG_CONFIG_HOME="$HOME/.config" XDG_STATE_HOME="$HOME/.local/state"
 export FIXTURE="$fixture"
+# The session whose OmaStore an install replaces; nothing outside it is touched.
+export XDG_RUNTIME_DIR="$fixture/run"
+mkdir -p "$XDG_RUNTIME_DIR"
 mkdir -p "$HOME" "$fixture/mock-bin" "$fixture/usr/bin" \
   "$fixture/usr/share/applications" "$fixture/usr/share/icons/hicolor/scalable/apps"
 for name in omastore omastored omastore-gui; do
@@ -124,6 +127,37 @@ grep -F "Exec=\"$HOME/.local/bin/omastore-gui\"" \
 if command -v desktop-file-validate >/dev/null 2>&1; then
   desktop-file-validate "$XDG_DATA_HOME/applications/omastore.desktop"
 fi
+
+# Installing over a running older OmaStore of this session closes it: its
+# daemon would keep the socket. Another session's OmaStore is left alone.
+mkdir -p "$root/1.2.2/bin" "$fixture/other-session"
+cp "$(command -v sleep)" "$root/1.2.2/bin/omastored"
+"$root/1.2.2/bin/omastored" 60 &
+old_daemon=$!
+cp "$(command -v sleep)" "$fixture/other-session/omastored"
+XDG_RUNTIME_DIR="$fixture/other-run" "$fixture/other-session/omastored" 60 &
+other_session=$!
+bg_pids="$bg_pids $old_daemon $other_session"
+sleep 0.2
+sh "$project/packaging/install.sh" > "$fixture/handover-log"
+for _ in 1 2 3 4 5 6 7 8 9 10; do readlink "/proc/$old_daemon/exe" >/dev/null 2>&1 || break; sleep 0.2; done
+if readlink "/proc/$old_daemon/exe" >/dev/null 2>&1; then
+  echo 'the older omastored kept running after the install' >&2
+  exit 1
+fi
+if ! readlink "/proc/$other_session/exe" >/dev/null 2>&1; then
+  echo "another session's omastored was stopped" >&2
+  exit 1
+fi
+kill "$other_session"
+grep -F 'Closed the OmaStore that was running' "$fixture/handover-log" >/dev/null
+# A link to a system install's hook (left by make install) is OmaStore's: replaced.
+mkdir -p "$fixture/sys/share/omastore/omarchy"
+: > "$fixture/sys/share/omastore/omarchy/omastore.hook"
+rm -f "$hook"
+ln -s "$fixture/sys/share/omastore/omarchy/omastore.hook" "$hook"
+sh "$project/packaging/install.sh" > /dev/null
+[ ! -L "$hook" ] && grep -qxF '# omastore-managed' "$hook"
 
 # --uninstall removes what install.sh created (and stops its daemon), but keeps
 # the catalog, the apps installed through OmaStore and files it does not own.

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(omastore-gui VERSION 0.1.0 LANGUAGES CXX)
+project(omastore-gui VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -40,6 +40,8 @@ qt_add_qml_module(omastore-gui
         qml/JobsBar.qml
         qml/SideBar.qml
         qml/PrimaryButton.qml
+        qml/ActionButton.qml
+        qml/Badge.qml
         qml/LinkText.qml
         qml/PublishPage.qml
 )

@@ -49,7 +49,9 @@ public:
     Q_INVOKABLE void clearFinished();
 
     // Applies a job's state (public for tests).
-    void upsert(const QJsonObject &job);
+    // history: the job comes from jobs.list. One that had already finished
+    // before this interface saw it is history, not news: no finished().
+    void upsert(const QJsonObject &job, bool history = false);
 
     static double progressOf(const QJsonObject &job);
 

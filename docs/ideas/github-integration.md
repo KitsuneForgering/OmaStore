@@ -2,7 +2,7 @@
 
 Starring (`star.get`/`star.set`), release notes and prefilled issue reports
 are done (Phases 17 and 18 of `TODO.md`). Build provenance is covered by
-[trust.md](trust.md) and Phase 15/16 of `TODO.md`.
+[trust.md](trust.md) and Phase 15 of `TODO.md`.
 
 ## Evidence
 

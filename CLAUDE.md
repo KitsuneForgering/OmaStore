@@ -33,7 +33,9 @@ Two processes with separate responsibilities:
   everything goes through the backend.
 - **IPC**: JSON-RPC 2.0 (one JSON message per line) on `$XDG_RUNTIME_DIR/omastore.sock`.
   Long operations (indexing, installation) return a job id and emit progress notifications
-  over the same socket. The protocol is in `docs/ipc.md`; keep it up to date when changing methods or DTOs.
+  over the same socket. The protocol is in `docs/ipc.md`; keep it up to date when changing methods or DTOs,
+  bump `rpc.ProtocolVersion` (and the frontend's `Backend::Protocol`) and list new methods in `rpc.Methods`:
+  `daemon.hello` is how the interface notices an older daemon.
 - **Ideas** not yet accepted live in `docs/ideas/` (one per file, with evidence and cost);
   when one is accepted, turn it into items in `TODO.md`.
 
@@ -58,6 +60,15 @@ Two processes with separate responsibilities:
   only `theme.*` colors, never `opacity` or `Qt.lighter/darker` on text or its background, and text on a
   fill uses the matching pair (`accentFill`/`onAccent`, `dangerFill`/`onDanger`, `focus`/`onFocus`).
   Animation durations come from `theme.durationShort`/`durationMedium`, which are 0 with reduced motion.
+- Typography and layout also come from `Theme`: sizes from the scale `theme.fontCaption/Body/Reading/Subtitle/
+  Title/Headline` (built on the system UI font, so a larger system font grows everything), families
+  `theme.fontFamily`/`monoFamily` (fontconfig's sans-serif/monospace, which follow Omarchy's fonts; mono for repo
+  names, versions and package names), spacing `theme.spaceXs…spaceXxl` (4 px grid), radii `theme.radiusS/M`, and
+  `theme.outline` for card edges (`theme.border` for controls). No literal pixel sizes, and no fixed heights on
+  anything holding text. Buttons are `ActionButton` (`primary`/`secondary`/`quiet`, `selected` for an on/off
+  state), statuses are `Badge`.
+- Every action shows its state: busy while it runs, a notice when it succeeds, a reason when it cannot run
+  (never a disabled control without a tooltip or text saying why).
 - The frontend never accesses the network: images come from the daemon (`image.get`, provider `image://omastore/`), the
   QML engine uses a `QNetworkAccessManager` that blocks remote URLs and the README is shown without images.
 - The frontend never looks for `omastored` in `PATH` (which includes `~/.local/bin`, where downloaded apps live):
@@ -71,7 +82,7 @@ Two processes with separate responsibilities:
    does not get in (and is removed, if it was there). Without a release with a Linux binary, it gets in but is not installable.
    `--prune` is skipped when a discovery source failed (a partial list would delete healthy repos).
 2. **Cache check** — for each repository, compare `pushed_at`, the HEAD commit SHA and the latest
-   release tag with what is in SQLite. **If nothing changed, do not reprocess.** That is why the
+   release (`repos.release_sig`: tag plus name, size and digest of every asset) with what is in SQLite. **If nothing changed, do not reprocess.** That is why the
    database exists; never remove this check for convenience. As a consequence, **when changing
    extraction/classification rules (assets, categories, README), bump `index.Version`**; otherwise repos
    already stored are never reclassified.
@@ -105,14 +116,19 @@ Rules:
   switch with rollback, and the running version is kept until the next update. Packages are left to pacman.
 - Uninstalling removes only the paths registered in the database. A path that could not be removed stays
   registered (uninstall returns `ErrIncomplete`), never silently forgotten.
+- Never pull files out from under a running app: uninstall refuses while a process runs from the app's directory
+  (`/proc` exe/cwd/maps, read only; `ErrInUse` unless forced), and an update keeps the version it replaced
+  (`installs.previous_version`, the target of `install.rollback`).
+- A file with neither a GitHub digest nor a published checksum is installed only with `AllowUnverified` (the user
+  confirmed it): one rule in the installer for GUI, CLI and updates.
 
 ## Database schema (summary)
 
-- `repos` — `full_name` (PK), description, stars, topics, `pushed_at`, `head_sha`, `latest_tag`, `etag`,
+- `repos` — `full_name` (PK), description, stars, topics, `pushed_at`, `head_sha`, `latest_tag`, `release_sig`, `etag`,
   `indexed_at` (last checked), `changed_at` (last change; drives `catalog.changed` and the search index).
 - `apps` — display data derived from the repo: name, summary, README, icon, category, score.
 - `assets` — release assets per repo/tag (name, url, arch, format, checksum).
-- `installs` — installed app, version, date, list of created files.
+- `installs` — installed app, version, date, list of created files, and the previous version kept on disk.
 - `not_apps` — repositories recently found without an app `omastore.toml`; skipped without requests for 7 days.
 - `apps.sysdeps` — `depends`/`optdepends` read from the repository's PKGBUILD/.SRCINFO at index time (JSON).
 - `repos.release_notes` — body of the latest release (markdown, capped at 16 KiB), shown as "What's new".
@@ -127,7 +143,7 @@ Schema changes go through numbered migrations in `backend/internal/store/migrati
 ```
 backend/
   cmd/omastored/        # daemon (IPC server)
-  cmd/omastore/         # debug CLI: index, list, show, install, uninstall, update, self-update, check, deps, star
+  cmd/omastore/         # debug CLI: index, list, show, install, uninstall, rollback, update, self-update, check, deps, star
   internal/app/         # wires the services; the single entry point for the CLI and the daemon
   internal/github/      # go-github wrapper
   internal/gitrepo/     # shallow clones via go-git + icon/screenshot lookup
@@ -142,6 +158,7 @@ backend/
   internal/notify/      # desktop notifications via D-Bus (without running notify-send)
   internal/search/      # BM25 search and "similar apps" (TF-IDF), deterministic
   internal/sysdeps/     # PKGBUILD/.SRCINFO dependencies (parsed, never run) + pacman check/install via pkexec
+  internal/elfdeps/     # shared libraries an installed executable needs and the system lacks (ELF, never run)
   internal/rpc/         # JSON-RPC server, jobs, socket activation
 frontend/
   CMakeLists.txt        # omastore-core lib + app + tests (ctest)

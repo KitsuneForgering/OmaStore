@@ -6,6 +6,8 @@ All notable changes to OmaStore are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-30
+
 ### Added
 
 - OmaStore updates itself: an installation made by `install.sh` sees new
@@ -115,5 +117,6 @@ First public release.
 - `install.sh`, `omastore-bin` PKGBUILD, reproducible release tarball with
   build provenance attestation, and optional systemd socket and daily timer.
 
-[Unreleased]: https://github.com/KitsuneSemCalda/OmaStore/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/KitsuneSemCalda/OmaStore/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/KitsuneSemCalda/OmaStore/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/KitsuneSemCalda/OmaStore/releases/tag/v0.1.0

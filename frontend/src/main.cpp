@@ -5,6 +5,7 @@
 #include "theme.h"
 
 #include <QCommandLineParser>
+#include <QFont>
 #include <QGuiApplication>
 #include <QPalette>
 #include <QProcess>
@@ -46,6 +47,13 @@ int main(int argc, char *argv[])
     RpcClient rpc;
     Backend backend(&rpc);
     Theme theme;
+    // Every Text and control starts from the user's UI family (fontconfig's
+    // sans-serif, which Omarchy points at its chosen font) at the theme's
+    // body size; QML only picks steps of the scale.
+    QFont uiFont = app.font();
+    uiFont.setFamily(theme.fontFamily());
+    uiFont.setPixelSize(theme.fontBody());
+    app.setFont(uiFont);
     // Text.MarkdownText uses the global palette for links, not QML's.
     auto applyLinkColor = [&app, &theme] {
         QPalette p = app.palette();

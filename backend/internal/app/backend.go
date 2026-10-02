@@ -26,16 +26,22 @@ func (a *App) Index(ctx context.Context, opts index.Options) (index.Stats, error
 	return a.Indexer.Run(ctx, opts)
 }
 
-func (a *App) Install(ctx context.Context, fullName string, p func(install.Progress)) (*store.Install, error) {
-	return a.Installer.Install(ctx, fullName, p)
+func (a *App) Install(ctx context.Context, fullName string, opts install.Options) (*store.Install, error) {
+	return a.Installer.Install(ctx, fullName, opts)
 }
 
-func (a *App) Update(ctx context.Context, fullName string, p func(install.Progress)) (*store.Install, error) {
-	return a.Installer.Update(ctx, fullName, p)
+func (a *App) Update(ctx context.Context, fullName string, opts install.Options) (*store.Install, error) {
+	return a.Installer.Update(ctx, fullName, opts)
 }
 
-func (a *App) Uninstall(ctx context.Context, fullName string) error {
-	return a.Installer.Uninstall(ctx, fullName)
+// Uninstall removes the app; while it runs, only with force.
+func (a *App) Uninstall(ctx context.Context, fullName string, force bool) error {
+	return a.Installer.Uninstall(ctx, fullName, force)
+}
+
+// Rollback goes back to the version the last update replaced.
+func (a *App) Rollback(ctx context.Context, fullName string) (*store.Install, error) {
+	return a.Installer.Rollback(ctx, fullName)
 }
 
 // Check diagnoses a repository for its author without touching the catalog.

@@ -35,13 +35,20 @@ packages in a `PKGBUILD`, the store can install them with pacman for you
   categories and search in one place.
 - **Install without touching the system:** apps live in your account, with menu
   shortcuts, and can be removed from the store.
-- **Know what you are downloading:** the store shows the release and checks its
-  published checksum when available. Without one, the interface asks before
-  installing; the CLI warns and continues.
+- **An intact download:** the file is checked against GitHub's digest or the
+  release's published checksum. A file with neither is installed only after you
+  confirm it (in the interface, or with `--allow-unverified` in the CLI), and
+  that holds for updates too. A checksum from the release itself proves the
+  download arrived intact, not who built it.
+- **Updates you can undo:** an update keeps the version it replaced, so an app
+  that is open keeps working and **Go back** returns to the previous version
+  without downloading anything. An app is not removed while it is running
+  unless you insist.
 - **The whole app, not only the binary:** the `depends` and `optdepends` of the
-  app's `PKGBUILD` are listed on its page, and the missing ones that the pacman
-  repositories have are installed with one click (AUR packages are never
-  installed for you).
+  app's `PKGBUILD`, and the shared libraries its installed executable needs and
+  your system lacks (read from the file, never run), are listed on its page; the
+  missing ones that the pacman repositories have are installed with one click
+  (AUR packages are never installed for you).
 - **Like it? Star it:** the star button on an app's page stars its repository
   on GitHub (with `gh auth login` or `GITHUB_TOKEN`).
 
@@ -57,16 +64,16 @@ packages in a `PKGBUILD`, the store can install them with pacman for you
   separately from the repository or the HTTPS URLs declared for display.
 - **No reprocessing:** an SQLite database keeps the state of each
   repository; with conditional requests (ETag), a new indexing run only
-  reprocesses what changed on GitHub.
+  reprocesses what changed on GitHub (a new push, a new release, or files
+  replaced or added in the same release).
 - **Live catalog:** apps show up in the interface as they are indexed, and the
   jobs bar shows the current stage (discovery, state check, indexing). Discovery
   queries its sources in parallel and gives up on a source that does not answer
   within 2 minutes (`omastore index --search-timeout`); the run then keeps the
   apps already stored instead of pruning them.
 - **Safe installation:**
-  - the GitHub API `digest` or a published `*.sha256`/`checksums.txt` is checked
-    when available; without one, the interface requires confirmation and the
-    CLI prints a warning;
+  - the GitHub API `digest` or a published `*.sha256`/`checksums.txt` is checked;
+    a file with neither needs your confirmation (`--allow-unverified` in the CLI);
   - extraction is protected against *path traversal* and malicious symlinks;
   - nothing from the package is executed during installation;
   - the installation is fully undone if something fails midway;
@@ -169,6 +176,13 @@ installed without you asking.
 
 Without systemd, the interface starts the daemon on its own when needed.
 
+`make release && sudo make install` (default `PREFIX=/usr/local`) also works over
+an older installation that is running: it reloads your systemd user units, stops
+the `omastored` still running the replaced binary (it would keep serving the old
+version; the new one starts on the next connection) and tells you when a per-user
+installation from `install.sh` in `~/.local` comes first in `PATH` and the menu.
+The units point at the binaries under `PREFIX`.
+
 Recommended: `gh auth login` (or `export GITHUB_TOKEN=...`). Without a token,
 GitHub limits you to 60 requests per hour, which is not enough to index the
 whole catalog.
@@ -198,7 +212,8 @@ omastore install pch/rawmakase
 omastore update                 # updates all installed apps
 omastore update --check         # only lists what has a new version (OmaStore's own too)
 omastore self-update            # updates OmaStore itself (installations made by install.sh)
-omastore uninstall pch/rawmakase
+omastore rollback pch/rawmakase # back to the version the last update replaced
+omastore uninstall pch/rawmakase # refuses while it runs; --force removes it anyway
 omastore check pch/rawmakase    # for authors: what the store sees and what to fix
 omastore deps pch/rawmakase     # system dependencies from its PKGBUILD; --install installs them
 omastore star pch/rawmakase     # star it on GitHub (unstar removes the star)

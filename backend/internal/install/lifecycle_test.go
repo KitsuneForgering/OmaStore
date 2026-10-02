@@ -30,14 +30,14 @@ func TestUninstallKeepsPendingFiles(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
-	inst, err := e.in.Install(ctx, "acme/omaphoto", nil)
+	inst, err := e.in.Install(ctx, "acme/omaphoto", Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	os.Chmod(e.paths.Applications, 0o555)
 	defer os.Chmod(e.paths.Applications, 0o755)
-	err = e.in.Uninstall(ctx, "acme/omaphoto")
+	err = e.in.Uninstall(ctx, "acme/omaphoto", false)
 	if !errors.Is(err, ErrIncomplete) {
 		t.Fatalf("err = %v, want ErrIncomplete", err)
 	}
@@ -53,7 +53,7 @@ func TestUninstallKeepsPendingFiles(t *testing.T) {
 	}
 
 	os.Chmod(e.paths.Applications, 0o755)
-	if err := e.in.Uninstall(ctx, "acme/omaphoto"); err != nil {
+	if err := e.in.Uninstall(ctx, "acme/omaphoto", false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Lstat(inst.DesktopPath); !os.IsNotExist(err) {
@@ -71,7 +71,7 @@ func TestUpdateRecordsLeftoverOldVersion(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
-	if _, err := e.in.Install(ctx, "acme/omaphoto", nil); err != nil {
+	if _, err := e.in.Install(ctx, "acme/omaphoto", Options{}); err != nil {
 		t.Fatal(err)
 	}
 	oldDir := filepath.Join(e.paths.AppsDir, "acme__omaphoto", "v1")
@@ -80,7 +80,7 @@ func TestUpdateRecordsLeftoverOldVersion(t *testing.T) {
 	defer os.Chmod(locked, 0o755)
 
 	e.publish(t, "v2", appTarGz(t, "2"), asset.FormatTarGz, true)
-	inst, err := e.in.Update(ctx, "acme/omaphoto", nil)
+	inst, err := e.in.Update(ctx, "acme/omaphoto", Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestUpdateRecordsLeftoverOldVersion(t *testing.T) {
 	}
 
 	os.Chmod(locked, 0o755)
-	if err := e.in.Uninstall(ctx, "acme/omaphoto"); err != nil {
+	if err := e.in.Uninstall(ctx, "acme/omaphoto", false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(e.paths.AppsDir, "acme__omaphoto")); !os.IsNotExist(err) {
@@ -108,7 +108,7 @@ func TestUpdateAfterRepositoryRename(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
-	first, err := e.in.Install(ctx, "acme/omaphoto", nil)
+	first, err := e.in.Install(ctx, "acme/omaphoto", Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestUpdateAfterRepositoryRename(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	inst, err := e.in.Update(ctx, "neo/omaphoto", nil)
+	inst, err := e.in.Update(ctx, "neo/omaphoto", Options{})
 	if err != nil {
 		t.Fatalf("update after rename: %v", err)
 	}
@@ -176,5 +176,34 @@ func TestDownloadAbortsWhenStalled(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("stalled download did not abort")
+	}
+}
+
+func TestIsBrokenAndRepair(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
+	inst, err := e.in.Install(ctx, "acme/omaphoto", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if IsBroken(*inst) {
+		t.Fatal("fresh install reported broken")
+	}
+	// The user deletes the app's folder by hand.
+	os.RemoveAll(filepath.Join(e.paths.AppsDir, "acme__omaphoto"))
+	stored, _ := e.st.GetInstall(ctx, "acme/omaphoto")
+	if !IsBroken(*stored) {
+		t.Fatal("missing executable not reported")
+	}
+	// Repair is a reinstall of the same version.
+	if inst, err = e.in.Install(ctx, "acme/omaphoto", Options{}); err != nil {
+		t.Fatalf("repair: %v", err)
+	}
+	if IsBroken(*inst) {
+		t.Error("still broken after the repair")
+	}
+	if target, ok := launcherTarget(filepath.Join(e.paths.BinDir, "omaphoto")); !ok || target != inst.ExecPath {
+		t.Errorf("launcher after repair → %q", target)
 	}
 }

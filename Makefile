@@ -110,10 +110,13 @@ install: ## Install into $(DESTDIR)$(PREFIX) (after make release)
 	DESTDIR=$(DESTDIR) $(CMAKE) --install $(RELEASE_DIR) --prefix $(PREFIX)
 	install -Dm644 packaging/desktop/omastore.desktop $(DESTDIR)$(PREFIX)/share/applications/omastore.desktop
 	install -Dm644 packaging/desktop/omastore-mark.svg $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/omastore.svg
-	install -Dm644 packaging/systemd/omastored.service $(DESTDIR)$(PREFIX)/lib/systemd/user/omastored.service
-	install -Dm644 packaging/systemd/omastored.socket  $(DESTDIR)$(PREFIX)/lib/systemd/user/omastored.socket
-	install -Dm644 packaging/systemd/omastore-index.service $(DESTDIR)$(PREFIX)/lib/systemd/user/omastore-index.service
-	install -Dm644 packaging/systemd/omastore-index.timer   $(DESTDIR)$(PREFIX)/lib/systemd/user/omastore-index.timer
+	@# The units name the binaries by absolute path: point them at this PREFIX
+	@# (with PREFIX=/usr/local they ran a /usr/bin/omastored that does not exist).
+	@install -d $(DESTDIR)$(PREFIX)/lib/systemd/user
+	for unit in omastored.service omastored.socket omastore-index.service omastore-index.timer; do \
+		sed 's|/usr/bin/|$(PREFIX)/bin/|g' packaging/systemd/$$unit > $(DESTDIR)$(PREFIX)/lib/systemd/user/$$unit || exit 1; \
+		chmod 644 $(DESTDIR)$(PREFIX)/lib/systemd/user/$$unit; \
+	done
 	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/omastore/LICENSE
 	install -Dm644 docs/ipc.md $(DESTDIR)$(PREFIX)/share/doc/omastore/ipc.md
 	@# Omarchy post-update hook; install.sh writes its own copy, a package cannot write to $$HOME.
@@ -125,6 +128,10 @@ install: ## Install into $(DESTDIR)$(PREFIX) (after make release)
 		case "$$f" in */scripts/*) mode=755 ;; *) mode=644 ;; esac; \
 		install -Dm$$mode "$$f" "$(DESTDIR)$(PREFIX)/share/omastore/skills/$$f" || exit 1; \
 	done
+	@# Over a running older OmaStore: reload the units, stop the daemon the old
+	@# binary still runs, warn about a per-user install that shadows this one.
+	@# Only on a live system; packages (DESTDIR) are left to their manager.
+	@if [ -z "$(DESTDIR)" ]; then sh packaging/post-install.sh $(PREFIX)/bin $(PREFIX)/share; fi
 
 uninstall: ## Remove the system install, plus the user's install.sh install and cache
 	@# The per-user part (install.sh, ~/.local) runs as the invoking user, also under sudo.
@@ -184,6 +191,7 @@ test-skills: $(BIN)/omastore ## The skills' Python validator == omastore lint-ma
 
 test-installer: ## Simulated local installation, no network
 	sh tests/install-shell.sh
+	sh tests/post-install.sh
 
 test: test-backend test-frontend test-skills test-installer ## All tests
 

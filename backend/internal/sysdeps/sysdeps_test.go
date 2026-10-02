@@ -153,6 +153,15 @@ func (f *fakeRun) run(_ context.Context, name string, args ...string) ([]byte, [
 			code = 127
 		}
 		return []byte(strings.Join(missing, "\n") + "\n"), nil, code, nil
+	case args[0] == "-F":
+		switch args[len(args)-1] {
+		case "libwebkit2gtk-4.1.so.0":
+			// multilib first: the usr/lib one must win.
+			return []byte("multilib\x00lib32-webkit\x001-1\x00usr/lib32/libwebkit2gtk-4.1.so.0\n" +
+				"extra\x00webkit2gtk-4.1\x002.46-1\x00usr/lib/libwebkit2gtk-4.1.so.0\n"), nil, 0, nil
+		default:
+			return nil, nil, 1, nil
+		}
 	case args[0] == "-Sddp":
 		switch target := args[len(args)-1]; target {
 		case "ffmpeg", "java-runtime":
@@ -236,5 +245,54 @@ func TestCheckWithoutPacman(t *testing.T) {
 	}
 	if len(rep.Deps) != 1 || rep.Deps[0].Status != StatusUnknown {
 		t.Errorf("report = %+v", rep)
+	}
+}
+
+func TestLibraryPackage(t *testing.T) {
+	f := &fakeRun{}
+	p := newPacman(t, f)
+	p.SyncDir = t.TempDir()
+	ctx := context.Background()
+
+	// No file database: unknown, and pacman is not even asked.
+	if pkg, known, err := p.LibraryPackage(ctx, "libwebkit2gtk-4.1.so.0"); err != nil || known || pkg != "" {
+		t.Errorf("without a file database: %q %v %v", pkg, known, err)
+	}
+	if len(f.calls) != 0 {
+		t.Errorf("asked pacman without a file database: %v", f.calls)
+	}
+
+	os.WriteFile(filepath.Join(p.SyncDir, "extra.files"), nil, 0o644)
+	pkg, known, err := p.LibraryPackage(ctx, "libwebkit2gtk-4.1.so.0")
+	if err != nil || !known || pkg != "extra/webkit2gtk-4.1" {
+		t.Errorf("lookup: %q %v %v", pkg, known, err)
+	}
+	if pkg, known, err := p.LibraryPackage(ctx, "libnothing.so.9"); err != nil || !known || pkg != "" {
+		t.Errorf("not found: %q %v %v", pkg, known, err)
+	}
+	if _, _, err := p.LibraryPackage(ctx, "--sync"); err == nil {
+		t.Error("an option passed as a library name")
+	}
+
+	rep := Report{Libraries: []LibState{{Name: "libwebkit2gtk-4.1.so.0", Status: StatusAvailable, Package: "extra/webkit2gtk-4.1"},
+		{Name: "libx.so", Status: StatusUnknown}}}
+	if got := rep.ToInstall(); !reflect.DeepEqual(got, []string{"extra/webkit2gtk-4.1"}) {
+		t.Errorf("to install = %v", got)
+	}
+}
+
+// A sync database the mirrors moved past: pacman cannot download the listed
+// version. The error says to update the system, not pacman's raw line.
+func TestInstallStaleDatabase(t *testing.T) {
+	f := &fakeRun{pkexec: 1, pkStderr: "error: failed retrieving file 'ffmpeg-2:7.1-3-x86_64.pkg.tar.zst' from mirror : The requested URL returned error: 404\n" +
+		"warning: failed to retrieve some files\nerror: failed to commit transaction (failed to retrieve some files)\n"}
+	p := newPacman(t, f)
+	err := p.Install(context.Background(), []string{"extra/ffmpeg"})
+	if !errors.Is(err, ErrStaleDatabase) {
+		t.Fatalf("err = %v", err)
+	}
+	f.pkStderr = "error: target not found: ffmpeg\n"
+	if err := p.Install(context.Background(), []string{"extra/ffmpeg"}); err == nil || errors.Is(err, ErrStaleDatabase) {
+		t.Errorf("other failure: %v", err)
 	}
 }

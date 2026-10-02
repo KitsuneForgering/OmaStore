@@ -6,6 +6,9 @@
 #include <QObject>
 #include <QTimer>
 
+#include <algorithm>
+#include <cmath>
+
 // Colors of the active Omarchy theme (colors.toml), reloaded automatically
 // when the user switches themes. Without Omarchy, uses a default palette that
 // follows the system's light/dark preference.
@@ -31,8 +34,11 @@ class Theme : public QObject {
     Q_PROPERTY(QColor warning READ warning NOTIFY changed)
     // Background of a hovered item (text on it keeps 7:1).
     Q_PROPERTY(QColor hover READ hover NOTIFY changed)
-    // Boundary of inputs, cards and dividers that must be seen (3:1).
+    // Boundary of inputs, buttons and anything that must be seen (3:1).
     Q_PROPERTY(QColor border READ border NOTIFY changed)
+    // Quiet edge of cards and dividers: enough to separate a surface from the
+    // background on themes where the two are close (1.6:1), never louder.
+    Q_PROPERTY(QColor outline READ outline NOTIFY changed)
     // Keyboard focus ring and selected-text highlight (3:1 against every
     // background), and the text on it (7:1).
     Q_PROPERTY(QColor focus READ focus NOTIFY changed)
@@ -49,6 +55,27 @@ class Theme : public QObject {
     Q_PROPERTY(bool reducedMotion READ reducedMotion NOTIFY changed)
     Q_PROPERTY(int durationShort READ durationShort NOTIFY changed)
     Q_PROPERTY(int durationMedium READ durationMedium NOTIFY changed)
+
+    // Typography: the families go through fontconfig, so they follow the
+    // fonts Omarchy (or the user) configured; the sizes, in pixels, are a scale
+    // built on the system's UI font, so a larger system font grows every step.
+    Q_PROPERTY(QString fontFamily READ fontFamily CONSTANT)
+    Q_PROPERTY(QString monoFamily READ monoFamily CONSTANT)
+    Q_PROPERTY(int fontCaption READ fontCaption CONSTANT)   // labels, metadata
+    Q_PROPERTY(int fontBody READ fontBody CONSTANT)         // UI text
+    Q_PROPERTY(int fontReading READ fontReading CONSTANT)   // README, long text
+    Q_PROPERTY(int fontSubtitle READ fontSubtitle CONSTANT) // card titles
+    Q_PROPERTY(int fontTitle READ fontTitle CONSTANT)       // page and section titles
+    Q_PROPERTY(int fontHeadline READ fontHeadline CONSTANT) // the app's name
+    // Spacing on a 4 px grid and corner radii.
+    Q_PROPERTY(int spaceXs READ spaceXs CONSTANT)
+    Q_PROPERTY(int spaceS READ spaceS CONSTANT)
+    Q_PROPERTY(int spaceM READ spaceM CONSTANT)
+    Q_PROPERTY(int spaceL READ spaceL CONSTANT)
+    Q_PROPERTY(int spaceXl READ spaceXl CONSTANT)
+    Q_PROPERTY(int spaceXxl READ spaceXxl CONSTANT)
+    Q_PROPERTY(int radiusS READ radiusS CONSTANT)
+    Q_PROPERTY(int radiusM READ radiusM CONSTANT)
 
 public:
     // dirs: theme directories in order of preference. Empty = Omarchy's
@@ -72,6 +99,8 @@ public:
     // Minimum contrast for text (WCAG AAA, 1.4.6) and for UI boundaries (1.4.11).
     static constexpr double TextContrast = 7.0;
     static constexpr double UiContrast = 3.0;
+    // Decorative edges (outline): visible, not a boundary WCAG requires.
+    static constexpr double OutlineContrast = 1.6;
 
     bool dark() const { return m_dark; }
     QString name() const { return m_name; }
@@ -87,6 +116,7 @@ public:
     QColor warning() const { return m_ui.value(QStringLiteral("warning")); }
     QColor hover() const { return m_ui.value(QStringLiteral("hover")); }
     QColor border() const { return m_ui.value(QStringLiteral("border")); }
+    QColor outline() const { return m_ui.value(QStringLiteral("outline")); }
     QColor focus() const { return m_ui.value(QStringLiteral("focus")); }
     QColor onFocus() const { return m_ui.value(QStringLiteral("onFocus")); }
     QColor accentFill() const { return m_ui.value(QStringLiteral("accentFill")); }
@@ -96,6 +126,25 @@ public:
     bool reducedMotion() const { return m_reducedMotion; }
     int durationShort() const { return m_reducedMotion ? 0 : 120; }
     int durationMedium() const { return m_reducedMotion ? 0 : 220; }
+    QString fontFamily() const { return QStringLiteral("sans-serif"); }
+    QString monoFamily() const { return QStringLiteral("monospace"); }
+    int fontCaption() const { return std::max(12, step(0.86)); }
+    int fontBody() const { return m_basePx; }
+    int fontReading() const { return std::max(17, step(1.15)); }
+    int fontSubtitle() const { return step(1.15); }
+    int fontTitle() const { return step(1.43); }
+    int fontHeadline() const { return step(1.86); }
+    int spaceXs() const { return 4; }
+    int spaceS() const { return 8; }
+    int spaceM() const { return 12; }
+    int spaceL() const { return 16; }
+    int spaceXl() const { return 24; }
+    int spaceXxl() const { return 32; }
+    int radiusS() const { return 6; }
+    int radiusM() const { return 10; }
+    // Body size in pixels from the application font (14 when unknown),
+    // kept between 13 and 24.
+    static int basePixelSize();
     // Whether the environment asks for reduced motion (see reducedMotion).
     static bool prefersReducedMotion();
 
@@ -106,6 +155,7 @@ signals:
 
 private:
     QColor color(const char *key) const;
+    int step(double ratio) const { return int(std::lround(m_basePx * ratio)); }
     void watch();
     void derive();
 
@@ -114,6 +164,7 @@ private:
     QHash<QString, QColor> m_ui;     // derived, accessible colors
     bool m_dark = true;
     bool m_reducedMotion = false;
+    int m_basePx = 14;
     QString m_name;
     QFileSystemWatcher m_watcher;
     QTimer m_debounce;
