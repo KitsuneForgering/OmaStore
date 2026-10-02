@@ -2,7 +2,7 @@
 # One "owner/repo" per line; empty lines and comments are ignored.
 # "list:owner/repo" uses the github.com/owner/repo links in a curated
 # list's README as seeds.
-KitsuneSemCalda/OmaVM
+KitsuneForgering/OmaVM
 michaelmonetized/omadesign
 ZacharyZhang-NY/OmaPhoto
 pch/rawmakase

@@ -11,7 +11,7 @@ Only the latest release receives fixes. Update with the same `install.sh`
 ## Reporting a vulnerability
 
 Please **do not open a public issue**. Report privately through
-[GitHub private vulnerability reporting](https://github.com/KitsuneSemCalda/OmaStore/security/advisories/new).
+[GitHub private vulnerability reporting](https://github.com/KitsuneForgering/OmaStore/security/advisories/new).
 
 Include what you can: the affected version, the steps or a proof of concept
 (for example a crafted archive or manifest), and the impact you observed.

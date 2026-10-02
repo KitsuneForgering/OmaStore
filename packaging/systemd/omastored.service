@@ -1,6 +1,6 @@
 [Unit]
 Description=OmaStore daemon (Omarchy app indexer and installer)
-Documentation=https://github.com/KitsuneSemCalda/OmaStore
+Documentation=https://github.com/KitsuneForgering/OmaStore
 Requires=omastored.socket
 After=omastored.socket network-online.target
 

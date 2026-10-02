@@ -1,4 +1,4 @@
-module github.com/KitsuneSemCalda/OmaStore/backend
+module github.com/KitsuneForgering/OmaStore/backend
 
 go 1.26.0
 

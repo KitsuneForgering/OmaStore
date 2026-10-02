@@ -13,7 +13,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/asset"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/asset"
 )
 
 var elfBin = []byte("\x7fELF\x02\x01\x01\x00fake-binary")

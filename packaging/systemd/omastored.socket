@@ -1,6 +1,6 @@
 [Unit]
 Description=OmaStore daemon socket
-Documentation=https://github.com/KitsuneSemCalda/OmaStore
+Documentation=https://github.com/KitsuneForgering/OmaStore
 
 [Socket]
 ListenStream=%t/omastore.sock

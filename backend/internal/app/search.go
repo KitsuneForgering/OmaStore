@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/search"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/search"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
 )
 
 // searchCache keeps the search index and rebuilds it when the catalog
