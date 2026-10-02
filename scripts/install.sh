@@ -1,6 +1,5 @@
 #!/bin/sh
-# Installs OmaStore into your account straight from GitHub, on a machine that
-# does not have it yet:
+# Installs (or reinstalls) OmaStore into your account straight from GitHub:
 #
 #   curl -fsSLO https://raw.githubusercontent.com/KitsuneSemCalda/OmaStore/dev/scripts/install.sh
 #   sh install.sh
@@ -14,7 +13,8 @@
 # Options:
 #   --source     build from source even if a release exists
 #   --ref REF    branch or tag to build (implies --source; default: $OMASTORE_REF or dev)
-#   --force      install even if an OmaStore is already present
+#   --force      install even beside a system-wide OmaStore (pacman, make install);
+#                the per-user copy takes precedence in PATH and in the menu
 #   --no-skills  do not copy the skills for app authors into the coding agents' skill directories
 #   --no-hooks   do not add the Omarchy post-update hook that reports app updates
 set -eu
@@ -62,14 +62,17 @@ fi
   exit 1
 }
 
-# This script is for the first installation; an existing one is updated
-# through the way it was installed (pacman, make install, or OmaStore itself:
-# "Update OmaStore" in the interface or omastore self-update).
+# A per-user installation from an earlier run is simply replaced (install.sh
+# switches the version and closes the old OmaStore that is running). A system
+# one (pacman, make install) is not this script's: installing beside it puts a
+# second OmaStore first in PATH and in the menu, so that needs --force; the one
+# running is then closed and the new one takes its place.
 if ! "$force"; then
-  for p in "$HOME/.local/bin/omastore-gui" /usr/bin/omastore-gui /usr/local/bin/omastore-gui; do
+  for p in /usr/bin/omastore-gui /usr/local/bin/omastore-gui; do
     if [ -e "$p" ]; then
-      echo "OmaStore is already installed: $p" >&2
-      echo 'Update it from OmaStore itself (omastore self-update), the way it was installed, or run again with --force.' >&2
+      echo "OmaStore is already installed system-wide: $p" >&2
+      echo 'Update it the way it was installed (pacman, or make install from a newer checkout).' >&2
+      echo 'To install a per-user copy that takes precedence over it instead, run again with --force.' >&2
       exit 1
     fi
   done
