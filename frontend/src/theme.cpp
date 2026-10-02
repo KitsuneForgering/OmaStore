@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFontInfo>
 #include <QGuiApplication>
 #include <QRegularExpression>
 #include <QStyleHints>
@@ -116,8 +117,16 @@ QColor Theme::ensureContrast(const QColor &c, const QList<QColor> &bgs, double t
     return best;
 }
 
+int Theme::basePixelSize()
+{
+    if (!qobject_cast<QGuiApplication *>(QCoreApplication::instance()))
+        return 14;
+    const int px = QFontInfo(QGuiApplication::font()).pixelSize();
+    return px > 0 ? std::clamp(px, 13, 24) : 14;
+}
+
 Theme::Theme(QStringList dirs, QObject *parent)
-    : QObject(parent), m_dirs(dirs.isEmpty() ? defaultDirs() : std::move(dirs))
+    : QObject(parent), m_dirs(dirs.isEmpty() ? defaultDirs() : std::move(dirs)), m_basePx(basePixelSize())
 {
     m_debounce.setSingleShot(true);
     m_debounce.setInterval(200);
@@ -195,6 +204,7 @@ void Theme::derive()
     ui.insert(QStringLiteral("success"), ensureContrast(color("green"), grounds, TextContrast));
     ui.insert(QStringLiteral("warning"), ensureContrast(color("yellow"), grounds, TextContrast));
     ui.insert(QStringLiteral("border"), ensureContrast(color("muted"), {bg, surface}, UiContrast));
+    ui.insert(QStringLiteral("outline"), ensureContrast(mix(surface, fgRaw, 0.12), {bg, surface}, OutlineContrast));
     // The focus color also highlights selected text: it needs 3:1 around it and a
     // text color with 7:1 on it. Pushing it further from the backgrounds only
     // helps both, so it moves until the text fits too.

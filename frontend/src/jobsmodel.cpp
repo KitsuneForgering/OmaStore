@@ -28,7 +28,7 @@ JobsModel::JobsModel(RpcClient *rpc, QObject *parent)
             if (!err.ok())
                 return;
             for (const QJsonValue &v : result.toArray())
-                upsert(v.toObject());
+                upsert(v.toObject(), true);
         });
     });
 }
@@ -98,7 +98,7 @@ void JobsModel::bump()
     emit revisionChanged();
 }
 
-void JobsModel::upsert(const QJsonObject &job)
+void JobsModel::upsert(const QJsonObject &job, bool history)
 {
     const QString id = str(job, "id");
     if (id.isEmpty())
@@ -111,7 +111,7 @@ void JobsModel::upsert(const QJsonObject &job)
         m_jobs.append(job);
         endInsertRows();
         emit countChanged();
-        justFinished = str(job, "state") != Running;
+        justFinished = !history && str(job, "state") != Running;
     } else {
         // Notifications may arrive out of order between jobs.list and the event
         // stream: a finished job never goes back to "running".

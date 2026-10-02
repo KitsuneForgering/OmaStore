@@ -26,6 +26,8 @@ class Backend : public QObject {
     // Why the last install, update or dependency job of the open app failed
     // ("" if it did not, or it succeeded since).
     Q_PROPERTY(QString detailFailure READ detailFailure NOTIFY detailChanged)
+    // The open app is being removed (install.uninstall is synchronous).
+    Q_PROPERTY(bool detailRemoving READ detailRemoving NOTIFY detailChanged)
     Q_PROPERTY(QVariantList similar READ similar NOTIFY similarChanged)
     Q_PROPERTY(int updatesAvailable READ updatesAvailable NOTIFY updatesAvailableChanged)
     // Compatibility report of the last author.check (Publish page).
@@ -35,7 +37,7 @@ class Backend : public QObject {
     // Why the last catalog refresh failed ("" after a successful one).
     Q_PROPERTY(QString indexError READ indexError NOTIFY indexErrorChanged)
     // Whether the GitHub user starred the open app: StarYes, StarNo or
-    // StarUnknown (not loaded yet, or no GitHub token: see starHint).
+    // StarUnknown (not loaded yet, or it could not be checked: starHint says why).
     Q_PROPERTY(int starState READ starState NOTIFY starChanged)
     Q_PROPERTY(bool starBusy READ starBusy NOTIFY starChanged)
     Q_PROPERTY(QString starHint READ starHint NOTIFY starChanged)
@@ -46,6 +48,11 @@ class Backend : public QObject {
     Q_PROPERTY(QVariantMap selfStatus READ selfStatus NOTIFY selfChanged)
     // Version installed by a finished self-update, waiting for a restart ("" if none).
     Q_PROPERTY(QString selfInstalled READ selfInstalled NOTIFY selfChanged)
+    // Why the running omastored does not match this interface (daemon.hello:
+    // an older protocol or missing methods); "" when it does.
+    Q_PROPERTY(QString daemonWarning READ daemonWarning NOTIFY daemonChanged)
+    // The running daemon can be restarted from here (it has self.restart).
+    Q_PROPERTY(bool canRestartDaemon READ canRestartDaemon NOTIFY daemonChanged)
 
 public:
     enum StarState { StarUnknown = -1, StarNo = 0, StarYes = 1 };
@@ -61,6 +68,7 @@ public:
     QVariantMap detail() const { return m_detail; }
     bool detailLoading() const { return m_detailLoading; }
     QString detailFailure() const;
+    bool detailRemoving() const { return !m_removing.isEmpty() && m_removing.compare(m_detailRepo, Qt::CaseInsensitive) == 0; }
     QVariantList similar() const { return m_similar; }
     int updatesAvailable() const;
     QVariantMap authorCheck() const { return m_authorCheck; }
@@ -73,12 +81,25 @@ public:
     QVariantMap deps() const { return m_deps; }
     QVariantMap selfStatus() const { return m_selfStatus; }
     QString selfInstalled() const { return m_selfInstalled; }
+    QString daemonWarning() const { return m_daemonWarning; }
+    bool canRestartDaemon() const { return m_canRestartDaemon; }
+    // The protocol this interface was built for (docs/ipc.md) and the methods
+    // it needs from the daemon.
+    static constexpr int Protocol = 2;
+    static const QStringList &requiredMethods();
+    // daemonWarning for a daemon.hello result ("" when it fits).
+    static QString helloWarning(const QJsonObject &hello);
 
     Q_INVOKABLE void openDetail(const QString &repo);
     Q_INVOKABLE void closeDetail();
-    Q_INVOKABLE void install(const QString &repo);
-    Q_INVOKABLE void update(const QString &repo);
-    Q_INVOKABLE void uninstall(const QString &repo);
+    // allowUnverified: the user confirmed a file with no checksum (the daemon
+    // refuses it otherwise, -32017).
+    Q_INVOKABLE void install(const QString &repo, bool allowUnverified = false);
+    Q_INVOKABLE void update(const QString &repo, bool allowUnverified = false);
+    // force: remove it even while it runs (after the user confirmed).
+    Q_INVOKABLE void uninstall(const QString &repo, bool force = false);
+    // Back to the version the last update replaced (still on disk).
+    Q_INVOKABLE void rollback(const QString &repo);
     Q_INVOKABLE void updateAll();
     Q_INVOKABLE void refreshIndex(bool force = false);
     Q_INVOKABLE void cancelJob(const QString &jobId);
@@ -93,6 +114,11 @@ public:
     // After a self-update: stops the daemon and emits restartReady, so the
     // new version of the interface (and of the daemon) takes over.
     Q_INVOKABLE void restartSelf();
+    // Stops the running (older) daemon; the client starts the one that
+    // belongs to this interface when it reconnects.
+    Q_INVOKABLE void restartDaemon();
+    // What a job is doing, for people: "Downloading", "Checking GitHub"…
+    Q_INVOKABLE static QString stageText(const QString &kind, const QString &stage);
     // README markdown ready to display (without remote images).
     Q_INVOKABLE QString readmeForDisplay(const QString &markdown) const;
     // Asks the daemon what the store sees of a repository (owner/repo or a
@@ -131,6 +157,7 @@ signals:
     void starChanged();
     void depsChanged();
     void selfChanged();
+    void daemonChanged();
     // The daemon stopped for the restart: start gui (the updated interface) and quit.
     void restartReady(const QString &gui);
     // An app was installed and has missing system dependencies that pacman
@@ -138,14 +165,17 @@ signals:
     void depsSuggested(const QString &repo, const QStringList &packages);
     // Error to show to the user.
     void errorOccurred(const QString &message);
+    // Removing repo was refused because it is running (processes: who).
+    void removeRefusedInUse(const QString &repo, const QString &processes);
     // Informational notice (e.g. installation finished).
     void notice(const QString &message);
 
 private:
     void loadCategories();
+    void checkDaemon();
     void reloadDetail();
     void loadSimilar(const QString &repo);
-    void startJob(const QString &method, const QString &repo);
+    void startJob(const QString &method, const QString &repo, QJsonObject params = {});
     void maybeIndexOnFirstRun();
     void sendAuthorCheck(const QJsonObject &params);
     void loadStar(const QString &repo);
@@ -171,9 +201,17 @@ private:
     int m_starState = StarUnknown;
     bool m_starBusy = false;
     QString m_starHint;
+    QString m_removing; // repo being uninstalled
+    // Generation of the latest request of each kind: an older answer for the
+    // same app (a reload overtaken by another) is dropped.
+    int m_detailSeq = 0;
+    int m_similarSeq = 0;
+    int m_depsSeq = 0;
     QVariantMap m_deps;
     QHash<QString, QString> m_failures; // lowercase repo → last job error
     QVariantMap m_selfStatus;
     QString m_selfInstalled;
     QString m_selfGui; // launcher of the updated interface
+    QString m_daemonWarning;
+    bool m_canRestartDaemon = false;
 };

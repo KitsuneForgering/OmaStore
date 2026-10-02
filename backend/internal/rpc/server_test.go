@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -62,7 +63,7 @@ func (f *fakeBackend) GetApp(ctx context.Context, name string) (*store.AppDetail
 	return &store.AppDetail{
 		App:     store.App{FullName: name, Name: "Photo", Readme: "# Photo"},
 		Repo:    store.Repo{FullName: name, LatestTag: "v2", License: "MIT"},
-		Assets:  []store.Asset{{Name: "p.tar.gz", Format: "tar.gz", Digest: "sha256:x"}, {Name: "p.bin", Format: "binary"}},
+		Assets:  []store.Asset{{Name: "p.tar.gz", Format: "tar.gz", Digest: "sha256:" + strings.Repeat("ab", 32)}, {Name: "p.bin", Format: "binary"}},
 		Install: &store.Install{FullName: name, Version: "v1"},
 	}, nil
 }
@@ -107,7 +108,8 @@ func (f *fakeBackend) Index(ctx context.Context, opts index.Options) (index.Stat
 	return index.Stats{Updated: 2}, nil
 }
 
-func (f *fakeBackend) Install(ctx context.Context, name string, p func(install.Progress)) (*store.Install, error) {
+func (f *fakeBackend) Install(ctx context.Context, name string, opts install.Options) (*store.Install, error) {
+	p := opts.Progress
 	p(install.Progress{Stage: install.StageDownload, Done: 5, Total: 10})
 	if err := f.wait(ctx); err != nil {
 		return nil, err
@@ -122,11 +124,15 @@ func (f *fakeBackend) Install(ctx context.Context, name string, p func(install.P
 	return &store.Install{FullName: name, Version: "v2", ExecPath: "/x"}, nil
 }
 
-func (f *fakeBackend) Update(ctx context.Context, name string, p func(install.Progress)) (*store.Install, error) {
-	return f.Install(ctx, name, p)
+func (f *fakeBackend) Update(ctx context.Context, name string, opts install.Options) (*store.Install, error) {
+	return f.Install(ctx, name, opts)
 }
 
-func (f *fakeBackend) Uninstall(ctx context.Context, name string) error {
+func (f *fakeBackend) Rollback(ctx context.Context, name string) (*store.Install, error) {
+	return nil, install.ErrNoPrevious
+}
+
+func (f *fakeBackend) Uninstall(ctx context.Context, name string, force bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if _, ok := f.installed[name]; !ok && name != "acme/photo" {
@@ -324,6 +330,47 @@ func (cl *client) waitNote(method string, match func(Job) bool) Job {
 	}
 }
 
+// daemon.hello advertises exactly the methods the dispatcher answers: an
+// interface decides what to offer from that list, so a method added to the
+// switch but not to Methods (or the reverse) would hide a feature or offer a
+// broken one.
+func TestHelloAdvertisesEveryMethod(t *testing.T) {
+	src, err := os.ReadFile("methods.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	handled := map[string]bool{}
+	for _, m := range regexp.MustCompile(`(?m)^\tcase ("[a-z]+\.[a-zA-Z]+"(?:, "[a-z]+\.[a-zA-Z]+")*):`).FindAllStringSubmatch(string(src), -1) {
+		for _, name := range regexp.MustCompile(`"([^"]+)"`).FindAllStringSubmatch(m[1], -1) {
+			handled[name[1]] = true
+		}
+	}
+	advertised := map[string]bool{}
+	for _, m := range Methods {
+		advertised[m] = true
+		if !handled[m] {
+			t.Errorf("%s is advertised but not handled", m)
+		}
+	}
+	for m := range handled {
+		if !advertised[m] {
+			t.Errorf("%s is handled but missing from Methods", m)
+		}
+	}
+	if len(handled) < 20 {
+		t.Fatalf("parsed only %d methods: %v", len(handled), handled)
+	}
+
+	_, sock := startServer(t, newFake())
+	var hello struct {
+		Protocol int      `json:"protocol"`
+		Methods  []string `json:"methods"`
+	}
+	if e := dial(t, sock).call("daemon.hello", nil, &hello); e != nil || hello.Protocol != ProtocolVersion || len(hello.Methods) != len(Methods) {
+		t.Errorf("hello: %+v %v", hello, e)
+	}
+}
+
 func TestProtocolErrors(t *testing.T) {
 	_, sock := startServer(t, newFake())
 	cl := dial(t, sock)
@@ -390,7 +437,7 @@ func TestCatalogDTOs(t *testing.T) {
 		t.Fatal(e)
 	}
 	if d.License != "MIT" || d.Install == nil || d.Install.Version != "v1" || len(d.Assets) != 2 ||
-		!d.Assets[0].Verified || d.Assets[1].Verified || !d.UpdateAvailable {
+		d.Assets[0].Checksum == "" || d.Assets[1].Checksum != "" || !d.UpdateAvailable {
 		t.Errorf("detail = %+v", d)
 	}
 

@@ -4,6 +4,8 @@ package index
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,7 +30,7 @@ import (
 // when changing rules that affect what is stored (assets, categories, README...):
 // repositories stored with a lower version are reprocessed even without changes
 // on GitHub.
-const Version = 9
+const Version = 10
 
 // GitHub is the subset of the client used by the indexer.
 type GitHub interface {
@@ -610,12 +612,12 @@ func (ix *Indexer) process(ctx context.Context, name string, force, explicit boo
 		}
 		if notModified {
 			// Same metadata (so pushed_at and HEAD too); a release can be
-			// published on an existing tag, so we check the tag.
+			// published, or its files replaced, without a push, so we check it.
 			rel, err := ix.GH.LatestRelease(ctx, name)
 			if err != nil {
 				return 0, err
 			}
-			if tagOf(rel) == prev.LatestTag {
+			if releaseSig(rel) == prev.ReleaseSig {
 				return outUnchanged, ix.Store.TouchRepo(ctx, name, now)
 			}
 			repo, newETag, _, err = ix.GH.GetRepo(ctx, name, "")
@@ -674,9 +676,9 @@ func (ix *Indexer) process(ctx context.Context, name string, force, explicit boo
 	}
 	score := Score(repo.Stars, repo.PushedAt, now)
 
-	// Cache check: if pushed_at, HEAD and tag did not change, do not
-	// reprocess. Only the volatile data (stars etc.) is updated.
-	if known && !force && prev.PushedAt.Equal(repo.PushedAt) && prev.HeadSHA == sha && prev.LatestTag == tagOf(rel) {
+	// Cache check: if pushed_at, HEAD and the release (tag and files) did
+	// not change, do not reprocess. Only the volatile data (stars etc.) is updated.
+	if known && !force && prev.PushedAt.Equal(repo.PushedAt) && prev.HeadSHA == sha && prev.ReleaseSig == releaseSig(rel) {
 		if batched && prev.Stars == repo.Stars && prev.Description == repo.Description {
 			return outUnchanged, ix.Store.TouchRepo(ctx, name, now)
 		}
@@ -717,6 +719,7 @@ func (ix *Indexer) process(ctx context.Context, name string, force, explicit boo
 		PushedAt:      repo.PushedAt,
 		HeadSHA:       sha,
 		LatestTag:     tagOf(rel),
+		ReleaseSig:    releaseSig(rel),
 		ReleaseNotes:  releaseNotes(rel),
 		ETag:          newETag,
 		IndexedAt:     now,
@@ -776,6 +779,28 @@ func tagOf(rel *github.Release) string {
 		return ""
 	}
 	return rel.Tag
+}
+
+// releaseSig fingerprints a release for the cache check: its tag and the
+// name, size and digest of every asset, in name order. Comparing only the
+// tag missed a binary replaced under the same tag (the stored digest went
+// stale and every install failed the checksum) and assets uploaded after an
+// index run caught the release half published. "" without a release.
+func releaseSig(rel *github.Release) string {
+	if rel == nil {
+		return ""
+	}
+	lines := make([]string, 0, len(rel.Assets))
+	for _, a := range rel.Assets {
+		lines = append(lines, fmt.Sprintf("%s\x00%d\x00%s", a.Name, a.Size, a.Digest))
+	}
+	sort.Strings(lines)
+	h := sha256.New()
+	fmt.Fprintf(h, "%s\n", rel.Tag)
+	for _, l := range lines {
+		fmt.Fprintf(h, "%s\n", l)
+	}
+	return hex.EncodeToString(h.Sum(nil))[:32]
 }
 
 // maxScreenshots limits the screenshots per app.

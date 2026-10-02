@@ -42,6 +42,11 @@ var (
 	// ErrIncomplete means some registered files could not be removed; they
 	// stay recorded so a later attempt can remove them.
 	ErrIncomplete = errors.New("some files could not be removed")
+	// ErrUnverified means the selected file has neither a GitHub digest nor a
+	// published checksum, and the caller did not allow installing it anyway.
+	ErrUnverified = errors.New("the release publishes no checksum for this file")
+	// ErrNoPrevious means there is no earlier version on disk to go back to.
+	ErrNoPrevious = errors.New("no previous version to go back to")
 )
 
 // Installer installs and removes apps.
@@ -62,6 +67,24 @@ type Installer struct {
 
 	defaultHTTP     *http.Client
 	defaultHTTPOnce sync.Once
+}
+
+// Options of an install or update.
+type Options struct {
+	Progress func(Progress)
+	// AllowUnverified installs a file that has no digest and no published
+	// checksum. The one rule for every entry point (GUI, CLI, updates): the
+	// user must have said yes to that file, otherwise ErrUnverified.
+	AllowUnverified bool
+}
+
+// Verifiable reports whether a's download can be checked: a digest from the
+// API or a checksum file in the release.
+func Verifiable(a store.Asset) bool {
+	if algo, hexsum, ok := strings.Cut(a.Digest, ":"); ok && (algo == "sha256" || algo == "sha512") && reHex.MatchString(hexsum) {
+		return true
+	}
+	return a.ChecksumURL != ""
 }
 
 // Progress is an installation's progress.
@@ -234,7 +257,8 @@ func SelectAsset(assets []store.Asset, goarch string, m *manifest.Manifest) (sto
 }
 
 // Install installs (or reinstalls/updates) the latest release of fullName.
-func (in *Installer) Install(ctx context.Context, fullName string, progress func(Progress)) (*store.Install, error) {
+func (in *Installer) Install(ctx context.Context, fullName string, opts Options) (*store.Install, error) {
+	progress := opts.Progress
 	unlock, err := in.lock(fullName)
 	if err != nil {
 		return nil, err
@@ -259,6 +283,9 @@ func (in *Installer) Install(ctx context.Context, fullName string, progress func
 	sel, ok := SelectAsset(d.Assets, in.goarch(), m)
 	if !d.Installable || !ok {
 		return nil, fmt.Errorf("%s: %w", fullName, ErrNotInstallable)
+	}
+	if !opts.AllowUnverified && !Verifiable(sel) {
+		return nil, fmt.Errorf("%s: %w: %s", fullName, ErrUnverified, sel.Name)
 	}
 	prev, err := in.Store.GetInstall(ctx, fullName)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
@@ -324,6 +351,14 @@ func (in *Installer) Install(ctx context.Context, fullName string, progress func
 		return nil, err
 	}
 
+	// Reinstalling the version that is running would swap its directory
+	// under it (another version is installed beside it instead).
+	if prev != nil {
+		if ps, err := procsUsing(filepath.Join(appDir, sanitizeVersion(d.Repo.LatestTag))); err == nil && len(ps) > 0 {
+			return nil, fmt.Errorf("%s: %w: %s", fullName, ErrInUse, describe(ps))
+		}
+	}
+
 	// 4. Integration: version directory, launcher, icon and .desktop. Everything
 	// goes through tx so it can be undone.
 	report(Progress{Stage: StageIntegrate})
@@ -340,9 +375,10 @@ func (in *Installer) Install(ctx context.Context, fullName string, progress func
 	}
 
 	// Remove what the previous installation created and the new one no longer
-	// uses (e.g. the old version directory). What cannot be removed stays
-	// recorded in the new installation, so uninstalling or the next update
-	// tries again.
+	// uses (the version before the previous one: the previous one is kept, see
+	// integrate). A version directory a process still runs from is left alone.
+	// What is not removed stays recorded in the new installation, so
+	// uninstalling or the next update tries again.
 	if prev != nil {
 		keep := map[string]bool{}
 		for _, f := range inst.Files {
@@ -350,7 +386,17 @@ func (in *Installer) Install(ctx context.Context, fullName string, progress func
 		}
 		var pending []string
 		for _, f := range prev.Files {
-			if !keep[f] && in.removeRegistered(f) != nil {
+			if keep[f] {
+				continue
+			}
+			if within(in.Paths.AppsDir, f) {
+				if ps, err := procsUsing(f); err == nil && len(ps) > 0 {
+					in.log().Info("old version still running; kept for now", "path", f, "processes", describe(ps))
+					pending = append(pending, f)
+					continue
+				}
+			}
+			if in.removeRegistered(f) != nil {
 				pending = append(pending, f)
 			}
 		}
@@ -420,18 +466,7 @@ func (in *Installer) integrate(ctx context.Context, t *tx, d *store.AppDetail, m
 	if err := in.checkOwned(desktopPath, "", prev); err != nil {
 		return nil, err
 	}
-	content := Desktop{
-		Name:        d.Name,
-		Comment:     d.Summary,
-		Exec:        execPath,
-		Icon:        iconName,
-		Terminal:    terminalFor(d, m),
-		TUILauncher: in.TUILauncher,
-		AppID:       "omastore." + strings.ToLower(owner+"."+repo),
-		Categories:  categoriesFor(d, m),
-		Repo:        d.FullName,
-		Version:     d.Repo.LatestTag,
-	}.Render()
+	content := in.desktopEntry(d, m, owner, repo, execPath, iconName, d.Repo.LatestTag)
 	if err := os.MkdirAll(in.Paths.Applications, 0o755); err != nil {
 		return nil, err
 	}
@@ -451,6 +486,23 @@ func (in *Installer) integrate(ctx context.Context, t *tx, d *store.AppDetail, m
 		DesktopPath: desktopPath,
 		Files:       files,
 	}
+	// The version this update replaces stays on disk and recorded: a copy
+	// that is running keeps its files, and Rollback can go back to it. A
+	// reinstall of the same version keeps the previous one it had.
+	if prev != nil {
+		prevDir := filepath.Join(appDir, sanitizeVersion(prev.Version))
+		switch {
+		case prevDir != versionDir && registered(prev.Files, prevDir) && isDir(prevDir):
+			inst.PreviousVersion, inst.PreviousExec = prev.Version, prev.ExecPath
+			inst.Files = append(inst.Files, prevDir)
+		case prevDir == versionDir && prev.PreviousVersion != "":
+			older := filepath.Join(appDir, sanitizeVersion(prev.PreviousVersion))
+			if older != versionDir && registered(prev.Files, older) && isDir(older) {
+				inst.PreviousVersion, inst.PreviousExec = prev.PreviousVersion, prev.PreviousExec
+				inst.Files = append(inst.Files, older)
+			}
+		}
+	}
 	if testHookBeforeSave != nil {
 		if err := testHookBeforeSave(); err != nil {
 			return nil, err
@@ -459,6 +511,134 @@ func (in *Installer) integrate(ctx context.Context, t *tx, d *store.AppDetail, m
 	if err := in.Store.SaveInstall(ctx, *inst); err != nil {
 		return nil, err
 	}
+	return inst, nil
+}
+
+func registered(files []string, p string) bool {
+	for _, f := range files {
+		if f == p {
+			return true
+		}
+	}
+	return false
+}
+
+func isDir(p string) bool {
+	st, err := os.Lstat(p)
+	return err == nil && st.IsDir()
+}
+
+// desktopEntry renders the app's .desktop for an executable and version.
+func (in *Installer) desktopEntry(d *store.AppDetail, m *manifest.Manifest, owner, repo, execPath, icon, version string) string {
+	return Desktop{
+		Name:        d.Name,
+		Comment:     d.Summary,
+		Exec:        execPath,
+		Icon:        icon,
+		Terminal:    terminalFor(d, m),
+		TUILauncher: in.TUILauncher,
+		AppID:       "omastore." + strings.ToLower(owner+"."+repo),
+		Categories:  categoriesFor(d, m),
+		Repo:        d.FullName,
+		Version:     version,
+	}.Render()
+}
+
+// IsBroken reports whether an installation lost its executable outside
+// OmaStore (a folder deleted by hand, a cleanup tool): it is still recorded,
+// but Open cannot work. Reinstalling repairs it.
+func IsBroken(inst store.Install) bool {
+	if inst.ExecPath == "" {
+		return false
+	}
+	st, err := os.Stat(inst.ExecPath)
+	return err != nil || !st.Mode().IsRegular()
+}
+
+// Rollback goes back to the version the last update replaced, still on
+// disk: the launcher and the .desktop point at it again, and the two versions
+// swap places (so rolling back twice returns to the newer one). The catalog
+// then offers the update again; nothing is downloaded.
+func (in *Installer) Rollback(ctx context.Context, fullName string) (*store.Install, error) {
+	unlock, err := in.lock(fullName)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	inst, err := in.Store.GetInstall(ctx, fullName)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, fmt.Errorf("%s: %w", fullName, ErrNotInstalled)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if inst.PreviousVersion == "" || inst.PreviousExec == "" {
+		return nil, fmt.Errorf("%s: %w", inst.FullName, ErrNoPrevious)
+	}
+	if st, err := os.Stat(inst.PreviousExec); err != nil || !st.Mode().IsRegular() || !within(in.Paths.AppsDir, inst.PreviousExec) {
+		return nil, fmt.Errorf("%s: %w: %s is gone", inst.FullName, ErrNoPrevious, inst.PreviousVersion)
+	}
+	d, err := in.Store.GetApp(ctx, inst.FullName)
+	if err != nil {
+		return nil, fmt.Errorf("app %s: %w", inst.FullName, err)
+	}
+	owner, repo, err := splitName(inst.FullName)
+	if err != nil {
+		return nil, err
+	}
+	m := manifest.Decode(d.Manifest)
+
+	icon := "application-x-executable"
+	id := appID(owner, repo)
+	var launchers []string
+	for _, f := range inst.Files {
+		switch {
+		case within(in.Paths.Icons, f):
+			icon = id
+		case filepath.Dir(f) == filepath.Clean(in.Paths.BinDir) && isOurLink(f, in.Paths.AppsDir):
+			launchers = append(launchers, f)
+		}
+	}
+
+	t := &tx{}
+	write := func(p, content string, mode os.FileMode) error {
+		if err := t.prepare(p); err != nil {
+			return err
+		}
+		return os.WriteFile(p, []byte(content), mode)
+	}
+	err = func() error {
+		for _, l := range launchers {
+			if err := write(l, launcherScript(inst.FullName, inst.PreviousExec), 0o755); err != nil {
+				return err
+			}
+		}
+		if inst.DesktopPath != "" {
+			content := in.desktopEntry(d, m, owner, repo, inst.PreviousExec, icon, inst.PreviousVersion)
+			if err := write(inst.DesktopPath, content, 0o644); err != nil {
+				return err
+			}
+		}
+		back := *inst
+		back.Version, back.PreviousVersion = inst.PreviousVersion, inst.Version
+		back.ExecPath, back.PreviousExec = inst.PreviousExec, inst.ExecPath
+		back.InstalledAt = time.Now()
+		if err := in.Store.SaveInstall(ctx, back); err != nil {
+			return err
+		}
+		*inst = back
+		return nil
+	}()
+	if err != nil {
+		if rbErr := t.rollback(); rbErr != nil {
+			in.log().Error("incomplete rollback", "repo", inst.FullName, "err", rbErr)
+		}
+		return nil, err
+	}
+	if err := t.commit(); err != nil {
+		in.log().Warn("could not remove backups", "repo", inst.FullName, "err", err)
+	}
+	in.runHooks(ctx)
 	return inst, nil
 }
 
@@ -607,7 +787,7 @@ func readSmall(p string) ([]byte, error) {
 }
 
 // Update installs the new version if there is one; otherwise returns ErrUpToDate.
-func (in *Installer) Update(ctx context.Context, fullName string, progress func(Progress)) (*store.Install, error) {
+func (in *Installer) Update(ctx context.Context, fullName string, opts Options) (*store.Install, error) {
 	inst, err := in.Store.GetInstall(ctx, fullName)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, fmt.Errorf("%s: %w", fullName, ErrNotInstalled)
@@ -622,13 +802,14 @@ func (in *Installer) Update(ctx context.Context, fullName string, progress func(
 	if d.Repo.LatestTag == inst.Version {
 		return inst, ErrUpToDate
 	}
-	return in.Install(ctx, fullName, progress)
+	return in.Install(ctx, fullName, opts)
 }
 
 // Uninstall removes only the paths registered in the database. If some of
 // them cannot be removed, the record is kept with just those paths and the
-// error wraps ErrIncomplete, so uninstalling again retries them.
-func (in *Installer) Uninstall(ctx context.Context, fullName string) error {
+// error wraps ErrIncomplete, so uninstalling again retries them. While the
+// app runs it refuses with ErrInUse, unless force.
+func (in *Installer) Uninstall(ctx context.Context, fullName string, force bool) error {
 	unlock, err := in.lock(fullName)
 	if err != nil {
 		return err
@@ -640,6 +821,13 @@ func (in *Installer) Uninstall(ctx context.Context, fullName string) error {
 	}
 	if err != nil {
 		return err
+	}
+	if !force {
+		if owner, repo, err := splitName(inst.FullName); err == nil {
+			if ps, err := procsUsing(filepath.Join(in.Paths.AppsDir, owner+"__"+repo)); err == nil && len(ps) > 0 {
+				return fmt.Errorf("%s: %w: %s", inst.FullName, ErrInUse, describe(ps))
+			}
+		}
 	}
 	var pending []string
 	var errs []error

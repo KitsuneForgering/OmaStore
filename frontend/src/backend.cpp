@@ -37,6 +37,7 @@ Backend::Backend(RpcClient *rpc, QObject *parent)
     connect(rpc, &RpcClient::connectedChanged, this, [this] {
         emit connectedChanged();
         if (m_rpc->isConnected()) {
+            checkDaemon();
             loadCategories();
             reloadDetail();
             if (!m_detailRepo.isEmpty()) {
@@ -91,6 +92,11 @@ Backend::Backend(RpcClient *rpc, QObject *parent)
         }
         if (kind == QLatin1String("deps") && repoOf(job).compare(m_detailRepo, Qt::CaseInsensitive) == 0)
             loadDeps(m_detailRepo);
+        if (state == QLatin1String("canceled") && kind != QLatin1String("index")) {
+            emit notice(kind == QLatin1String("update") ? tr("Update of %1 canceled; nothing changed.").arg(repoOf(job))
+                        : kind == QLatin1String("deps") ? tr("Installing the dependencies of %1 was canceled.").arg(repoOf(job))
+                        : tr("Installation of %1 canceled; nothing was installed.").arg(repoOf(job)));
+        }
         if (kind != QLatin1String("index") && state != QLatin1String("canceled")) {
             const QString key = repoOf(job).toLower();
             const bool had = m_failures.contains(key);
@@ -161,8 +167,75 @@ QString Backend::friendlyError(int code, const QString &message)
         return tr("System dependencies can only be installed on Arch Linux (pacman).");
     case -32014:
         return tr("Some dependencies are not in the pacman repositories (they may be in the AUR). Install them manually.");
+    case -32015:
+        return tr("The app is open. Close it and try again.");
+    case -32016:
+        return tr("There is no earlier version of this app on this computer to go back to.");
+    case -32018:
+        return tr("Your package database is older than the mirrors, so pacman could not download the "
+                  "dependencies. Update the system (omarchy update), then try again. Nothing was installed.");
+    case -32017:
+        return tr("This release publishes no checksum, so OmaStore does not install it without asking. "
+                  "Open the app's page to confirm.");
     }
     return message;
+}
+
+const QStringList &Backend::requiredMethods()
+{
+    static const QStringList methods{
+        QStringLiteral("catalog.list"), QStringLiteral("catalog.get"), QStringLiteral("install.start"),
+        QStringLiteral("install.uninstall"), QStringLiteral("install.rollback"), QStringLiteral("star.get"),
+        QStringLiteral("deps.check"), QStringLiteral("self.status"),
+    };
+    return methods;
+}
+
+QString Backend::helloWarning(const QJsonObject &hello)
+{
+    const int protocol = hello.value(QStringLiteral("protocol")).toInt();
+    if (protocol > Protocol)
+        return tr("omastored is newer than this window. Close OmaStore and open it again to use the new version.");
+    QStringList missing;
+    const QJsonArray methods = hello.value(QStringLiteral("methods")).toArray();
+    for (const QString &m : requiredMethods()) {
+        if (!methods.contains(m))
+            missing << m;
+    }
+    if (protocol < Protocol || !missing.isEmpty())
+        return tr("The running omastored is older than this window (protocol %1, this window needs %2), so some "
+                  "actions will fail. Restart it to use the version that came with this window.")
+            .arg(protocol)
+            .arg(Protocol);
+    return {};
+}
+
+void Backend::checkDaemon()
+{
+    m_rpc->call(QStringLiteral("daemon.hello"), {}, [this](const QJsonValue &result, const RpcError &err) {
+        if (!err.ok())
+            return;
+        const QJsonObject hello = result.toObject();
+        const QString warning = helloWarning(hello);
+        const bool canRestart = hello.value(QStringLiteral("methods")).toArray().contains(QStringLiteral("self.restart"));
+        if (warning != m_daemonWarning || canRestart != m_canRestartDaemon) {
+            m_daemonWarning = warning;
+            m_canRestartDaemon = canRestart;
+            emit daemonChanged();
+        }
+    });
+}
+
+void Backend::restartDaemon()
+{
+    m_rpc->call(QStringLiteral("self.restart"), {}, [this](const QJsonValue &, const RpcError &err) {
+        // A dropped connection means it already left; the client reconnects
+        // and starts the daemon next to this interface.
+        if (!err.ok() && err.code != RpcClient::DisconnectedCode)
+            emit errorOccurred(err.code == -32002
+                                   ? tr("Wait for the running operations to finish, then try again.")
+                                   : friendlyError(err.code, err.message));
+    });
 }
 
 void Backend::loadCategories()
@@ -212,7 +285,17 @@ void Backend::loadStar(const QString &repo)
         if (repo != m_detailRepo || m_starBusy)
             return;
         if (!err.ok()) {
-            setStar(StarUnknown, false, err.code == -32011 ? friendlyError(err.code, err.message) : QString());
+            // Never a dead button without a reason: the tooltip says why.
+            QString why;
+            if (err.code == -32011)
+                why = friendlyError(err.code, err.message);
+            else if (err.code == -32601)
+                why = tr("This omastored is older than the interface and cannot star apps. Restart OmaStore.");
+            else if (err.code == RpcClient::DisconnectedCode)
+                why = tr("Not connected to omastored.");
+            else
+                why = tr("Could not check your star on GitHub: %1").arg(friendlyError(err.code, err.message));
+            setStar(StarUnknown, false, why);
             return;
         }
         setStar(result.toObject().value(QStringLiteral("starred")).toBool() ? StarYes : StarNo, false, {});
@@ -238,17 +321,19 @@ void Backend::toggleStar()
         setStar(want ? StarYes : StarNo, false, {});
         m_detail.insert(QStringLiteral("stars"), result.toObject().value(QStringLiteral("stars")).toInt());
         emit detailChanged();
+        emit notice(want ? tr("You starred %1 on GitHub").arg(repo) : tr("Your star on %1 was removed").arg(repo));
     });
 }
 
 void Backend::loadDeps(const QString &repo, bool suggest)
 {
+    const int seq = ++m_depsSeq;
     m_rpc->call(QStringLiteral("deps.check"), {{QStringLiteral("repo"), repo}},
-                [this, repo, suggest](const QJsonValue &result, const RpcError &err) {
+                [this, repo, suggest, seq](const QJsonValue &result, const RpcError &err) {
         if (!err.ok())
             return;
         const QVariantMap deps = result.toObject().toVariantMap();
-        if (repo.compare(m_detailRepo, Qt::CaseInsensitive) == 0) {
+        if (seq == m_depsSeq && repo.compare(m_detailRepo, Qt::CaseInsensitive) == 0) {
             m_deps = deps;
             emit depsChanged();
         }
@@ -265,9 +350,10 @@ void Backend::installDeps(const QString &repo)
 
 void Backend::loadSimilar(const QString &repo)
 {
+    const int seq = ++m_similarSeq;
     m_rpc->call(QStringLiteral("catalog.similar"), {{QStringLiteral("repo"), repo}, {QStringLiteral("limit"), 6}},
-                [this, repo](const QJsonValue &result, const RpcError &err) {
-        if (repo != m_detailRepo || !err.ok())
+                [this, repo, seq](const QJsonValue &result, const RpcError &err) {
+        if (seq != m_similarSeq || repo != m_detailRepo || !err.ok())
             return;
         m_similar = result.toArray().toVariantList();
         emit similarChanged();
@@ -292,12 +378,13 @@ void Backend::reloadDetail()
     if (m_detailRepo.isEmpty())
         return;
     const QString repo = m_detailRepo;
+    const int seq = ++m_detailSeq;
     m_detailLoading = true;
     emit detailChanged();
     m_rpc->call(QStringLiteral("catalog.get"), {{QStringLiteral("repo"), repo}},
-                [this, repo](const QJsonValue &result, const RpcError &err) {
-        if (repo != m_detailRepo)
-            return; // the user already opened another app
+                [this, repo, seq](const QJsonValue &result, const RpcError &err) {
+        if (seq != m_detailSeq || repo != m_detailRepo)
+            return; // overtaken by a newer reload, or another app was opened
         m_detailLoading = false;
         if (!err.ok()) {
             emit detailChanged();
@@ -311,9 +398,8 @@ void Backend::reloadDetail()
     loadDeps(repo); // an index or install may change what is declared or installed
 }
 
-void Backend::startJob(const QString &method, const QString &repo)
+void Backend::startJob(const QString &method, const QString &repo, QJsonObject params)
 {
-    QJsonObject params;
     if (!repo.isEmpty())
         params.insert(QStringLiteral("repo"), repo);
     m_rpc->call(method, params, [this](const QJsonValue &, const RpcError &err) {
@@ -322,14 +408,20 @@ void Backend::startJob(const QString &method, const QString &repo)
     });
 }
 
-void Backend::install(const QString &repo)
+void Backend::install(const QString &repo, bool allowUnverified)
 {
-    startJob(QStringLiteral("install.start"), repo);
+    QJsonObject params;
+    if (allowUnverified)
+        params.insert(QStringLiteral("allowUnverified"), true);
+    startJob(QStringLiteral("install.start"), repo, params);
 }
 
-void Backend::update(const QString &repo)
+void Backend::update(const QString &repo, bool allowUnverified)
 {
-    startJob(QStringLiteral("update.start"), repo);
+    QJsonObject params;
+    if (allowUnverified)
+        params.insert(QStringLiteral("allowUnverified"), true);
+    startJob(QStringLiteral("update.start"), repo, params);
 }
 
 void Backend::updateAll()
@@ -341,14 +433,41 @@ void Backend::updateAll()
     }
 }
 
-void Backend::uninstall(const QString &repo)
+void Backend::uninstall(const QString &repo, bool force)
 {
-    m_rpc->call(QStringLiteral("install.uninstall"), {{QStringLiteral("repo"), repo}},
-                [this, repo](const QJsonValue &, const RpcError &err) {
+    if (!m_removing.isEmpty())
+        return;
+    m_removing = repo;
+    emit detailChanged();
+    QJsonObject params{{QStringLiteral("repo"), repo}};
+    if (force)
+        params.insert(QStringLiteral("force"), true);
+    m_rpc->call(QStringLiteral("install.uninstall"), params, [this, repo](const QJsonValue &, const RpcError &err) {
+        m_removing.clear();
+        emit detailChanged();
+        if (err.code == -32015) {
+            // "…: the app is running: name (pid), …": the processes after the last ": ".
+            const QString who = err.message.section(QStringLiteral(": "), -1);
+            emit removeRefusedInUse(repo, who);
+            return;
+        }
         if (!err.ok())
             emit errorOccurred(friendlyError(err.code, err.message));
         else
             emit notice(tr("%1 removed").arg(repo));
+    });
+}
+
+void Backend::rollback(const QString &repo)
+{
+    m_rpc->call(QStringLiteral("install.rollback"), {{QStringLiteral("repo"), repo}},
+                [this, repo](const QJsonValue &result, const RpcError &err) {
+        if (!err.ok()) {
+            emit errorOccurred(friendlyError(err.code, err.message));
+            return;
+        }
+        emit notice(tr("%1 is back at %2. The newer version is still offered as an update.")
+                        .arg(repo, result.toObject().value(QStringLiteral("version")).toString()));
     });
 }
 
@@ -404,6 +523,30 @@ void Backend::restartSelf()
         m_rpc->stop(); // no reconnection to the daemon that is leaving
         emit restartReady(m_selfGui);
     });
+}
+
+QString Backend::stageText(const QString &kind, const QString &stage)
+{
+    if (kind == QLatin1String("index")) {
+        if (stage == QLatin1String("discover"))
+            return tr("Searching GitHub");
+        if (stage == QLatin1String("state"))
+            return tr("Checking for changes");
+        return tr("Reading apps");
+    }
+    if (stage == QLatin1String("download"))
+        return tr("Downloading");
+    if (stage == QLatin1String("verify"))
+        return tr("Verifying");
+    if (stage == QLatin1String("extract"))
+        return tr("Extracting");
+    if (stage == QLatin1String("integrate"))
+        return tr("Adding to the menu");
+    if (stage == QLatin1String("done"))
+        return tr("Done");
+    if (stage == QLatin1String("authorize"))
+        return tr("Waiting for the administrator password");
+    return tr("Preparing");
 }
 
 QString Backend::readmeForDisplay(const QString &markdown) const

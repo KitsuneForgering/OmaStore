@@ -18,7 +18,7 @@
    API (`GET /repos/{owner}/{repo}/attestations/{digest}`). Show
    "built by workflow X of the repository itself" when available, and
    allow requiring it in a setting ("only apps with provenance").
-   *Accepted:* Phase 15 and 16 of `TODO.md` (badge first, required later).
+   *Accepted:* Phase 15 of `TODO.md` (badge first, required later).
 2. **minisign/cosign signatures:** verify when the repository publishes
    the public key (or in `omastore.toml`, see [`../authors.md`](../authors.md)).
 3. **Reputation signals in the catalog:** repository age, number of

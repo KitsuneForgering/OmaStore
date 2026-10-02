@@ -11,6 +11,8 @@ ApplicationWindow {
     visible: true
     title: "OmaStore"
     color: theme.background
+    font.family: theme.fontFamily
+    font.pixelSize: theme.fontBody
 
     palette {
         window: theme.background
@@ -69,7 +71,8 @@ ApplicationWindow {
 
         SideBar {
             Layout.fillHeight: true
-            Layout.preferredWidth: stack.depth > 1 ? 176 : 220
+            // Wide enough for the category names at the user's font size.
+            Layout.preferredWidth: Math.max(stack.depth > 1 ? 196 : 232, theme.fontBody * (stack.depth > 1 ? 13 : 16))
             detailActive: stack.depth > 1
             section: window.section
             onSectionSelected: (s) => { window.section = s; window.back() }
@@ -80,6 +83,36 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
+
+            // The running daemon does not match this window (daemon.hello).
+            Rectangle {
+                objectName: "daemonBanner"
+                Layout.fillWidth: true
+                visible: backend.daemonWarning !== ""
+                implicitHeight: bannerRow.implicitHeight + theme.spaceM * 2
+                color: theme.surface
+                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: theme.warning }
+                RowLayout {
+                    id: bannerRow
+                    anchors.fill: parent
+                    anchors.leftMargin: theme.spaceXl
+                    anchors.rightMargin: theme.spaceXl
+                    spacing: theme.spaceM
+                    Text {
+                        Layout.fillWidth: true
+                        text: "⚠ " + backend.daemonWarning + (backend.canRestartDaemon ? ""
+                              : " " + qsTr("Close OmaStore and run: pkill -x omastored"))
+                        color: theme.warning
+                        wrapMode: Text.Wrap
+                        Accessible.role: Accessible.AlertMessage
+                    }
+                    ActionButton {
+                        visible: backend.canRestartDaemon
+                        text: qsTr("Restart omastored")
+                        onClicked: backend.restartDaemon()
+                    }
+                }
+            }
 
             StackView {
                 id: stack
@@ -153,31 +186,65 @@ ApplicationWindow {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: opacity > 0.99 ? 72 : 56
         Behavior on anchors.bottomMargin { NumberAnimation { duration: theme.durationMedium; easing.type: Easing.OutCubic } }
-        width: Math.min(toastText.implicitWidth + 32, parent.width - 64)
-        height: toastText.implicitHeight + 20
-        radius: 6
+        width: Math.min(toastRow.implicitWidth + theme.spaceL * 2, parent.width - 64)
+        height: toastRow.implicitHeight + theme.spaceM * 2
+        radius: theme.radiusM
         color: isError ? theme.dangerFill : theme.surface
-        border.color: theme.border
+        border.color: isError ? theme.onDanger : theme.border
         Accessible.role: Accessible.AlertMessage
         Accessible.name: toastText.text
         opacity: 0
         visible: opacity > 0
         Behavior on opacity { NumberAnimation { duration: theme.durationMedium } }
 
-        Text {
-            id: toastText
-            anchors.centerIn: parent
-            width: parent.width - 32
-            wrapMode: Text.Wrap
-            horizontalAlignment: Text.AlignHCenter
-            color: toast.isError ? theme.onDanger : theme.foreground
+        RowLayout {
+            id: toastRow
+            anchors.fill: parent
+            anchors.leftMargin: theme.spaceL
+            anchors.rightMargin: theme.spaceS
+            anchors.topMargin: theme.spaceM
+            anchors.bottomMargin: theme.spaceM
+            spacing: theme.spaceM
+            Text {
+                id: toastText
+                Layout.fillWidth: true
+                Layout.maximumWidth: 560
+                wrapMode: Text.Wrap
+                color: toast.isError ? theme.onDanger : theme.foreground
+            }
+            // Errors stay until dismissed: say how, with a real button.
+            Button {
+                id: toastClose
+                objectName: "toastClose"
+                Layout.alignment: Qt.AlignTop
+                text: "✕"
+                flat: true
+                hoverEnabled: true
+                Accessible.name: qsTr("Dismiss")
+                onClicked: toast.opacity = 0
+                contentItem: Text {
+                    text: toastClose.text
+                    color: toast.isError ? theme.onDanger : theme.foreground
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    implicitWidth: 28
+                    implicitHeight: 28
+                    radius: theme.radiusS
+                    color: "transparent"
+                    border.color: toastClose.visualFocus ? theme.focus
+                                : toast.isError ? theme.onDanger : theme.border
+                    border.width: toastClose.visualFocus ? 2 : (toastClose.hovered ? 1 : 0)
+                }
+            }
         }
         // Notices go away after a while (not while the pointer is on them);
         // errors stay until dismissed, so there is time to read them.
         Timer {
             id: toastTimer
             interval: 6000
-            running: toast.opacity > 0 && !toast.isError && !toastArea.containsMouse
+            running: toast.opacity > 0 && !toast.isError && !toastArea.hovered
             onTriggered: toast.opacity = 0
         }
         function show(msg, err) {
@@ -186,7 +253,7 @@ ApplicationWindow {
             opacity = 1
             toastTimer.restart()
         }
-        MouseArea { id: toastArea; anchors.fill: parent; hoverEnabled: true; onClicked: toast.opacity = 0 }
+        HoverHandler { id: toastArea }
     }
 
     // After an install: offer the missing system dependencies (PKGBUILD
@@ -197,12 +264,15 @@ ApplicationWindow {
         property string repo: ""
         property var packages: []
         anchors.centerIn: parent
+        // Fixed: a wrapping label would otherwise size it from its unwrapped text.
+        contentWidth: 380
         modal: true
         title: qsTr("Install system dependencies?")
         standardButtons: Dialog.Yes | Dialog.No
         Label {
-            width: 400
+            width: 380
             wrapMode: Text.Wrap
+            color: theme.foreground
             text: qsTr("%1 needs these packages to work fully:\n\n%2\n\nThey are installed with pacman, which asks for the administrator password.")
                   .arg(depsDialog.repo).arg(depsDialog.packages.join(", "))
         }

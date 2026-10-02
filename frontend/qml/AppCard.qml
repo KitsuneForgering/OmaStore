@@ -3,7 +3,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 // Catalog grid card. The CatalogModel roles arrive as required
-// properties.
+// properties. Its height comes from the text sizes (see CatalogPage), never a
+// fixed number, so a larger system font does not cut the summary.
 Rectangle {
     id: card
     required property string repo
@@ -18,10 +19,10 @@ Rectangle {
 
     readonly property var job: { backend.jobs.revision; return backend.jobs.forRepo(repo) }
 
-    radius: 8
+    radius: theme.radiusM
     color: area.containsMouse || activeFocus ? theme.hover : theme.surface
-    border.color: activeFocus ? theme.focus : "transparent"
-    border.width: 2
+    border.color: activeFocus ? theme.focus : theme.outline
+    border.width: activeFocus ? 2 : 1
     Behavior on color { ColorAnimation { duration: theme.durationShort } }
     Behavior on border.color { ColorAnimation { duration: theme.durationShort } }
     Keys.onReturnPressed: activated()
@@ -43,11 +44,12 @@ Rectangle {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 14
-        spacing: 8
+        anchors.margins: theme.spaceL
+        spacing: theme.spaceM
 
         RowLayout {
-            spacing: 12
+            Layout.fillWidth: true
+            spacing: theme.spaceM
             AppIcon {
                 Layout.preferredWidth: 48
                 Layout.preferredHeight: 48
@@ -61,15 +63,16 @@ Rectangle {
                     Layout.fillWidth: true
                     text: card.name
                     color: theme.foreground
-                    font.pixelSize: 16
-                    font.bold: true
+                    font.pixelSize: theme.fontSubtitle
+                    font.weight: Font.DemiBold
                     elide: Text.ElideRight
                 }
                 Text {
                     Layout.fillWidth: true
                     text: card.repo
                     color: theme.muted
-                    font.pixelSize: 11
+                    font.family: theme.monoFamily
+                    font.pixelSize: theme.fontCaption
                     elide: Text.ElideMiddle
                 }
             }
@@ -78,6 +81,7 @@ Rectangle {
         Text {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            verticalAlignment: Text.AlignTop
             text: card.summary
             color: theme.foreground
             wrapMode: Text.Wrap
@@ -90,20 +94,23 @@ Rectangle {
             visible: !!card.job.id
             indeterminate: !card.job.id || card.job.progress < 0
             value: card.job.progress >= 0 ? card.job.progress : 0
+            Accessible.name: qsTr("Progress of %1").arg(card.name)
         }
 
         RowLayout {
+            Layout.fillWidth: true
+            spacing: theme.spaceS
             Text {
                 text: "★ " + card.stars
-                color: theme.warning
-                font.pixelSize: 12
+                color: theme.muted
+                font.pixelSize: theme.fontCaption
+                Accessible.name: qsTr("%n star(s)", "", card.stars)
             }
             Item { Layout.fillWidth: true }
-            Text {
+            Badge {
                 visible: card.installedVersion !== ""
                 text: card.updateAvailable ? qsTr("update available") : qsTr("installed")
-                color: card.updateAvailable ? theme.warning : theme.success
-                font.pixelSize: 12
+                tone: card.updateAvailable ? "warning" : "success"
             }
         }
     }

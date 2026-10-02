@@ -242,10 +242,57 @@ install -m644 "$tmp/usr/share/icons/hicolor/scalable/apps/omastore.svg" "$icon"
 refresh_caches
 echo "OmaStore $version installed. Open it from the menu or run $bin/omastore-gui"
 
+# Hand over from the OmaStore that ran before (an older version of this
+# installation, a make install, a development build): its daemon keeps the
+# socket, so the new interface would talk to the old daemon, and an old window
+# would start its own daemon again. Both get SIGTERM, a clean shutdown
+# (interrupted installs roll back). Only processes of this session, the ones
+# sharing the socket (same XDG_RUNTIME_DIR, or HOME without one): never the
+# OmaStore of another login or of a test fixture.
+session_of() {
+  tr '\0' '\n' < "/proc/$1/environ" 2>/dev/null | sed -n "s/^$2=//p" | head -n 1
+}
+if [ -n "${XDG_RUNTIME_DIR:-}" ]; then session_var=XDG_RUNTIME_DIR session=$XDG_RUNTIME_DIR
+else session_var=HOME session=$HOME
+fi
+stopped=
+for proc in /proc/[0-9]*; do
+  exe=$(readlink "$proc/exe" 2>/dev/null) || continue
+  exe=${exe% (deleted)}
+  name=${exe##*/}
+  case "$name" in omastored|omastore-gui) ;; *) continue ;; esac
+  [ "$exe" = "$root/$version/bin/$name" ] && continue
+  [ "$(session_of "${proc#/proc/}" "$session_var")" = "$session" ] || continue
+  kill "${proc#/proc/}" 2>/dev/null && stopped="$stopped ${proc#/proc/}"
+done
+if [ -n "$stopped" ]; then
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    alive=
+    for pid in $stopped; do readlink "/proc/$pid/exe" >/dev/null 2>&1 && alive="$alive $pid"; done
+    [ -z "$alive" ] && break
+    sleep 0.3
+  done
+  echo "Closed the OmaStore that was running (it was an older one); open it again from the menu."
+fi
+# A systemd socket from a package or make install starts its own omastored on
+# the next connection, not this one.
+if command -v systemctl >/dev/null 2>&1 && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -d "$XDG_RUNTIME_DIR/systemd" ] &&
+  systemctl --user is-enabled omastored.socket >/dev/null 2>&1; then
+  unit_exec=$(systemctl --user show -p ExecStart omastored.service 2>/dev/null | sed -n 's/.*path=\([^ ;]*\).*/\1/p')
+  if [ -n "$unit_exec" ] && [ "$unit_exec" != "$bin/omastored" ]; then
+    echo "Note: your omastored.socket starts $unit_exec, not this installation. To use this one:" >&2
+    echo "  systemctl --user disable --now omastored.socket" >&2
+  fi
+fi
+
 # On Omarchy (its config directory exists), omarchy-update also reports the
 # updates of the apps installed through OmaStore. The hook only reads the
 # catalog and sends a notification, and never fails the system update.
 if [ "$hooks" = yes ] && [ -d "$omarchy_config" ]; then
+  # A link to a system install's hook (make install links it) is OmaStore's too.
+  case "$(readlink "$hook" 2>/dev/null || :)" in
+    */share/omastore/omarchy/omastore.hook) rm -f "$hook" ;;
+  esac
   if { [ -e "$hook" ] || [ -L "$hook" ]; } && { [ -L "$hook" ] || ! grep -qxF "$hook_marker" "$hook"; }; then
     echo "Omarchy hook left as is: $hook was not installed by OmaStore." >&2
   else

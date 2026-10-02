@@ -12,70 +12,176 @@ Page {
     readonly property string repo: app.repo || ""
     readonly property var job: { backend.jobs.revision; return app.repo ? backend.jobs.forRepo(app.repo) : ({}) }
     readonly property bool installed: !!app.install
-    readonly property bool busy: !!job.id
-    readonly property bool unverified: {
-        if (!app.assets) return false
-        for (let a of app.assets) if (a.verified) return false
-        return app.assets.length > 0
-    }
+    readonly property bool broken: installed && !!app.install.broken
+    readonly property bool busy: !!job.id || backend.detailRemoving
+    // The file an install would download has nothing to check it with.
+    readonly property bool unverified: !!app.selectedAsset && app.selectedAsset.checksum === ""
 
     background: Rectangle { color: theme.background }
 
     function flickToTop() { flick.contentY = 0 }
 
-    function stageText(stage) {
-        switch (stage) {
-        case "download": return qsTr("Downloading")
-        case "verify": return qsTr("Verifying")
-        case "extract": return qsTr("Extracting")
-        case "integrate": return qsTr("Integrating with the system")
-        case "done": return qsTr("Done")
-        case "authorize": return qsTr("Installing system dependencies (administrator password)")
+    // A label above its value, for the facts panel.
+    component Fact: ColumnLayout {
+        property string label: ""
+        property string value: ""
+        property bool mono: false
+        Layout.fillWidth: true
+        spacing: 2
+        Text {
+            text: parent.label.toUpperCase()
+            color: theme.muted
+            font.pixelSize: theme.fontCaption
+            font.weight: Font.DemiBold
+            font.letterSpacing: 0.8
+            Accessible.ignored: true
         }
-        return qsTr("Preparing")
+        Text {
+            Layout.fillWidth: true
+            text: parent.value
+            color: theme.foreground
+            font.family: parent.mono ? theme.monoFamily : theme.fontFamily
+            wrapMode: Text.Wrap
+            Accessible.name: parent.label + ": " + parent.value
+        }
+    }
+
+    // A section title with its rule, shared by the long-text sections.
+    component SectionTitle: ColumnLayout {
+        property string text: ""
+        Layout.fillWidth: true
+        spacing: theme.spaceM
+        Text {
+            text: parent.text
+            color: theme.foreground
+            font.pixelSize: theme.fontTitle
+            font.weight: Font.DemiBold
+            Accessible.role: Accessible.Heading
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 1
+            color: theme.outline
+        }
     }
 
     Dialog {
         id: confirmUnverified
+        objectName: "confirmUnverified"
+        property bool forUpdate: false
+        // Fixed when it opens: the page reloads under it once the job starts,
+        // and a text changing while it closes makes the dialog resize in a loop.
+        property string fileName: ""
         anchors.centerIn: parent
+        // Fixed: a wrapping label would otherwise size it from its unwrapped text.
+        contentWidth: 380
         modal: true
-        title: qsTr("Install without verification?")
+        title: forUpdate ? qsTr("Update without a checksum?") : qsTr("Install without a checksum?")
         standardButtons: Dialog.Yes | Dialog.No
         Label {
-            width: 360
+            width: 380
             wrapMode: Text.Wrap
-            text: qsTr("This release publishes no checksum, so OmaStore cannot confirm that the downloaded file is the one the author published.")
+            color: theme.foreground
+            text: qsTr("This release publishes no checksum for %1, so OmaStore cannot tell whether the download arrived intact.")
+                  .arg(confirmUnverified.fileName)
         }
-        onAccepted: backend.install(page.app.repo)
+        onAccepted: forUpdate ? backend.update(page.app.repo, true) : backend.install(page.app.repo, true)
+    }
+    function askOrRun(forUpdate) {
+        if (page.unverified) {
+            confirmUnverified.forUpdate = forUpdate
+            confirmUnverified.fileName = page.app.selectedAsset.name
+            confirmUnverified.open()
+        } else if (forUpdate) {
+            backend.update(page.app.repo)
+        } else {
+            backend.install(page.app.repo)
+        }
+    }
+
+    // Removing was refused: the app is open.
+    Dialog {
+        id: removeInUse
+        objectName: "removeInUse"
+        property string processes: ""
+        anchors.centerIn: parent
+        // Fixed: a wrapping label would otherwise size it from its unwrapped text.
+        contentWidth: 380
+        modal: true
+        title: qsTr("%1 is open").arg(page.app.name || "")
+        Label {
+            width: 380
+            wrapMode: Text.Wrap
+            color: theme.foreground
+            text: qsTr("Close it first: removing its files while it runs can make it crash or lose unsaved work.\n\nRunning: %1").arg(removeInUse.processes)
+        }
+        footer: DialogButtonBox {
+            ActionButton {
+                text: qsTr("Remove anyway")
+                DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole
+            }
+            ActionButton {
+                kind: "primary"
+                text: qsTr("Keep it")
+                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
+            }
+            onClicked: (button) => {
+                if (button.DialogButtonBox.buttonRole === DialogButtonBox.DestructiveRole)
+                    backend.uninstall(page.app.repo, true)
+                removeInUse.close()
+            }
+        }
+    }
+    Connections {
+        target: backend
+        function onRemoveRefusedInUse(repo, processes) {
+            if (repo.toLowerCase() !== page.repo.toLowerCase())
+                return
+            removeInUse.processes = processes
+            removeInUse.open()
+        }
     }
 
     Dialog {
         id: confirmRemove
+        objectName: "confirmRemove"
         anchors.centerIn: parent
+        // Fixed: a wrapping label would otherwise size it from its unwrapped text.
+        contentWidth: 380
         modal: true
         title: qsTr("Remove %1?").arg(page.app.name || "")
         standardButtons: Dialog.Yes | Dialog.No
+        Label {
+            width: 380
+            wrapMode: Text.Wrap
+            color: theme.foreground
+            text: qsTr("The app, its command and its menu entry are removed. Your own files and the app's settings in your home folder are kept.")
+        }
         onAccepted: backend.uninstall(page.app.repo)
     }
 
     Flickable {
         id: flick
         anchors.fill: parent
-        contentHeight: column.implicitHeight + 48
+        contentHeight: column.implicitHeight + theme.spaceXxl * 2
         clip: true
         ScrollBar.vertical: ScrollBar {}
 
         ColumnLayout {
             id: column
             objectName: "detailContent"
-            x: 32
-            y: 24
-            width: flick.width - 64
-            spacing: 28
+            // One content column, centered on wide windows, with the same
+            // gutter as the catalog.
+            width: Math.min(flick.width - theme.spaceXl * 2, 1200)
+            x: Math.max(theme.spaceXl, (flick.width - width) / 2)
+            y: theme.spaceXl
+            spacing: theme.spaceXxl
 
-            Button {
+            ActionButton {
+                kind: "quiet"
+                Layout.leftMargin: -theme.spaceS
+                Layout.bottomMargin: -theme.spaceL
                 text: qsTr("← Back")
-                flat: true
                 onClicked: page.backRequested()
             }
 
@@ -84,19 +190,21 @@ Page {
                 running: visible
             }
 
+            // Header: icon, name, repository, summary, and the star.
             RowLayout {
                 visible: !!page.app.repo
                 Layout.fillWidth: true
-                spacing: 24
+                spacing: theme.spaceXl
                 AppIcon {
-                    Layout.preferredWidth: 88
-                    Layout.preferredHeight: 88
+                    Layout.alignment: Qt.AlignTop
+                    Layout.preferredWidth: 96
+                    Layout.preferredHeight: 96
                     url: page.app.iconUrl || ""
                     name: page.app.name || ""
                 }
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 8
+                    spacing: theme.spaceS
                     // Name and repository shrink with the window instead of
                     // widening the page: a long name wraps, the link elides.
                     Text {
@@ -104,9 +212,10 @@ Page {
                         Layout.fillWidth: true
                         text: page.app.name || ""
                         color: theme.foreground
-                        font.pixelSize: 28
-                        font.bold: true
+                        font.pixelSize: theme.fontHeadline
+                        font.weight: Font.Bold
                         wrapMode: Text.Wrap
+                        Accessible.role: Accessible.Heading
                     }
                     LinkText {
                         Layout.fillWidth: true
@@ -114,24 +223,31 @@ Page {
                         elide: Text.ElideMiddle
                         text: page.app.repo || ""
                         url: page.app.htmlUrl || ""
+                        font.family: theme.monoFamily
+                        font.pixelSize: theme.fontCaption
                         Accessible.description: qsTr("Opens the repository on GitHub")
                     }
                     Text {
                         Layout.fillWidth: true
+                        Layout.topMargin: theme.spaceXs
                         text: page.app.summary || ""
                         color: theme.foreground
+                        font.pixelSize: theme.fontSubtitle
                         wrapMode: Text.Wrap
+                        lineHeight: 1.25
                     }
-                    Text {
-                        Layout.fillWidth: true
-                        color: theme.muted
-                        font.pixelSize: 12
-                        wrapMode: Text.Wrap
-                        text: [
-                            "★ " + (page.app.stars || 0),
-                            page.app.category,
-                            page.installed ? qsTr("installed: %1").arg(page.app.install.version) : ""
-                        ].filter(s => !!s).join("  ·  ")
+                    RowLayout {
+                        spacing: theme.spaceS
+                        Badge {
+                            visible: !!page.app.category
+                            text: page.app.category || ""
+                        }
+                        Badge {
+                            visible: page.installed
+                            text: page.app.updateAvailable ? qsTr("update available")
+                                  : qsTr("installed %1").arg(page.installed ? page.app.install.version : "")
+                            tone: page.app.updateAvailable ? "warning" : "success"
+                        }
                     }
                 }
                 // Liking an app stars its repository on GitHub. The wrapper
@@ -144,15 +260,23 @@ Page {
                     ToolTip.visible: starHover.hovered
                     ToolTip.delay: 400
                     ToolTip.text: backend.starHint !== "" ? backend.starHint
-                                : starButton.starred ? qsTr("Remove your star on GitHub")
+                                : starButton.starred ? qsTr("You starred this app on GitHub. Click to remove your star.")
                                 : qsTr("Star this app on GitHub")
-                    Button {
+                    ActionButton {
                         id: starButton
                         objectName: "starButton"
                         anchors.fill: parent
                         readonly property bool starred: backend.starState === 1
+                        // On: the accent fill, so it reads at a glance.
+                        selected: starred
                         enabled: backend.connected && backend.starState !== -1 && !backend.starBusy
-                        text: (starred ? "★ " + qsTr("Starred") : "☆ " + qsTr("Star")) + "  " + (page.app.stars || 0)
+                        text: backend.starBusy ? (starred ? qsTr("Removing star…") : qsTr("Starring…"))
+                              : (starred ? "★ " + qsTr("Starred") : "☆ " + qsTr("Star")) + "  ·  " + (page.app.stars || 0)
+                        Accessible.role: Accessible.CheckBox
+                        Accessible.checkable: true
+                        Accessible.checked: starred
+                        Accessible.name: qsTr("Star on GitHub, %n star(s)", "", page.app.stars || 0)
+                        Accessible.description: backend.starHint
                         onClicked: backend.toggleStar()
                     }
                 }
@@ -164,42 +288,67 @@ Page {
                 Layout.fillWidth: true
                 visible: !!page.app.repo
                 columns: width >= 720 && gallery.visible ? 2 : 1
-                columnSpacing: 20
-                rowSpacing: 24
+                columnSpacing: theme.spaceXl
+                rowSpacing: theme.spaceXl
 
                 ColumnLayout {
                     id: gallery
                     Layout.fillWidth: true
-                    Layout.preferredWidth: hero.columns === 2 ? hero.width * 0.6 - 10 : hero.width
-                    spacing: 10
+                    Layout.preferredWidth: hero.columns === 2 ? hero.width * 0.62 - theme.spaceXl / 2 : hero.width
+                    Layout.alignment: Qt.AlignTop
+                    spacing: theme.spaceM
                     visible: !!page.app.screenshots && page.app.screenshots.length > 0
+
+                    // Pointer over the gallery: the slideshow waits.
+                    HoverHandler { id: galleryHover }
 
                     SwipeView {
                         id: previewCarousel
                         objectName: "previewCarousel"
+                        // Slideshow: advances every autoplayInterval and wraps
+                        // around. It waits while the pointer or the keyboard
+                        // focus is on the gallery, while the window is in the
+                        // background and after the user pauses it; with
+                        // reduced motion it starts paused (WCAG 2.2.2).
+                        property bool autoplay: true
+                        property int autoplayInterval: 5000
+                        property bool userPaused: theme.reducedMotion
+                        readonly property bool playing: autoplay && !userPaused && count > 1 && page.visible
+                                                        && !galleryHover.hovered && !activeFocus
+                                                        && Qt.application.state === Qt.ApplicationActive
                         Layout.fillWidth: true
-                        Layout.preferredHeight: hero.columns === 2 ? 340 : Math.min(320, hero.width * 0.62)
+                        Layout.preferredHeight: hero.columns === 2 ? 360 : Math.min(320, hero.width * 0.62)
                         clip: true
                         activeFocusOnTab: true
                         Keys.onLeftPressed: decrementCurrentIndex()
                         Keys.onRightPressed: incrementCurrentIndex()
+                        onCurrentIndexChanged: if (autoplayTimer.running) autoplayTimer.restart()
+
+                        Timer {
+                            id: autoplayTimer
+                            interval: previewCarousel.autoplayInterval
+                            repeat: true
+                            running: previewCarousel.playing
+                            onTriggered: previewCarousel.setCurrentIndex((previewCarousel.currentIndex + 1) % previewCarousel.count)
+                        }
 
                         Repeater {
                             model: page.app.screenshots || []
                             Rectangle {
                                 required property string modelData
                                 required property int index
-                                radius: 6
+                                radius: theme.radiusM
                                 color: theme.surface
+                                border.color: theme.outline
                                 Image {
                                     Accessible.role: Accessible.Graphic
                                     Accessible.name: qsTr("Screenshot %1 of %2 of %3").arg(parent.index + 1)
                                                          .arg(previewCarousel.count).arg(page.app.name || "")
                                     anchors.fill: parent
-                                    anchors.margins: 4
+                                    anchors.margins: theme.spaceS
                                     asynchronous: true
                                     fillMode: Image.PreserveAspectFit
-                                    sourceSize: Qt.size(960, 600)
+                                    sourceSize: Qt.size(1280, 800)
                                     source: "image://omastore/" + encodeURIComponent(modelData)
                                     BusyIndicator { anchors.centerIn: parent; running: parent.status === Image.Loading }
                                 }
@@ -207,12 +356,19 @@ Page {
                         }
                     }
 
+                    // The buttons shrink (and elide) rather than widen the
+                    // gallery past a narrow window or under a large font.
                     RowLayout {
                         objectName: "previewControls"
                         Layout.fillWidth: true
-                        Button {
+                        visible: previewCarousel.count > 1
+                        spacing: theme.spaceS
+                        ActionButton {
                             objectName: "previewPrevious"
-                            text: qsTr("Previous")
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: implicitWidth
+                            Layout.minimumWidth: leftPadding + rightPadding + theme.fontBody * 2
+                            text: qsTr("‹ Previous")
                             enabled: previewCarousel.currentIndex > 0
                             onClicked: previewCarousel.decrementCurrentIndex()
                         }
@@ -221,10 +377,26 @@ Page {
                             objectName: "previewPosition"
                             text: qsTr("%1 / %2").arg(previewCarousel.currentIndex + 1).arg(previewCarousel.count)
                             color: theme.muted
+                            font.pixelSize: theme.fontCaption
                         }
-                        Button {
+                        ActionButton {
+                            objectName: "previewPlayPause"
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: implicitWidth
+                            Layout.minimumWidth: leftPadding + rightPadding + theme.fontBody * 2
+                            kind: "quiet"
+                            visible: previewCarousel.count > 1
+                            text: previewCarousel.userPaused ? qsTr("▶ Play") : qsTr("❚❚ Pause")
+                            Accessible.name: previewCarousel.userPaused ? qsTr("Play slideshow") : qsTr("Pause slideshow")
+                            onClicked: previewCarousel.userPaused = !previewCarousel.userPaused
+                        }
+                        Item { Layout.fillWidth: true }
+                        ActionButton {
                             objectName: "previewNext"
-                            text: qsTr("Next")
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: implicitWidth
+                            Layout.minimumWidth: leftPadding + rightPadding + theme.fontBody * 2
+                            text: qsTr("Next ›")
                             enabled: previewCarousel.currentIndex < previewCarousel.count - 1
                             onClicked: previewCarousel.incrementCurrentIndex()
                         }
@@ -234,28 +406,29 @@ Page {
                         id: previewStrip
                         objectName: "previewStrip"
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 72
+                        Layout.preferredHeight: 76
                         visible: count > 1
                         orientation: ListView.Horizontal
-                        spacing: 8
+                        spacing: theme.spaceS
                         clip: true
                         model: page.app.screenshots || []
                         delegate: Rectangle {
                             required property string modelData
                             required property int index
-                            width: 112
-                            height: 68
-                            radius: 5
+                            readonly property bool current: index === previewCarousel.currentIndex
+                            width: 120
+                            height: 72
+                            radius: theme.radiusS
                             color: theme.surface
-                            border.width: index === previewCarousel.currentIndex ? 2 : 0
-                            border.color: theme.accent
+                            border.width: current ? 3 : 1
+                            border.color: current ? theme.focus : theme.outline
                             Image {
                                 anchors.fill: parent
-                                anchors.margins: 3
+                                anchors.margins: 4
                                 source: "image://omastore/" + encodeURIComponent(modelData)
                                 fillMode: Image.PreserveAspectFit
                                 asynchronous: true
-                                sourceSize: Qt.size(224, 136)
+                                sourceSize: Qt.size(240, 144)
                             }
                             MouseArea {
                                 anchors.fill: parent
@@ -276,43 +449,176 @@ Page {
                     id: infoPanel
                     objectName: "detailInfoPanel"
                     Layout.fillWidth: true
-                    Layout.preferredWidth: hero.columns === 2 ? hero.width * 0.4 - 10 : hero.width
+                    Layout.preferredWidth: hero.columns === 2 ? hero.width * 0.38 - theme.spaceXl / 2 : hero.width
                     Layout.alignment: Qt.AlignTop
-                    spacing: 18
+                    spacing: theme.spaceM
 
+                    // Actions first: they are why people open the page.
+                    PrimaryButton {
+                        objectName: "installButton"
+                        Layout.fillWidth: true
+                        visible: !page.installed && !page.busy
+                        enabled: backend.connected && !!page.app.installable
+                        text: page.app.installable ? qsTr("Install") : qsTr("No Linux binary")
+                        onClicked: page.askOrRun(false)
+                    }
+                    // Next to the button it is about.
+                    Text {
+                        objectName: "uncheckedHint"
+                        Layout.fillWidth: true
+                        visible: page.unverified && !page.busy && !!page.app.installable && (!page.installed || !!page.app.updateAvailable)
+                        text: qsTr("⚠ This release publishes no checksum for this file; you will be asked first.")
+                        color: theme.warning
+                        font.pixelSize: theme.fontCaption
+                        wrapMode: Text.Wrap
+                    }
+                    Text {
+                        objectName: "notInstallableHint"
+                        Layout.fillWidth: true
+                        visible: !!page.app.repo && !page.app.installable && !page.installed
+                        text: qsTr("The latest release has no Linux binary for this computer.")
+                        color: theme.muted
+                        font.pixelSize: theme.fontCaption
+                        wrapMode: Text.Wrap
+                    }
+                    PrimaryButton {
+                        Layout.fillWidth: true
+                        visible: page.installed && !!page.app.updateAvailable && !page.busy
+                        text: qsTr("Update to %1").arg(page.app.latestVersion)
+                        onClicked: page.askOrRun(true)
+                    }
+                    // Its files were removed outside OmaStore: say so, offer the fix.
+                    Text {
+                        objectName: "brokenHint"
+                        Layout.fillWidth: true
+                        visible: page.broken && !page.busy
+                        text: qsTr("⚠ The app's files are gone (removed outside OmaStore), so it cannot open.")
+                        color: theme.warning
+                        font.pixelSize: theme.fontCaption
+                        wrapMode: Text.Wrap
+                    }
+                    PrimaryButton {
+                        objectName: "repairButton"
+                        Layout.fillWidth: true
+                        visible: page.broken && !page.busy
+                        enabled: backend.connected && !!page.app.installable
+                        text: qsTr("Repair")
+                        onClicked: page.askOrRun(false)
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: page.installed && !page.busy
+                        spacing: theme.spaceS
+                        ActionButton {
+                            objectName: "openButton"
+                            Layout.fillWidth: true
+                            visible: !page.broken
+                            text: qsTr("Open")
+                            onClicked: backend.launch()
+                        }
+                        ActionButton {
+                            objectName: "removeButton"
+                            Layout.fillWidth: true
+                            text: qsTr("Remove")
+                            onClicked: confirmRemove.open()
+                        }
+                    }
+                    // The version the last update replaced is still on disk.
+                    ActionButton {
+                        objectName: "rollbackButton"
+                        Layout.fillWidth: true
+                        kind: "quiet"
+                        visible: page.installed && !page.busy && !!page.app.install.previousVersion
+                        text: qsTr("Go back to %1").arg(page.installed ? page.app.install.previousVersion : "")
+                        ToolTip.visible: hovered
+                        ToolTip.delay: 400
+                        ToolTip.text: qsTr("Use the version you had before the last update. Nothing is downloaded.")
+                        onClicked: backend.rollback(page.app.repo)
+                    }
+                    // A running job, or a removal: what is happening, with a
+                    // way out when it can be canceled.
+                    ColumnLayout {
+                        objectName: "busyBox"
+                        visible: page.busy
+                        Layout.fillWidth: true
+                        spacing: theme.spaceS
+                        Text {
+                            objectName: "busyText"
+                            Layout.fillWidth: true
+                            text: backend.detailRemoving ? qsTr("Removing…") : backend.stageText(page.job.kind || "", page.job.stage || "")
+                            color: theme.foreground
+                            font.weight: Font.DemiBold
+                            wrapMode: Text.Wrap
+                        }
+                        ProgressBar {
+                            Layout.fillWidth: true
+                            indeterminate: backend.detailRemoving || page.job.progress === undefined || page.job.progress < 0
+                            value: page.job.progress > 0 ? page.job.progress : 0
+                            Accessible.name: qsTr("Progress")
+                        }
+                        ActionButton {
+                            kind: "quiet"
+                            Layout.leftMargin: -theme.spaceS
+                            visible: !!page.job.id
+                            text: qsTr("Cancel")
+                            onClicked: backend.cancelJob(page.job.id)
+                        }
+                    }
+                    // The last install/update of this app failed: say why and
+                    // offer a prefilled report to its author.
+                    ColumnLayout {
+                        objectName: "failureBox"
+                        Layout.fillWidth: true
+                        visible: backend.detailFailure !== "" && !page.busy
+                        spacing: theme.spaceXs
+                        Text {
+                            Layout.fillWidth: true
+                            text: qsTr("The last attempt failed: %1").arg(backend.detailFailure)
+                            color: theme.danger
+                            font.pixelSize: theme.fontCaption
+                            wrapMode: Text.Wrap
+                        }
+                        LinkText {
+                            text: qsTr("Report this problem to the author ↗")
+                            font.pixelSize: theme.fontCaption
+                            onActivated: Qt.openUrlExternally(backend.issueUrl())
+                        }
+                    }
+
+                    // Facts.
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: infoContent.implicitHeight + 40
-                        radius: 8
+                        Layout.topMargin: theme.spaceS
+                        Layout.preferredHeight: facts.implicitHeight + theme.spaceL * 2
+                        radius: theme.radiusM
                         color: theme.surface
-                        border.color: theme.selection
+                        border.color: theme.outline
 
                         ColumnLayout {
-                            id: infoContent
+                            id: facts
                             anchors.fill: parent
-                            anchors.margins: 20
-                            spacing: 16
+                            anchors.margins: theme.spaceL
+                            spacing: theme.spaceM
 
-                            Label {
-                                text: qsTr("Version")
-                                color: theme.muted
-                                font.pixelSize: 12
+                            GridLayout {
+                                Layout.fillWidth: true
+                                columns: 2
+                                columnSpacing: theme.spaceL
+                                rowSpacing: theme.spaceM
+                                Fact { label: qsTr("Version"); value: page.app.latestVersion || qsTr("Unavailable"); mono: !!page.app.latestVersion }
+                                Fact { label: qsTr("License"); value: page.app.license || qsTr("Not specified") }
+                                Fact { label: qsTr("Stars"); value: String(page.app.stars || 0) }
+                                Fact {
+                                    visible: page.installed
+                                    label: qsTr("Installed")
+                                    value: page.installed ? page.app.install.version : ""
+                                    mono: true
+                                }
                             }
-                            Text {
-                                Layout.topMargin: -12
-                                text: page.app.latestVersion || qsTr("Unavailable")
-                                color: theme.foreground
-                                font.pixelSize: 16
-                            }
-                            Label {
-                                text: qsTr("License")
-                                color: theme.muted
-                                font.pixelSize: 12
-                            }
-                            Text {
-                                Layout.topMargin: -12
-                                text: page.app.license || qsTr("Not specified")
-                                color: theme.foreground
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 1
+                                color: theme.outline
                             }
                             LinkText {
                                 visible: !!page.app.htmlUrl
@@ -324,90 +630,30 @@ Page {
                             LinkText {
                                 objectName: "reportLink"
                                 visible: !!page.app.htmlUrl
-                                Layout.topMargin: -8
                                 text: qsTr("Report a problem ↗")
                                 onActivated: Qt.openUrlExternally(backend.issueUrl())
                             }
                         }
                     }
 
-                    PrimaryButton {
-                        objectName: "installButton"
-                        Layout.fillWidth: true
-                        visible: !page.installed && !page.busy
-                        enabled: backend.connected && !!page.app.installable
-                        text: page.app.installable ? qsTr("Install") : qsTr("No Linux binary")
-                        onClicked: page.unverified ? confirmUnverified.open() : backend.install(page.app.repo)
-                    }
-                    PrimaryButton {
-                        Layout.fillWidth: true
-                        visible: page.installed && !!page.app.updateAvailable && !page.busy
-                        text: qsTr("Update to %1").arg(page.app.latestVersion)
-                        onClicked: backend.update(page.app.repo)
-                    }
-                    Button {
-                        objectName: "openButton"
-                        Layout.fillWidth: true
-                        visible: page.installed && !page.busy
-                        text: qsTr("Open")
-                        onClicked: backend.launch()
-                    }
-                    Button {
-                        Layout.fillWidth: true
-                        visible: page.installed && !page.busy
-                        text: qsTr("Remove")
-                        onClicked: confirmRemove.open()
-                    }
-                    // The last install/update of this app failed: say why and
-                    // offer a prefilled report to its author.
-                    ColumnLayout {
-                        objectName: "failureBox"
-                        Layout.fillWidth: true
-                        visible: backend.detailFailure !== "" && !page.busy
-                        spacing: 4
-                        Text {
-                            Layout.fillWidth: true
-                            text: qsTr("The last attempt failed: %1").arg(backend.detailFailure)
-                            color: theme.danger
-                            font.pixelSize: 12
-                            wrapMode: Text.Wrap
-                        }
-                        LinkText {
-                            text: qsTr("Report this problem to the author ↗")
-                            font.pixelSize: 12
-                            onActivated: Qt.openUrlExternally(backend.issueUrl())
-                        }
-                    }
-                    ColumnLayout {
-                        visible: page.busy
-                        Layout.fillWidth: true
-                        Text {
-                            text: page.stageText(page.job.stage)
-                            color: theme.foreground
-                        }
-                        ProgressBar {
-                            Layout.fillWidth: true
-                            indeterminate: page.job.progress === undefined || page.job.progress < 0
-                            value: page.job.progress > 0 ? page.job.progress : 0
-                        }
-                        Button {
-                            text: qsTr("Cancel")
-                            flat: true
-                            onClicked: backend.cancelJob(page.job.id)
-                        }
-                    }
                     // System dependencies declared in the app's PKGBUILD.
                     Rectangle {
                         id: depsBox
                         objectName: "depsBox"
                         readonly property var deps: backend.deps.deps || []
+                        readonly property var libraries: backend.deps.libraries || []
+                        readonly property string wrongArch: backend.deps.wrongArch || ""
                         readonly property var toInstall: backend.deps.toInstall || []
+                        readonly property bool libraryLookupUnknown: {
+                            for (const l of libraries) if (l.status === "unknown") return true
+                            return false
+                        }
                         Layout.fillWidth: true
-                        Layout.preferredHeight: depsContent.implicitHeight + 32
-                        visible: deps.length > 0
-                        radius: 8
+                        Layout.preferredHeight: depsContent.implicitHeight + theme.spaceL * 2
+                        visible: deps.length > 0 || libraries.length > 0 || wrongArch !== ""
+                        radius: theme.radiusM
                         color: theme.surface
-                        border.color: theme.selection
+                        border.color: theme.outline
 
                         function statusText(d) {
                             switch (d.status) {
@@ -421,24 +667,29 @@ Page {
                         ColumnLayout {
                             id: depsContent
                             anchors.fill: parent
-                            anchors.margins: 16
-                            spacing: 6
+                            anchors.margins: theme.spaceL
+                            spacing: theme.spaceS
 
-                            Label {
-                                text: qsTr("System dependencies")
+                            Text {
+                                text: qsTr("System dependencies").toUpperCase()
                                 color: theme.muted
-                                font.pixelSize: 12
+                                font.pixelSize: theme.fontCaption
+                                font.weight: Font.DemiBold
+                                font.letterSpacing: 0.8
+                                Accessible.name: qsTr("System dependencies")
+                                Accessible.role: Accessible.Heading
                             }
                             Repeater {
                                 model: depsBox.deps
                                 RowLayout {
                                     required property var modelData
                                     Layout.fillWidth: true
-                                    spacing: 8
+                                    spacing: theme.spaceS
                                     Text {
                                         Layout.fillWidth: true
                                         text: modelData.name + (modelData.optional ? " " + qsTr("(optional)") : "")
                                         color: theme.foreground
+                                        font.family: theme.monoFamily
                                         elide: Text.ElideRight
                                         ToolTip.visible: depHover.hovered && !!modelData.reason
                                         ToolTip.text: modelData.reason || ""
@@ -446,18 +697,60 @@ Page {
                                     }
                                     Text {
                                         text: depsBox.statusText(modelData)
-                                        color: modelData.status === "installed" ? theme.muted
+                                        color: modelData.status === "installed" ? theme.success
                                              : modelData.status === "unavailable" ? theme.warning : theme.accent
-                                        font.pixelSize: 12
+                                        font.pixelSize: theme.fontCaption
                                         // The check mark alone says nothing to a screen reader.
                                         Accessible.name: modelData.status === "installed" ? qsTr("installed") : text
                                     }
                                 }
                             }
-                            Button {
+                            // Read from the installed executable (never run).
+                            Text {
+                                objectName: "wrongArchWarning"
+                                Layout.fillWidth: true
+                                visible: depsBox.wrongArch !== ""
+                                text: qsTr("⚠ The installed file is built for %1 and cannot run on this computer. Report it to the author.").arg(depsBox.wrongArch)
+                                color: theme.danger
+                                wrapMode: Text.Wrap
+                            }
+                            Repeater {
+                                model: depsBox.libraries
+                                RowLayout {
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    spacing: theme.spaceS
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: modelData.name
+                                        color: theme.foreground
+                                        font.family: theme.monoFamily
+                                        elide: Text.ElideMiddle
+                                        ToolTip.visible: libHover.hovered
+                                        ToolTip.text: qsTr("A library the app needs to start; this system does not have it.")
+                                        HoverHandler { id: libHover }
+                                    }
+                                    Text {
+                                        text: modelData.status === "available" ? qsTr("missing · %1").arg(modelData.package)
+                                              : modelData.status === "unavailable" ? qsTr("not in pacman")
+                                              : qsTr("missing library")
+                                        color: modelData.status === "available" ? theme.accent : theme.warning
+                                        font.pixelSize: theme.fontCaption
+                                    }
+                                }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                visible: depsBox.libraryLookupUnknown
+                                text: qsTr("To find which package ships a library, enable pacman's file database: sudo pacman -Fy")
+                                color: theme.muted
+                                font.pixelSize: theme.fontCaption
+                                wrapMode: Text.Wrap
+                            }
+                            ActionButton {
                                 objectName: "installDepsButton"
                                 Layout.fillWidth: true
-                                Layout.topMargin: 6
+                                Layout.topMargin: theme.spaceXs
                                 visible: depsBox.toInstall.length > 0 && !page.busy
                                 enabled: backend.connected
                                 text: depsBox.toInstall.length === 1 ? qsTr("Install 1 dependency")
@@ -469,33 +762,19 @@ Page {
                                 visible: backend.deps.pacman === false
                                 text: qsTr("Install them with your system's package manager.")
                                 color: theme.muted
-                                font.pixelSize: 11
+                                font.pixelSize: theme.fontCaption
                                 wrapMode: Text.Wrap
                             }
                         }
                     }
-                    Text {
-                        visible: page.unverified && !page.installed
-                        text: qsTr("⚠ no checksum")
-                        color: theme.warning
-                        font.pixelSize: 11
-                    }
-                    Text {
-                        objectName: "notInstallableHint"
-                        Layout.fillWidth: true
-                        visible: !!page.app.repo && !page.app.installable && !page.installed
-                        text: qsTr("The latest release has no Linux binary for this computer.")
-                        color: theme.muted
-                        font.pixelSize: 12
-                        wrapMode: Text.Wrap
-                    }
+
                     LinkText {
                         objectName: "authorCheckLink"
                         Layout.fillWidth: true
                         visible: !!page.app.repo
                         text: page.app.installable ? qsTr("Is this your app? Check how it looks to the store →")
                                                    : qsTr("Is this your app? See what is missing →")
-                        font.pixelSize: 12
+                        font.pixelSize: theme.fontCaption
                         wrapMode: Text.Wrap
                         onActivated: page.publishRequested(page.app.repo)
                     }
@@ -503,33 +782,27 @@ Page {
             }
 
             // Release notes of the latest release, rendered like the README
-            // (no remote images; links open only on click).
+            // (no remote images; links open only on click). Long text keeps a
+            // readable line length and the column's left edge.
             ColumnLayout {
                 objectName: "releaseNotes"
                 Layout.fillWidth: true
-                Layout.maximumWidth: 900
-                Layout.alignment: Qt.AlignHCenter
+                Layout.maximumWidth: 860
                 visible: !!page.app.releaseNotes
-                spacing: 18
-                Text {
+                spacing: theme.spaceL
+                SectionTitle {
                     text: page.installed && page.app.updateAvailable
                           ? qsTr("What's new in %1 (you have %2)").arg(page.app.latestVersion).arg(page.app.install.version)
                           : qsTr("What's new in %1").arg(page.app.latestVersion)
-                    color: theme.foreground
-                    font.pixelSize: 20
-                    font.bold: true
-                }
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 1
-                    color: theme.selection
                 }
                 Text {
                     Layout.fillWidth: true
                     text: page.app.releaseNotes ? backend.readmeForDisplay(page.app.releaseNotes) : ""
                     textFormat: Text.MarkdownText
                     wrapMode: Text.Wrap
-                    font.pixelSize: 15
+                    font.pixelSize: theme.fontReading
+                    lineHeight: 1.5
+                    lineHeightMode: Text.ProportionalHeight
                     color: theme.foreground
                     linkColor: theme.accent
                     onLinkActivated: (link) => {
@@ -542,28 +815,17 @@ Page {
 
             ColumnLayout {
                 Layout.fillWidth: true
-                Layout.maximumWidth: 900
-                Layout.alignment: Qt.AlignHCenter
+                Layout.maximumWidth: 860
                 visible: !!page.app.readme
-                spacing: 18
-                Text {
-                    text: qsTr("README")
-                    color: theme.foreground
-                    font.pixelSize: 20
-                    font.bold: true
-                }
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 1
-                    color: theme.selection
-                }
+                spacing: theme.spaceL
+                SectionTitle { text: qsTr("About") }
                 Text {
                     objectName: "detailReadme"
                     Layout.fillWidth: true
                     text: page.app.readme ? backend.readmeForDisplay(page.app.readme) : ""
                     textFormat: Text.MarkdownText
                     wrapMode: Text.Wrap
-                    font.pixelSize: 17
+                    font.pixelSize: theme.fontReading
                     lineHeight: 1.5
                     lineHeightMode: Text.ProportionalHeight
                     color: theme.foreground
@@ -580,27 +842,23 @@ Page {
             ColumnLayout {
                 Layout.fillWidth: true
                 visible: backend.similar.length > 0
-                spacing: 8
-                Text {
-                    text: qsTr("Similar apps")
-                    color: theme.foreground
-                    font.pixelSize: 16
-                    font.bold: true
-                }
+                spacing: theme.spaceL
+                SectionTitle { text: qsTr("Similar apps") }
                 Flow {
                     Layout.fillWidth: true
-                    spacing: 10
+                    spacing: theme.spaceM
                     Repeater {
                         model: backend.similar
                         delegate: Rectangle {
                             id: simCard
                             required property var modelData
-                            width: 220
-                            height: 64
-                            radius: 6
+                            width: 260
+                            implicitHeight: simRow.implicitHeight + theme.spaceM * 2
+                            height: implicitHeight
+                            radius: theme.radiusM
                             color: simArea.containsMouse || activeFocus ? theme.hover : theme.surface
-                            border.color: theme.focus
-                            border.width: activeFocus ? 2 : 0
+                            border.color: activeFocus ? theme.focus : theme.outline
+                            border.width: activeFocus ? 2 : 1
                             Behavior on color { ColorAnimation { duration: theme.durationShort } }
                             activeFocusOnTab: true
                             Accessible.role: Accessible.Button
@@ -610,9 +868,12 @@ Page {
                             Keys.onEnterPressed: page.appActivated(modelData.repo)
                             Keys.onSpacePressed: page.appActivated(modelData.repo)
                             RowLayout {
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                spacing: 10
+                                id: simRow
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.margins: theme.spaceM
+                                spacing: theme.spaceM
                                 AppIcon {
                                     Layout.preferredWidth: 40
                                     Layout.preferredHeight: 40
@@ -621,19 +882,19 @@ Page {
                                 }
                                 ColumnLayout {
                                     Layout.fillWidth: true
-                                    spacing: 0
+                                    spacing: 2
                                     Text {
                                         Layout.fillWidth: true
                                         text: modelData.name
                                         color: theme.foreground
-                                        font.bold: true
+                                        font.weight: Font.DemiBold
                                         elide: Text.ElideRight
                                     }
                                     Text {
                                         Layout.fillWidth: true
                                         text: modelData.category
                                         color: theme.muted
-                                        font.pixelSize: 11
+                                        font.pixelSize: theme.fontCaption
                                         elide: Text.ElideRight
                                     }
                                 }

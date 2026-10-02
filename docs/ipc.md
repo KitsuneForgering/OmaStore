@@ -2,7 +2,13 @@
 
 The frontend talks to `omastored` over **JSON-RPC 2.0** on a Unix socket at
 `$XDG_RUNTIME_DIR/omastore.sock` (mode `0600`). Implementation:
-`backend/internal/rpc/`. Protocol version: **1** (`daemon.hello`).
+`backend/internal/rpc/`. Protocol version: **2** (`daemon.hello`).
+
+The version goes up whenever a method or a DTO changes. On connect the frontend
+calls `daemon.hello` and compares `protocol` (and the `methods` it needs) with
+what it was built for; an older daemon gets a banner with a way to restart it
+(`self.restart`, when the daemon has it). Daemons before protocol 2 answer
+without `methods`.
 
 ## Framing
 
@@ -28,16 +34,17 @@ Missing `params` is the same as `{}`. Unknown fields in `params` are an error
 
 | Method | Parameters | Result |
 |---|---|---|
-| `daemon.hello` | — | `{name, protocol}` |
+| `daemon.hello` | — | `{name, protocol, methods}`: `methods` lists every method this daemon answers |
 | `catalog.list` | `{category?, query?, installed?, all?, limit?, offset?}` | `AppItem[]`: by score; with `query`, by relevance |
 | `catalog.get` | `{repo}` | `AppDetail` |
 | `catalog.similar` | `{repo, limit?}` (default 8, max. 50) | most similar `AppItem[]`, installable only |
 | `catalog.categories` | — | `[{name, count}]` |
 | `installs.list` | — | `InstallInfo[]` |
 | `index.start` | `{force?, repos?}` | `Job` (kind `index`) |
-| `install.start` | `{repo}` | `Job` (kind `install`) |
-| `update.start` | `{repo}` | `Job` (kind `update`) |
-| `install.uninstall` | `{repo}` | `{}` (synchronous) |
+| `install.start` | `{repo, allowUnverified?}` | `Job` (kind `install`) |
+| `update.start` | `{repo, allowUnverified?}` | `Job` (kind `update`) |
+| `install.uninstall` | `{repo, force?}` | `{}` (synchronous); `-32015` while the app runs, unless `force` |
+| `install.rollback` | `{repo}` | `InstallInfo` (synchronous): back to the version the last update replaced |
 | `jobs.list` | — | `Job[]` (running ones and the last 50 finished) |
 | `jobs.cancel` | `{job}` | `{}` |
 | `image.get` | `{url}` | `{path}`: local path of the cached image |
@@ -51,6 +58,23 @@ Missing `params` is the same as `{}`. Unknown fields in `params` are an error
 | `self.restart` | — | `{}`; the daemon exits right after replying (`-32002` while jobs run) |
 
 `repo` is always `"owner/repo"`. `all: true` includes apps without an installable binary.
+
+**Files without a checksum.** `install.start` and `update.start` refuse, before
+downloading, a file that has neither a GitHub digest nor a published checksum
+(`-32017`), unless `allowUnverified: true`: the user confirmed that file. The
+same rule holds for the CLI (`--allow-unverified`). `AppDetail.selectedAsset`
+is the file an install would download on this machine, so the interface asks
+about that file and not about the release as a whole.
+
+**Apps in use.** The daemon reads `/proc` (exe, cwd and mapped files; nothing
+is run or signaled) to find processes running from an app's directory.
+`install.uninstall` refuses while there are any (`-32015`, the message ends
+with `name (pid), …`), unless `force`. An update keeps the version it replaces
+on disk and recorded (`InstallInfo.previousVersion`): a running copy keeps its
+files, and `install.rollback` points the launcher and the menu entry back to
+it (calling it again returns to the newer one; nothing is downloaded). The
+version before that one is removed by the update, or kept for a later update
+while a process still runs from it.
 
 OmaStore updates itself only when `install.sh` installed it (`mode: "self"`:
 `$XDG_DATA_HOME/omastore/self/<version>/` with links in `~/.local/bin`). The
@@ -94,7 +118,18 @@ optdepends alike, with `pkexec pacman -S --needed`: polkit asks for the
 administrator password. Dependencies found in no repository (AUR) are never
 installed; they stay `unavailable` in the report, and when nothing else was
 missing the job fails with `-32014`. Only one `deps` job runs at a time
-(pacman has a single lock).
+(pacman has a single lock). When pacman cannot download a package the local
+database lists (the mirrors moved on since the last system update), the job
+fails with `-32018`: the fix is `omarchy update`, never `pacman -Sy`.
+
+Once the app is installed, `deps.check` also reads the installed executable's
+ELF headers (`debug/elf`; never run, not even `ldd`) and lists in `libraries`
+the shared libraries it needs that neither the app's files nor the system's
+library directories (`/etc/ld.so.conf`) have. The package that ships each one
+comes from pacman's file database (`pacman -F`) when it exists (`pacman -Fy`
+creates it); those packages join `toInstall`. A script launcher (Python, shell)
+is not checked. `wrongArch` names the machine an executable was built for when
+it is not this one.
 
 ### Types
 
@@ -114,10 +149,22 @@ AppDetail extends AppItem {
   description, license, htmlUrl: string
   topics: string[]
   pushedAt?, indexedAt?: string    // RFC 3339
-  assets: {name, size, arch, format, verified}[]
+  assets: AssetInfo[]
+  selectedAsset: AssetInfo | null  // the file an install downloads on this machine
   install: InstallInfo | null
 }
-InstallInfo { repo, version, installedAt, execPath, desktopPath }
+AssetInfo {
+  name, arch, format: string, size: number
+  checksum: "digest" | "file" | "" // what can check the download (GitHub's digest,
+                                   // a checksum file in the release, nothing);
+                                   // availability only: the check runs on install
+}
+InstallInfo {
+  repo, version, installedAt, execPath, desktopPath: string
+  previousVersion: string          // what install.rollback goes back to ("" if none)
+  broken: boolean                  // the executable is gone (removed outside OmaStore):
+                                   // install.start again repairs it
+}
 SelfInfo {
   mode: "self" | "package" | "dev"
   version: string                  // running version ("" unless mode is "self")
@@ -159,8 +206,14 @@ DepsReport {
     status: "installed" | "available" | "unavailable" | "unknown"
     package: string                // "repo/name" pacman would install, when available
   }[]
-  missing: number                  // available + unavailable
+  missing: number                  // available + unavailable deps, plus libraries
   toInstall: string[]              // what deps.install installs
+  libraries: {                     // needed by the installed executable, missing here
+    name: string                   // soname, e.g. "libwebkit2gtk-4.1.so.0"
+    status: "available" | "unavailable" | "unknown"   // unknown: no pacman file database
+    package?: string               // "repo/name" that ships it, when available
+  }[]
+  wrongArch: string                // machine the executable was built for, if not this one
 }
 ```
 
@@ -219,6 +272,10 @@ up to the cancellation (e.g. repos already indexed).
 | -32012 | administrator authentication canceled or refused (polkit) |
 | -32013 | unsupported system: no pacman |
 | -32014 | missing dependencies are in no pacman repository (e.g. AUR) |
+| -32015 | the app is running (uninstall without `force`, or reinstalling the running version) |
+| -32016 | no previous version on disk to roll back to |
+| -32017 | the file has no checksum and `allowUnverified` was not given |
+| -32018 | pacman could not download a package: the package database is older than the mirrors |
 
 ## Running
 

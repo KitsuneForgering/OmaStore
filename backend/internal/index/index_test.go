@@ -140,6 +140,17 @@ func (f *fakeGH) Tree(ctx context.Context, name, sha string) ([]string, bool, er
 	return r.files, false, nil
 }
 
+// mustRun runs the indexer and fails the test on an error: an indexing
+// failure must not show up only as an unexpected statistic.
+func mustRun(t *testing.T, ix *Indexer, opts Options) Stats {
+	t.Helper()
+	stats, err := ix.Run(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("index run: %v (stats %+v)", err, stats)
+	}
+	return stats
+}
+
 var t0 = time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC)
 
 func photoRepo() *fakeRepo {
@@ -267,13 +278,13 @@ func TestUnchangedRepoIsNotReprocessed(t *testing.T) {
 
 	// Only stars changed: light update, without README/tree.
 	gh.repos["acme/omaphoto"].repo.Stars = 43
-	stats, _ = ix.Run(ctx, Options{})
+	stats = mustRun(t, ix, Options{})
 	if stats.Refreshed != 1 || gh.n("readme") != readmes {
 		t.Errorf("stars: stats=%+v calls=%v", stats, gh.calls)
 	}
 
 	// Force reprocesses everything.
-	stats, _ = ix.Run(ctx, Options{Force: true})
+	stats = mustRun(t, ix, Options{Force: true})
 	if stats.Updated != 2 || gh.n("readme") != readmes+2 {
 		t.Errorf("force: stats=%+v", stats)
 	}
@@ -282,19 +293,19 @@ func TestUnchangedRepoIsNotReprocessed(t *testing.T) {
 func TestNewCommitOrReleaseReprocesses(t *testing.T) {
 	ix, gh, st := setup(t)
 	ctx := context.Background()
-	ix.Run(ctx, Options{})
+	mustRun(t, ix, Options{})
 
 	r := gh.repos["acme/omaphoto"]
 	r.repo.PushedAt = t0.Add(time.Hour)
 	r.sha = "sha2"
-	stats, _ := ix.Run(ctx, Options{})
+	stats := mustRun(t, ix, Options{})
 	if stats.Updated != 1 || stats.Unchanged != 1 {
 		t.Errorf("new commit: %+v", stats)
 	}
 
 	// New release without a push (304 on the repo): the tag reveals the change.
 	r.release = &github.Release{Tag: "v2.0.0", Body: "## v2\r\n\r\n- New export\r\n", Assets: r.release.Assets}
-	stats, _ = ix.Run(ctx, Options{})
+	stats = mustRun(t, ix, Options{})
 	if stats.Updated != 1 {
 		t.Errorf("new release: %+v", stats)
 	}
@@ -307,7 +318,7 @@ func TestNewCommitOrReleaseReprocesses(t *testing.T) {
 func TestRemovedAndPrune(t *testing.T) {
 	ix, gh, st := setup(t)
 	ctx := context.Background()
-	ix.Run(ctx, Options{})
+	mustRun(t, ix, Options{})
 
 	delete(gh.repos, "acme/omalib")
 	stats, err := ix.Run(ctx, Options{})
@@ -320,7 +331,7 @@ func TestRemovedAndPrune(t *testing.T) {
 
 	gh.search = nil
 	ix.Prune = true
-	stats, _ = ix.Run(ctx, Options{})
+	stats = mustRun(t, ix, Options{})
 	if stats.Removed != 1 {
 		t.Errorf("prune: %+v", stats)
 	}
@@ -377,7 +388,7 @@ func TestParseSeeds(t *testing.T) {
 func TestIndexVersionBumpReprocesses(t *testing.T) {
 	ix, gh, st := setup(t)
 	ctx := context.Background()
-	ix.Run(ctx, Options{})
+	mustRun(t, ix, Options{})
 	d, _ := st.GetApp(ctx, "acme/omaphoto")
 	// Simulates a repo stored by an older indexer version.
 	d.Repo.IndexVersion = Version - 1
@@ -479,7 +490,7 @@ func TestOnlyAppsWithManifestAreIndexed(t *testing.T) {
 		r.noToml = true
 		r.sha = "sha-without-manifest"
 		r.repo.PushedAt = t0.Add(time.Hour)
-		stats, _ = ix.Run(ctx, Options{})
+		stats = mustRun(t, ix, Options{})
 		if stats.Removed != 1 {
 			t.Errorf("batched=%v: removal: %+v", batched, stats)
 		}
@@ -502,6 +513,98 @@ func TestEmptyManifestIsEnough(t *testing.T) {
 }
 
 // fakeBatchGH adds the batch query to fakeGH.
+// Files replaced or added under the same tag (no push, same HEAD) are
+// picked up: the stored digest must follow the new binary, or every install
+// fails the checksum; an asset uploaded after a run caught the release half
+// published must show up. Through REST (304 on the repository) and the batch.
+func TestReleaseFilesChangedUnderSameTag(t *testing.T) {
+	for _, batched := range []bool{false, true} {
+		t.Run(map[bool]string{false: "rest", true: "batch"}[batched], func(t *testing.T) {
+			ix, gh, st := setup(t)
+			if batched {
+				ix.GH = &fakeBatchGH{fakeGH: gh}
+			}
+			ctx := context.Background()
+			r := gh.repos["acme/omaphoto"]
+			// Half published: only the x86_64 tarball so far.
+			full := r.release.Assets
+			r.release = &github.Release{Tag: "v1.0.0", Assets: []github.ReleaseAsset{full[0]}}
+			if _, err := ix.Run(ctx, Options{}); err != nil {
+				t.Fatal(err)
+			}
+			d, err := st.GetApp(ctx, "acme/omaphoto")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(d.Assets) != 1 {
+				t.Fatalf("half published: assets = %+v", d.Assets)
+			}
+
+			// The rest of the upload lands.
+			r.release = &github.Release{Tag: "v1.0.0", Assets: full}
+			stats, err := ix.Run(ctx, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stats.Updated != 1 {
+				t.Errorf("assets added: stats = %+v", stats)
+			}
+			if d, _ = st.GetApp(ctx, "acme/omaphoto"); len(d.Assets) != 2 {
+				t.Errorf("assets added: %+v", d.Assets)
+			}
+
+			// The author replaces the x86_64 binary (gh release upload --clobber).
+			replaced := append([]github.ReleaseAsset(nil), full...)
+			replaced[0].Digest = "sha256:bb"
+			replaced[0].Size = 11
+			r.release = &github.Release{Tag: "v1.0.0", Assets: replaced}
+			stats, err = ix.Run(ctx, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stats.Updated != 1 {
+				t.Errorf("asset replaced: stats = %+v", stats)
+			}
+			d, _ = st.GetApp(ctx, "acme/omaphoto")
+			for _, a := range d.Assets {
+				if a.Arch == asset.ArchAMD64 && a.Digest != "sha256:bb" {
+					t.Errorf("stale digest: %+v", a)
+				}
+			}
+
+			// And nothing changed: not reprocessed.
+			stats, err = ix.Run(ctx, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if stats.Updated != 0 || stats.Unchanged != 2 {
+				t.Errorf("unchanged: stats = %+v", stats)
+			}
+		})
+	}
+}
+
+func TestReleaseSig(t *testing.T) {
+	a := &github.Release{Tag: "v1", Assets: []github.ReleaseAsset{{Name: "a", Size: 1, Digest: "sha256:aa"}, {Name: "b", Size: 2}}}
+	b := &github.Release{Tag: "v1", Assets: []github.ReleaseAsset{{Name: "b", Size: 2}, {Name: "a", Size: 1, Digest: "sha256:aa"}}}
+	if releaseSig(a) != releaseSig(b) {
+		t.Error("asset order changed the fingerprint")
+	}
+	if releaseSig(nil) != "" {
+		t.Error("no release must give an empty fingerprint")
+	}
+	for _, changed := range []*github.Release{
+		{Tag: "v2", Assets: a.Assets},
+		{Tag: "v1", Assets: []github.ReleaseAsset{{Name: "a", Size: 1, Digest: "sha256:ab"}, {Name: "b", Size: 2}}},
+		{Tag: "v1", Assets: []github.ReleaseAsset{{Name: "a", Size: 3, Digest: "sha256:aa"}, {Name: "b", Size: 2}}},
+		{Tag: "v1", Assets: []github.ReleaseAsset{{Name: "a", Size: 1, Digest: "sha256:aa"}}},
+	} {
+		if releaseSig(changed) == releaseSig(a) {
+			t.Errorf("%+v has the same fingerprint as %+v", changed, a)
+		}
+	}
+}
+
 type fakeBatchGH struct {
 	*fakeGH
 	noToken bool
@@ -556,25 +659,25 @@ func TestBatchedIndexingSkipsRESTMetadata(t *testing.T) {
 
 	// Nothing changed: no request besides the batch.
 	before := map[string]int{"readme": gh.n("readme"), "tree": gh.n("tree")}
-	stats, _ = ix.Run(ctx, Options{})
+	stats = mustRun(t, ix, Options{})
 	if stats.Unchanged != 2 || gh.n("readme") != before["readme"] || gh.n("tree") != before["tree"] {
 		t.Errorf("inalterado: stats=%+v calls=%v", stats, gh.calls)
 	}
 
 	// Only stars changed: light update.
 	gh.repos["acme/omaphoto"].repo.Stars = 99
-	stats, _ = ix.Run(ctx, Options{})
+	stats = mustRun(t, ix, Options{})
 	if stats.Refreshed != 1 || stats.Unchanged != 1 {
 		t.Errorf("estrelas: %+v", stats)
 	}
 
 	// The repository disappeared: removed; on the next run, only skipped.
 	delete(gh.repos, "acme/omalib")
-	stats, _ = ix.Run(ctx, Options{})
+	stats = mustRun(t, ix, Options{})
 	if stats.Removed != 1 || stats.Skipped != 0 {
 		t.Errorf("removed: %+v", stats)
 	}
-	stats, _ = ix.Run(ctx, Options{})
+	stats = mustRun(t, ix, Options{})
 	if stats.Removed != 0 || stats.Skipped != 1 {
 		t.Errorf("skipped: %+v", stats)
 	}
@@ -668,7 +771,7 @@ func TestIndexVersionAppliesAfterNameResolution(t *testing.T) {
 			ix.GH = &fakeBatchGH{fakeGH: gh}
 		}
 		ctx := context.Background()
-		ix.Run(ctx, Options{})
+		mustRun(t, ix, Options{})
 		d, _ := st.GetApp(ctx, "acme/omaphoto")
 		d.Repo.IndexVersion = Version - 1
 		st.SaveIndexed(ctx, d.Repo, d.App, d.Assets)

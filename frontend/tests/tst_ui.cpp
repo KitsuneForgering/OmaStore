@@ -12,11 +12,13 @@
 #include <QQuickImageProvider>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <memory>
 
 namespace {
@@ -53,6 +55,70 @@ QPointF leftTop(QQuickItem *item, QQuickItem *root)
 {
     return item->mapToItem(root, QPointF{});
 }
+
+void click(QQuickWindow &window, QQuickItem *item)
+{
+    const QPointF center = item->mapToScene(QPointF(item->width() / 2, item->height() / 2));
+    QTest::mouseClick(&window, Qt::LeftButton, {}, center.toPoint());
+}
+
+QJsonObject appDetail(const QString &repo, int screenshots, int stars = 4)
+{
+    QJsonArray shots;
+    for (int i = 0; i < screenshots; ++i)
+        shots.append(QStringLiteral("https://example.com/%1.png").arg(i));
+    return QJsonObject{{"repo", repo}, {"name", "Demo App"}, {"summary", "A sample app"},
+                       {"latestVersion", "v1.2.3"}, {"license", "MIT"}, {"readme", "# Demo App\nDetails"},
+                       {"category", "Utility"}, {"installable", true}, {"screenshots", shots},
+                       {"stars", stars}, {"assets", QJsonArray{}}};
+}
+
+// DetailPage.qml in a window, talking to a fake daemon.
+struct DetailHarness {
+    explicit DetailHarness(std::function<QJsonObject(const QString &, const QJsonObject &)> handler)
+        : theme({QStringLiteral("/nonexistent")})
+    {
+        daemon.handler = std::move(handler);
+        listening = daemon.listen();
+        rpc = std::make_unique<RpcClient>(daemon.path());
+        rpc->setAutoStart(false);
+        backend = std::make_unique<Backend>(rpc.get());
+        engine.addImageProvider("omastore", new StubImages);
+        engine.rootContext()->setContextProperty("backend", backend.get());
+        engine.rootContext()->setContextProperty("theme", &theme);
+        QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(OMASTORE_QML_DIR "/DetailPage.qml")));
+        error = component.errorString();
+        object.reset(component.create());
+        page = qobject_cast<QQuickItem *>(object.get());
+        if (!page)
+            return;
+        window.resize(1000, 760);
+        page->setParentItem(window.contentItem());
+        page->setSize(window.size());
+        window.show();
+    }
+    // Opens repo once the page is up, then connects.
+    bool open(const QString &repo)
+    {
+        if (!page || !listening || !QTest::qWaitForWindowExposed(&window))
+            return false;
+        backend->openDetail(repo);
+        rpc->start();
+        return QTest::qWaitFor([&] { return backend->detail().value("repo").toString() == repo; });
+    }
+    QQuickItem *find(const char *name) const { return page ? page->findChild<QQuickItem *>(name) : nullptr; }
+
+    Theme theme;
+    FakeDaemon daemon;
+    bool listening = false;
+    std::unique_ptr<RpcClient> rpc;
+    std::unique_ptr<Backend> backend;
+    QQmlEngine engine;
+    QString error;
+    std::unique_ptr<QObject> object;
+    QQuickItem *page = nullptr;
+    QQuickWindow window;
+};
 } // namespace
 
 class TestUi : public QObject {
@@ -142,6 +208,8 @@ private slots:
         auto *name = page->findChild<QQuickItem *>("detailName");
         QVERIFY(content && controls && carousel && hero && panel && strip && readme &&
                 previous && next && position && install && name);
+        // The slideshow would move the gallery under the checks below.
+        carousel->setProperty("autoplay", false);
         QTRY_COMPARE(position->property("text").toString(), QStringLiteral("1 / 2"));
         // The layout settles over several passes after the screenshots arrive
         // (columns, then widths): the geometry is checked until it holds, and
@@ -225,6 +293,203 @@ private slots:
         QTRY_COMPARE(carousel->property("currentIndex").toInt(), 1);
         backend.openDetail("demo/other");
         QTRY_COMPARE(position->property("text").toString(), QStringLiteral("1 / 3"));
+        QCOMPARE(carousel->property("currentIndex").toInt(), 0);
+    }
+
+    // Starring shows: the button takes the accent fill (not only another
+    // glyph), the count moves and a notice confirms it.
+    void starredStateIsVisible()
+    {
+        DetailHarness h([](const QString &method, const QJsonObject &params) -> QJsonObject {
+            if (method == "catalog.get")
+                return {{"result", appDetail(params.value("repo").toString(), 0)}};
+            if (method == "star.get")
+                return {{"result", QJsonObject{{"starred", false}}}};
+            if (method == "star.set")
+                return {{"result", QJsonObject{{"starred", true}, {"stars", 5}}}};
+            return {{"result", QJsonArray{}}};
+        });
+        QVERIFY2(h.page, qPrintable(h.error));
+        QVERIFY(h.open("demo/app"));
+        auto *star = h.find("starButton");
+        QVERIFY(star);
+        auto background = [star] { return star->property("background").value<QQuickItem *>()->property("color").value<QColor>(); };
+        auto label = [star] { return star->property("contentItem").value<QQuickItem *>(); };
+
+        QTRY_VERIFY(star->property("enabled").toBool());
+        QTRY_COMPARE(background(), h.theme.surface());
+        QVERIFY(star->property("text").toString().contains("Star"));
+        QVERIFY(!star->property("text").toString().contains("Starred"));
+
+        QSignalSpy notices(h.backend.get(), &Backend::notice);
+        click(h.window, star);
+        QTRY_COMPARE(h.backend->starState(), int(Backend::StarYes));
+        QTRY_COMPARE(background(), h.theme.accentFill());
+        QTRY_COMPARE(label()->property("color").value<QColor>(), h.theme.onAccent());
+        QVERIFY(contrast(label()->property("color").value<QColor>(), background()) >= 7);
+        QVERIFY(star->property("text").toString().contains("Starred"));
+        QVERIFY(star->property("text").toString().contains("5"));
+        QCOMPARE(notices.count(), 1);
+        QVERIFY(notices.at(0).at(0).toString().contains("starred"));
+    }
+
+    // A star that cannot be checked says why instead of leaving a dead button.
+    void starFailureExplainsItself()
+    {
+        DetailHarness h([](const QString &method, const QJsonObject &params) -> QJsonObject {
+            if (method == "catalog.get")
+                return {{"result", appDetail(params.value("repo").toString(), 0)}};
+            if (method == "star.get")
+                return {{"error", QJsonObject{{"code", -32601}, {"message", "method not found"}}}};
+            return {{"result", QJsonArray{}}};
+        });
+        QVERIFY2(h.page, qPrintable(h.error));
+        QVERIFY(h.open("demo/app"));
+        auto *star = h.find("starButton");
+        QVERIFY(star);
+        QTRY_VERIFY(!h.backend->starHint().isEmpty());
+        QVERIFY(h.backend->starHint().contains("older"));
+        QVERIFY(!star->property("enabled").toBool());
+    }
+
+    // A file with no checksum: the install asks first, and only the
+    // confirmed request carries allowUnverified (the daemon refuses others).
+    void unverifiedInstallAsksFirst()
+    {
+        DetailHarness h([](const QString &method, const QJsonObject &params) -> QJsonObject {
+            if (method == "catalog.get") {
+                QJsonObject d = appDetail(params.value("repo").toString(), 0);
+                d.insert("selectedAsset", QJsonObject{{"name", "demo-1-x86_64-linux.tar.gz"}, {"checksum", ""}});
+                return {{"result", d}};
+            }
+            if (method == "install.start")
+                return {{"result", QJsonObject{{"id", "j1"}, {"state", "running"}}}};
+            return {{"result", QJsonArray{}}};
+        });
+        QVERIFY2(h.page, qPrintable(h.error));
+        QVERIFY(h.open("demo/app"));
+        auto *install = h.find("installButton");
+        auto *hint = h.find("uncheckedHint");
+        QVERIFY(install && hint);
+        QTRY_VERIFY(hint->isVisible());
+        QTRY_VERIFY(install->property("enabled").toBool());
+        click(h.window, install);
+        auto *dialog = h.page->findChild<QObject *>("confirmUnverified");
+        QVERIFY(dialog);
+        QTRY_VERIFY(dialog->property("visible").toBool());
+        QTest::qWait(50);
+        QCOMPARE(h.daemon.count("install.start"), 0);
+
+        QMetaObject::invokeMethod(dialog, "accept");
+        QTRY_COMPARE(h.daemon.count("install.start"), 1);
+        QJsonObject params;
+        for (const QJsonObject &r : h.daemon.received)
+            if (r.value("method").toString() == "install.start")
+                params = r.value("params").toObject();
+        QCOMPARE(params.value("allowUnverified").toBool(), true);
+    }
+
+    // An installed app with a previous version, files gone and a missing
+    // library: Go back, Repair, the library and the in-use refusal all show.
+    void installedAppStates()
+    {
+        DetailHarness h([](const QString &method, const QJsonObject &params) -> QJsonObject {
+            if (method == "catalog.get") {
+                QJsonObject d = appDetail(params.value("repo").toString(), 0);
+                d.insert("install", QJsonObject{{"repo", "demo/app"}, {"version", "v2"}, {"previousVersion", "v1"},
+                                                {"broken", true}});
+                return {{"result", d}};
+            }
+            if (method == "deps.check")
+                return {{"result", QJsonObject{{"deps", QJsonArray{}}, {"toInstall", QJsonArray{"extra/webkit2gtk-4.1"}},
+                                               {"libraries", QJsonArray{QJsonObject{{"name", "libwebkit2gtk-4.1.so.0"},
+                                                   {"status", "available"}, {"package", "extra/webkit2gtk-4.1"}}}}}}};
+            if (method == "install.uninstall")
+                return {{"error", QJsonObject{{"code", -32015}, {"message", "demo/app: the app is running: demo (4242)"}}}};
+            if (method == "install.rollback")
+                return {{"result", QJsonObject{{"repo", "demo/app"}, {"version", "v1"}}}};
+            return {{"result", QJsonArray{}}};
+        });
+        QVERIFY2(h.page, qPrintable(h.error));
+        QVERIFY(h.open("demo/app"));
+        auto *rollback = h.find("rollbackButton");
+        auto *repair = h.find("repairButton");
+        auto *open = h.find("openButton");
+        auto *deps = h.find("depsBox");
+        QVERIFY(rollback && repair && open && deps);
+        QTRY_VERIFY(rollback->isVisible());
+        QVERIFY(rollback->property("text").toString().contains("v1"));
+        QVERIFY(repair->isVisible());
+        QVERIFY(!open->isVisible());
+        QTRY_VERIFY(deps->isVisible());
+
+        QSignalSpy notices(h.backend.get(), &Backend::notice);
+        click(h.window, rollback);
+        QTRY_COMPARE(h.daemon.count("install.rollback"), 1);
+        QTRY_COMPARE(notices.count(), 1);
+        QVERIFY(notices.at(0).at(0).toString().contains("v1"));
+
+        h.backend->uninstall("demo/app");
+        auto *inUse = h.page->findChild<QObject *>("removeInUse");
+        QVERIFY(inUse);
+        QTRY_VERIFY(inUse->property("visible").toBool());
+        QVERIFY(inUse->property("processes").toString().contains("4242"));
+    }
+
+    // The gallery is a slideshow: it advances on its own and wraps around,
+    // and waits while paused or while the pointer is on it.
+    void carouselPlaysAndPauses()
+    {
+        DetailHarness h([](const QString &method, const QJsonObject &params) -> QJsonObject {
+            if (method == "catalog.get")
+                return {{"result", appDetail(params.value("repo").toString(), 3)}};
+            return {{"result", QJsonArray{}}};
+        });
+        QVERIFY2(h.page, qPrintable(h.error));
+        auto *carousel = h.find("previewCarousel");
+        auto *playPause = h.find("previewPlayPause");
+        QVERIFY(carousel && playPause);
+        carousel->setProperty("autoplayInterval", 40);
+        QTest::mouseMove(&h.window, QPoint(2, 2)); // the pointer away from the gallery
+        QVERIFY(h.open("demo/app"));
+        QTRY_COMPARE(carousel->property("count").toInt(), 3);
+        QTRY_COMPARE(carousel->property("currentIndex").toInt(), 2);
+        QTRY_COMPARE(carousel->property("currentIndex").toInt(), 0); // wrapped
+
+        click(h.window, playPause);
+        QTRY_VERIFY(carousel->property("userPaused").toBool());
+        QTest::mouseMove(&h.window, QPoint(2, 2));
+        const int pausedAt = carousel->property("currentIndex").toInt();
+        QTest::qWait(300);
+        QCOMPARE(carousel->property("currentIndex").toInt(), pausedAt);
+
+        // Playing again, but the pointer rests on the gallery: still waits.
+        click(h.window, playPause);
+        QTRY_VERIFY(!carousel->property("userPaused").toBool());
+        QVERIFY(!carousel->property("playing").toBool());
+        QTest::mouseMove(&h.window, QPoint(2, 2));
+        QTRY_VERIFY(carousel->property("playing").toBool());
+        QTRY_VERIFY(carousel->property("currentIndex").toInt() != pausedAt);
+    }
+
+    // With reduced motion the slideshow starts paused (it can still be played).
+    void carouselStartsPausedWithReducedMotion()
+    {
+        qputenv("OMASTORE_REDUCE_MOTION", "1");
+        DetailHarness h([](const QString &method, const QJsonObject &params) -> QJsonObject {
+            if (method == "catalog.get")
+                return {{"result", appDetail(params.value("repo").toString(), 3)}};
+            return {{"result", QJsonArray{}}};
+        });
+        qunsetenv("OMASTORE_REDUCE_MOTION");
+        QVERIFY2(h.page, qPrintable(h.error));
+        auto *carousel = h.find("previewCarousel");
+        QVERIFY(carousel);
+        carousel->setProperty("autoplayInterval", 40);
+        QVERIFY(h.open("demo/app"));
+        QTRY_COMPARE(carousel->property("count").toInt(), 3);
+        QVERIFY(carousel->property("userPaused").toBool());
+        QTest::qWait(200);
         QCOMPARE(carousel->property("currentIndex").toInt(), 0);
     }
 
