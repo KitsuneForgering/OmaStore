@@ -117,6 +117,6 @@ First public release.
 - `install.sh`, `omastore-bin` PKGBUILD, reproducible release tarball with
   build provenance attestation, and optional systemd socket and daily timer.
 
-[Unreleased]: https://github.com/KitsuneSemCalda/OmaStore/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/KitsuneSemCalda/OmaStore/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/KitsuneSemCalda/OmaStore/releases/tag/v0.1.0
+[Unreleased]: https://github.com/KitsuneForgering/OmaStore/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/KitsuneForgering/OmaStore/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/KitsuneForgering/OmaStore/releases/tag/v0.1.0

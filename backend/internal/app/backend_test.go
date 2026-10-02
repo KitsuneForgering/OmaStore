@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/rpc"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/rpc"
 )
 
 // *App must satisfy rpc.Backend.

@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/asset"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/flock"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/asset"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/flock"
 )
 
 // OmaStore updating itself. Only the per-user installation made by
@@ -23,7 +23,7 @@ import (
 // to whoever built it.
 
 // SelfRepo is OmaStore's own repository.
-const SelfRepo = "KitsuneSemCalda/OmaStore"
+const SelfRepo = "KitsuneForgering/OmaStore"
 
 // How OmaStore was installed (SelfInstall.Mode).
 const (

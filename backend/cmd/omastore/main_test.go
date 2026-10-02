@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/notify"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/xdg"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/notify"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/xdg"
 )
 
 // isolate points HOME/XDG to a temporary directory and turns off the network.

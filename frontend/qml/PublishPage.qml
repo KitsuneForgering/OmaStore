@@ -9,8 +9,8 @@ Page {
     id: page
     readonly property var report: backend.authorCheck
     readonly property bool hasReport: !!report.repo
-    readonly property string guideUrl: "https://github.com/KitsuneSemCalda/OmaStore/blob/master/docs/authors.md"
-    readonly property string skillsUrl: "https://github.com/KitsuneSemCalda/OmaStore/tree/master/skills"
+    readonly property string guideUrl: "https://github.com/KitsuneForgering/OmaStore/blob/master/docs/authors.md"
+    readonly property string skillsUrl: "https://github.com/KitsuneForgering/OmaStore/tree/master/skills"
     readonly property string template: 'kind = "app"\n' +
         'name = "MyApp"\n' +
         'summary = "What it does, in one sentence"\n' +

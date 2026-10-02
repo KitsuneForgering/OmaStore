@@ -22,13 +22,13 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/asset"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/flock"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/gitrepo"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/manifest"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/repoid"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/xdg"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/asset"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/flock"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/gitrepo"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/manifest"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/repoid"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/xdg"
 )
 
 // Errors returned by the installer.

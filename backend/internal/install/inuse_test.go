@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/asset"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/asset"
 )
 
 // fakeProc points procRoot at a fake /proc where each process has a cwd and

@@ -17,14 +17,14 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/app"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/index"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/install"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/logging"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/manifest"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/notify"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/sysdeps"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/app"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/index"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/install"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/logging"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/manifest"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/notify"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/sysdeps"
 )
 
 const usage = `usage: omastore [-v] <command> [options]

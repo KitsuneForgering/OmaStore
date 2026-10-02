@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/github"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/install"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/github"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/install"
 )
 
 // selfReleaseTTL is how long the latest OmaStore release is reused before

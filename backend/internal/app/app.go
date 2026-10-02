@@ -8,14 +8,14 @@ import (
 	"log/slog"
 	"path/filepath"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/github"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/gitrepo"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/imagecache"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/index"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/install"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/sysdeps"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/xdg"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/github"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/gitrepo"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/imagecache"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/index"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/install"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/sysdeps"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/xdg"
 )
 
 // App groups the backend services.

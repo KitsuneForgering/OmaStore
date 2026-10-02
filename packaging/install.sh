@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-repo=https://github.com/KitsuneSemCalda/OmaStore
+repo=https://github.com/KitsuneForgering/OmaStore
 
 # --no-skills (anywhere in the arguments) leaves the coding agents' skill
 # directories alone; --no-hooks leaves Omarchy's hooks alone.

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/elfdeps"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/sysdeps"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/elfdeps"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/sysdeps"
 )
 
 // Starred reports whether the GitHub user (the token's owner) starred the
