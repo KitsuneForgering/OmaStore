@@ -16,6 +16,10 @@ Button {
     readonly property bool filled: kind === "primary" || selected
 
     Accessible.name: text
+    // A label squeezed by its layout is elided; the full text is a hover away.
+    ToolTip.visible: hovered && contentItem.truncated
+    ToolTip.delay: 400
+    ToolTip.text: text
     font.family: theme.fontFamily
     font.pixelSize: theme.fontBody
     font.weight: filled ? Font.DemiBold : Font.Medium

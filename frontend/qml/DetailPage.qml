@@ -356,6 +356,8 @@ Page {
                         }
                     }
 
+                    // The buttons shrink (and elide) rather than widen the
+                    // gallery past a narrow window or under a large font.
                     RowLayout {
                         objectName: "previewControls"
                         Layout.fillWidth: true
@@ -363,6 +365,9 @@ Page {
                         spacing: theme.spaceS
                         ActionButton {
                             objectName: "previewPrevious"
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: implicitWidth
+                            Layout.minimumWidth: leftPadding + rightPadding + theme.fontBody * 2
                             text: qsTr("‹ Previous")
                             enabled: previewCarousel.currentIndex > 0
                             onClicked: previewCarousel.decrementCurrentIndex()
@@ -376,6 +381,9 @@ Page {
                         }
                         ActionButton {
                             objectName: "previewPlayPause"
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: implicitWidth
+                            Layout.minimumWidth: leftPadding + rightPadding + theme.fontBody * 2
                             kind: "quiet"
                             visible: previewCarousel.count > 1
                             text: previewCarousel.userPaused ? qsTr("▶ Play") : qsTr("❚❚ Pause")
@@ -385,6 +393,9 @@ Page {
                         Item { Layout.fillWidth: true }
                         ActionButton {
                             objectName: "previewNext"
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: implicitWidth
+                            Layout.minimumWidth: leftPadding + rightPadding + theme.fontBody * 2
                             text: qsTr("Next ›")
                             enabled: previewCarousel.currentIndex < previewCarousel.count - 1
                             onClicked: previewCarousel.incrementCurrentIndex()
