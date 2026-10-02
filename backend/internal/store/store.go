@@ -64,6 +64,7 @@ type Repo struct {
 	PushedAt      time.Time
 	HeadSHA       string
 	LatestTag     string
+	ReleaseSig    string // fingerprint of the latest release and its assets
 	ReleaseNotes  string // body of the latest release (markdown)
 	ETag          string
 	IndexedAt     time.Time
@@ -76,6 +77,7 @@ type RepoState struct {
 	PushedAt     time.Time
 	HeadSHA      string
 	LatestTag    string
+	ReleaseSig   string
 	ETag         string
 	IndexVersion int
 	Stars        int
@@ -120,6 +122,10 @@ type Install struct {
 	ExecPath    string
 	DesktopPath string
 	Files       []string
+	// The version this one replaced, still on disk (see install.Rollback);
+	// "" when there is none.
+	PreviousVersion string
+	PreviousExec    string
 }
 
 // AppDetail gathers everything known about an app.
@@ -189,9 +195,9 @@ func (s *Store) RepoState(ctx context.Context, fullName string) (RepoState, erro
 	var st RepoState
 	var pushed sql.NullTime
 	err := s.db.QueryRowContext(ctx,
-		`SELECT pushed_at, head_sha, latest_tag, etag, index_version, stars, description
+		`SELECT pushed_at, head_sha, latest_tag, release_sig, etag, index_version, stars, description
 		 FROM repos WHERE full_name = ?`, fullName).
-		Scan(&pushed, &st.HeadSHA, &st.LatestTag, &st.ETag, &st.IndexVersion, &st.Stars, &st.Description)
+		Scan(&pushed, &st.HeadSHA, &st.LatestTag, &st.ReleaseSig, &st.ETag, &st.IndexVersion, &st.Stars, &st.Description)
 	if errors.Is(err, sql.ErrNoRows) {
 		return st, ErrNotFound
 	}
@@ -232,18 +238,19 @@ func (s *Store) SaveIndexed(ctx context.Context, r Repo, a App, assets []Asset) 
 
 	if _, err = tx.ExecContext(ctx, `
 		INSERT INTO repos (full_name, description, stars, topics, license, html_url, default_branch,
-		                   pushed_at, head_sha, latest_tag, release_notes, etag, indexed_at, index_version, changed_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		                   pushed_at, head_sha, latest_tag, release_sig, release_notes, etag, indexed_at, index_version,
+		                   changed_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(full_name) DO UPDATE SET
 			description = excluded.description, stars = excluded.stars, topics = excluded.topics,
 			license = excluded.license, html_url = excluded.html_url,
 			default_branch = excluded.default_branch, pushed_at = excluded.pushed_at,
-			head_sha = excluded.head_sha, latest_tag = excluded.latest_tag,
+			head_sha = excluded.head_sha, latest_tag = excluded.latest_tag, release_sig = excluded.release_sig,
 			release_notes = excluded.release_notes, etag = excluded.etag,
 			indexed_at = excluded.indexed_at, index_version = excluded.index_version,
 			changed_at = excluded.changed_at`,
 		r.FullName, r.Description, r.Stars, encodeList(r.Topics), r.License, r.HTMLURL, r.DefaultBranch,
-		nullTime(r.PushedAt), r.HeadSHA, r.LatestTag, r.ReleaseNotes, r.ETag, nullTime(r.IndexedAt), r.IndexVersion,
+		nullTime(r.PushedAt), r.HeadSHA, r.LatestTag, r.ReleaseSig, r.ReleaseNotes, r.ETag, nullTime(r.IndexedAt), r.IndexVersion,
 		nullTime(r.IndexedAt)); err != nil {
 		return fmt.Errorf("save repo %s: %w", r.FullName, err)
 	}
@@ -432,12 +439,15 @@ func (s *Store) Assets(ctx context.Context, fullName, tag string) ([]Asset, erro
 // SaveInstall records (or replaces) an app installation.
 func (s *Store) SaveInstall(ctx context.Context, in Install) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO installs (full_name, version, installed_at, exec_path, desktop_path, files)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO installs (full_name, version, installed_at, exec_path, desktop_path, files,
+		                      previous_version, previous_exec)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(full_name) DO UPDATE SET
 			version = excluded.version, installed_at = excluded.installed_at,
-			exec_path = excluded.exec_path, desktop_path = excluded.desktop_path, files = excluded.files`,
-		in.FullName, in.Version, in.InstalledAt.UTC(), in.ExecPath, in.DesktopPath, encodeList(in.Files))
+			exec_path = excluded.exec_path, desktop_path = excluded.desktop_path, files = excluded.files,
+			previous_version = excluded.previous_version, previous_exec = excluded.previous_exec`,
+		in.FullName, in.Version, in.InstalledAt.UTC(), in.ExecPath, in.DesktopPath, encodeList(in.Files),
+		in.PreviousVersion, in.PreviousExec)
 	if err != nil {
 		return fmt.Errorf("record installation of %s: %w", in.FullName, err)
 	}
@@ -450,10 +460,11 @@ func (s *Store) GetInstall(ctx context.Context, fullName string) (*Install, erro
 	var in Install
 	var files string
 	err := s.db.QueryRowContext(ctx, `
-		SELECT full_name, version, installed_at, exec_path, desktop_path, files
+		SELECT full_name, version, installed_at, exec_path, desktop_path, files, previous_version, previous_exec
 		FROM installs WHERE full_name = ? COLLATE NOCASE
 		ORDER BY full_name = ? DESC LIMIT 1`, fullName, fullName).
-		Scan(&in.FullName, &in.Version, &in.InstalledAt, &in.ExecPath, &in.DesktopPath, &files)
+		Scan(&in.FullName, &in.Version, &in.InstalledAt, &in.ExecPath, &in.DesktopPath, &files,
+			&in.PreviousVersion, &in.PreviousExec)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -467,7 +478,7 @@ func (s *Store) GetInstall(ctx context.Context, fullName string) (*Install, erro
 // ListInstalls lists the installed apps by name.
 func (s *Store) ListInstalls(ctx context.Context) ([]Install, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT full_name, version, installed_at, exec_path, desktop_path, files
+		SELECT full_name, version, installed_at, exec_path, desktop_path, files, previous_version, previous_exec
 		FROM installs ORDER BY full_name`)
 	if err != nil {
 		return nil, fmt.Errorf("list installations: %w", err)
@@ -477,7 +488,8 @@ func (s *Store) ListInstalls(ctx context.Context) ([]Install, error) {
 	for rows.Next() {
 		var in Install
 		var files string
-		if err := rows.Scan(&in.FullName, &in.Version, &in.InstalledAt, &in.ExecPath, &in.DesktopPath, &files); err != nil {
+		if err := rows.Scan(&in.FullName, &in.Version, &in.InstalledAt, &in.ExecPath, &in.DesktopPath, &files,
+			&in.PreviousVersion, &in.PreviousExec); err != nil {
 			return nil, err
 		}
 		in.Files = decodeList(files)

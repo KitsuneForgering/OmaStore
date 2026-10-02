@@ -3,9 +3,13 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/KitsuneSemCalda/OmaStore/backend/internal/elfdeps"
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/sysdeps"
 )
 
@@ -58,13 +62,72 @@ func (a *App) declaredDeps(ctx context.Context, fullName string) (sysdeps.Set, e
 	return set, nil
 }
 
-// SysDeps checks the app's declared system dependencies on this machine.
+// SysDeps checks the app's declared system dependencies on this machine
+// and, once it is installed, the shared libraries its executable needs.
 func (a *App) SysDeps(ctx context.Context, fullName string) (sysdeps.Report, error) {
 	set, err := a.declaredDeps(ctx, fullName)
 	if err != nil {
 		return sysdeps.Report{}, err
 	}
-	return a.Pacman.Check(ctx, set)
+	rep, err := a.Pacman.Check(ctx, set)
+	if err != nil && !errors.Is(err, sysdeps.ErrNoPacman) {
+		return rep, err
+	}
+	a.addLibraries(ctx, fullName, &rep)
+	return rep, err
+}
+
+// addLibraries reads the installed executable's ELF headers (never runs it)
+// and adds the libraries this system lacks, with the package that ships each
+// one when pacman's file database can tell. Most release tarballs have no
+// PKGBUILD, so this is often the only warning before "it does not open".
+func (a *App) addLibraries(ctx context.Context, fullName string, rep *sysdeps.Report) {
+	inst, err := a.Store.GetInstall(ctx, fullName)
+	if err != nil || inst.ExecPath == "" {
+		return
+	}
+	root := versionRoot(a.Paths.AppsDir, inst.ExecPath)
+	if root == "" {
+		return
+	}
+	res, err := elfdeps.Check(inst.ExecPath, root, elfdeps.SystemDirs())
+	if err != nil {
+		if !errors.Is(err, elfdeps.ErrNotELF) {
+			a.Log.Debug("library check failed", "repo", fullName, "err", err)
+		}
+		return
+	}
+	if res.WrongArch {
+		rep.WrongArch = res.Machine
+		return
+	}
+	for _, lib := range res.Missing {
+		st := sysdeps.LibState{Name: lib, Status: sysdeps.StatusUnknown}
+		pkg, known, err := a.Pacman.LibraryPackage(ctx, lib)
+		switch {
+		case err != nil:
+			a.Log.Debug("library package lookup failed", "lib", lib, "err", err)
+		case pkg != "":
+			st.Status, st.Package = sysdeps.StatusAvailable, pkg
+		case known:
+			st.Status = sysdeps.StatusUnavailable
+		}
+		rep.Libraries = append(rep.Libraries, st)
+	}
+}
+
+// versionRoot is the version directory (apps/<owner>__<repo>/<version>)
+// holding exec, or "" if exec is not under appsDir.
+func versionRoot(appsDir, exec string) string {
+	rel, err := filepath.Rel(appsDir, exec)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return ""
+	}
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	if len(parts) < 3 {
+		return ""
+	}
+	return filepath.Join(appsDir, parts[0], parts[1])
 }
 
 // InstallSysDeps installs, as root through polkit, every missing dependency

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -27,10 +28,26 @@ type DepState struct {
 	Package string `json:"package,omitempty"`
 }
 
+// LibState is a shared library the installed executable needs and the
+// system does not have (see internal/elfdeps).
+type LibState struct {
+	Name string `json:"name"` // soname, e.g. libwebkit2gtk-4.1.so.0
+	// StatusAvailable (Package provides it), StatusUnavailable (no
+	// repository has it) or StatusUnknown (no pacman file database to ask:
+	// pacman -Fy creates it).
+	Status  string `json:"status"`
+	Package string `json:"package,omitempty"`
+}
+
 // Report is the state of an app's dependencies.
 type Report struct {
 	Source string     `json:"source"`
 	Deps   []DepState `json:"deps"`
+	// Libraries the installed executable needs and are missing.
+	Libraries []LibState `json:"libraries,omitempty"`
+	// WrongArch names the machine the installed executable was built for when
+	// it is not this one ("" otherwise).
+	WrongArch string `json:"wrongArch,omitempty"`
 }
 
 // ToInstall lists the repository packages that would be installed.
@@ -43,11 +60,23 @@ func (r Report) ToInstall() []string {
 			out = append(out, d.Package)
 		}
 	}
+	for _, l := range r.Libraries {
+		if l.Status == StatusAvailable && !seen[l.Package] {
+			seen[l.Package] = true
+			out = append(out, l.Package)
+		}
+	}
 	return out
 }
 
 // ErrNoPacman means this system has no pacman (not Arch-based).
 var ErrNoPacman = errors.New("pacman not found: system dependencies can only be checked on Arch Linux")
+
+// ErrStaleDatabase means pacman could not download a package the local sync
+// database lists: the mirrors moved on since the last system update. The fix
+// is a full system update (omarchy update), never "pacman -Sy" (a partial
+// upgrade, which Arch does not support).
+var ErrStaleDatabase = errors.New("the package database is older than the mirrors: update the system (omarchy update) and try again")
 
 // ErrDenied means the administrator authentication was canceled or refused.
 var ErrDenied = errors.New("administrator authentication was canceled or refused")
@@ -59,8 +88,9 @@ var ErrUnavailable = errors.New("some dependencies are not in any pacman reposit
 // are absolute on purpose: never resolved through PATH, which includes
 // ~/.local/bin, where downloaded apps live.
 type Pacman struct {
-	Pacman string // default /usr/bin/pacman
-	Pkexec string // default /usr/bin/pkexec
+	Pacman  string // default /usr/bin/pacman
+	Pkexec  string // default /usr/bin/pkexec
+	SyncDir string // default /var/lib/pacman/sync (where pacman -Fy keeps the file databases)
 	// run executes a command (tests replace it). It returns stdout, stderr
 	// and the exit code; err is set only when the command could not run.
 	run func(ctx context.Context, name string, args ...string) (stdout, stderr []byte, code int, err error)
@@ -95,6 +125,68 @@ func (p *Pacman) exec(ctx context.Context, name string, args ...string) ([]byte,
 		return out.Bytes(), errb.Bytes(), ee.ExitCode(), nil
 	}
 	return out.Bytes(), errb.Bytes(), 0, err
+}
+
+// HasFileDB reports whether pacman can answer "which package has this
+// file" (pacman -F needs the .files databases that pacman -Fy downloads).
+func (p *Pacman) HasFileDB() bool {
+	dir := p.SyncDir
+	if dir == "" {
+		dir = "/var/lib/pacman/sync"
+	}
+	m, _ := filepath.Glob(filepath.Join(dir, "*.files"))
+	return len(m) > 0
+}
+
+// LibraryPackage finds the repository package ("repo/name") that ships the
+// shared library lib in usr/lib, through pacman's file database. known is
+// false when there is no such database to ask.
+func (p *Pacman) LibraryPackage(ctx context.Context, lib string) (pkg string, known bool, err error) {
+	if !p.Available() || !p.HasFileDB() {
+		return "", false, nil
+	}
+	if !validLib(lib) {
+		return "", true, fmt.Errorf("invalid library name %q", lib)
+	}
+	out, stderr, code, err := p.exec(ctx, p.pacman(), "-F", "--machinereadable", "--", lib)
+	if err != nil {
+		return "", true, fmt.Errorf("run pacman -F: %w", err)
+	}
+	if code != 0 && len(bytes.TrimSpace(out)) == 0 {
+		if code == 1 { // not found
+			return "", true, nil
+		}
+		return "", true, fmt.Errorf("pacman -F %s: exit %d: %s", lib, code, lastLine(stderr))
+	}
+	// repo\0name\0version\0path per line. Prefer the library in usr/lib: the
+	// same soname also exists in lib32 packages (multilib).
+	fallback := ""
+	for _, line := range strings.Split(string(out), "\n") {
+		f := strings.Split(line, "\x00")
+		if len(f) != 4 || !ValidName(f[0]) || !ValidName(f[1]) {
+			continue
+		}
+		if f[3] == "usr/lib/"+lib {
+			return f[0] + "/" + f[1], true, nil
+		}
+		if fallback == "" && !strings.Contains(f[3], "lib32") {
+			fallback = f[0] + "/" + f[1]
+		}
+	}
+	return fallback, true, nil
+}
+
+// validLib accepts sonames only (no paths, no options).
+func validLib(lib string) bool {
+	if lib == "" || len(lib) > 200 || strings.HasPrefix(lib, "-") {
+		return false
+	}
+	for _, r := range lib {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("._+-", r)) {
+			return false
+		}
+	}
+	return true
 }
 
 // Available reports whether pacman exists on this system.
@@ -214,6 +306,9 @@ func (p *Pacman) Install(ctx context.Context, pkgs []string) error {
 			break
 		}
 		return ErrDenied
+	}
+	if bytes.Contains(stderr, []byte("failed retrieving file")) || bytes.Contains(stderr, []byte("failed to retrieve some files")) {
+		return fmt.Errorf("%w (%s)", ErrStaleDatabase, lastLine(stderr))
 	}
 	return fmt.Errorf("pacman -S: exit %d: %s", code, lastLine(stderr))
 }

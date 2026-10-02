@@ -128,11 +128,11 @@ func TestInstallUpdateUninstall(t *testing.T) {
 	e.publish(t, "v1.0.0", appTarGz(t, "1"), asset.FormatTarGz, true)
 
 	var stages []string
-	inst, err := e.in.Install(ctx, "acme/omaphoto", func(p Progress) {
+	inst, err := e.in.Install(ctx, "acme/omaphoto", Options{Progress: func(p Progress) {
 		if len(stages) == 0 || stages[len(stages)-1] != p.Stage {
 			stages = append(stages, p.Stage)
 		}
-	})
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,30 +184,48 @@ func TestInstallUpdateUninstall(t *testing.T) {
 	}
 
 	// Update without a new version.
-	if _, err := e.in.Update(ctx, "acme/omaphoto", nil); !errors.Is(err, ErrUpToDate) {
+	if _, err := e.in.Update(ctx, "acme/omaphoto", Options{}); !errors.Is(err, ErrUpToDate) {
 		t.Errorf("update without changes: %v", err)
 	}
 
-	// Update to v2: swaps the launcher and removes the old version.
+	// Update to v2: swaps the launcher and keeps v1 beside it (a running
+	// copy keeps its files; rollback goes back to it).
 	e.publish(t, "v2.0.0", appTarGz(t, "2"), asset.FormatTarGz, true)
-	inst2, err := e.in.Update(ctx, "acme/omaphoto", nil)
+	inst2, err := e.in.Update(ctx, "acme/omaphoto", Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if inst2.Version != "v2.0.0" {
-		t.Errorf("version = %s", inst2.Version)
+	if inst2.Version != "v2.0.0" || inst2.PreviousVersion != "v1.0.0" || inst2.PreviousExec != inst.ExecPath {
+		t.Errorf("v2: %+v", inst2)
 	}
-	if _, err := os.Stat(versionDir); !os.IsNotExist(err) {
-		t.Error("old version was not removed")
+	if _, err := os.Stat(versionDir); err != nil {
+		t.Errorf("previous version was not kept: %v", err)
+	}
+	if !registered(inst2.Files, versionDir) {
+		t.Errorf("previous version not registered: %v", inst2.Files)
 	}
 	if target, _ := launcherTarget(link); !strings.Contains(target, "/v2.0.0/") {
 		t.Errorf("launcher does not point to v2: %s", target)
 	}
 
+	// Update to v3: v2 becomes the previous one, v1 goes away.
+	e.publish(t, "v3.0.0", appTarGz(t, "3"), asset.FormatTarGz, true)
+	inst3, err := e.in.Update(ctx, "acme/omaphoto", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inst3.PreviousVersion != "v2.0.0" {
+		t.Errorf("v3: %+v", inst3)
+	}
+	if _, err := os.Stat(versionDir); !os.IsNotExist(err) {
+		t.Error("the version before the previous one was not removed")
+	}
+	inst2 = inst3
+
 	// Uninstall: everything registered goes away, and only that.
 	keep := filepath.Join(e.paths.BinDir, "other-program")
 	os.WriteFile(keep, []byte("x"), 0o755)
-	if err := e.in.Uninstall(ctx, "acme/omaphoto"); err != nil {
+	if err := e.in.Uninstall(ctx, "acme/omaphoto", false); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range append(inst2.Files, filepath.Join(e.paths.AppsDir, "acme__omaphoto")) {
@@ -221,7 +239,7 @@ func TestInstallUpdateUninstall(t *testing.T) {
 	if _, err := e.st.GetInstall(ctx, "acme/omaphoto"); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("registro continua: %v", err)
 	}
-	if err := e.in.Uninstall(ctx, "acme/omaphoto"); !errors.Is(err, ErrNotInstalled) {
+	if err := e.in.Uninstall(ctx, "acme/omaphoto", false); !errors.Is(err, ErrNotInstalled) {
 		t.Errorf("second uninstall: %v", err)
 	}
 }
@@ -235,7 +253,7 @@ func TestInstallChecksumMismatch(t *testing.T) {
 	a.Digest = "sha256:" + strings.Repeat("0", 64)
 	e.st.SaveIndexed(ctx, d.Repo, d.App, []store.Asset{a})
 
-	_, err := e.in.Install(ctx, "acme/omaphoto", nil)
+	_, err := e.in.Install(ctx, "acme/omaphoto", Options{})
 	if !errors.Is(err, ErrChecksum) {
 		t.Fatalf("err = %v", err)
 	}
@@ -253,13 +271,13 @@ func TestInstallChecksumFile(t *testing.T) {
 	e.st.SaveIndexed(ctx, d.Repo, d.App, []store.Asset{a})
 
 	e.files["/checksums.txt"] = []byte(sha([]byte("other")) + "  other.tar.gz\n" + sha(data) + " *" + a.Name + "\n")
-	if _, err := e.in.Install(ctx, "acme/omaphoto", nil); err != nil {
+	if _, err := e.in.Install(ctx, "acme/omaphoto", Options{}); err != nil {
 		t.Fatalf("checksum certo: %v", err)
 	}
-	e.in.Uninstall(ctx, "acme/omaphoto")
+	e.in.Uninstall(ctx, "acme/omaphoto", false)
 
 	e.files["/checksums.txt"] = []byte(sha([]byte("x")) + "  " + a.Name + "\n")
-	if _, err := e.in.Install(ctx, "acme/omaphoto", nil); !errors.Is(err, ErrChecksum) {
+	if _, err := e.in.Install(ctx, "acme/omaphoto", Options{}); !errors.Is(err, ErrChecksum) {
 		t.Errorf("checksum errado: %v", err)
 	}
 }
@@ -295,7 +313,7 @@ func TestInstallRollbackOnConflict(t *testing.T) {
 	foreign := filepath.Join(e.paths.Applications, "omastore-acme-omaphoto.desktop")
 	os.WriteFile(foreign, []byte("alheio"), 0o644)
 
-	_, err := e.in.Install(ctx, "acme/omaphoto", nil)
+	_, err := e.in.Install(ctx, "acme/omaphoto", Options{})
 	if !errors.Is(err, ErrConflict) {
 		t.Fatalf("err = %v", err)
 	}
@@ -313,7 +331,7 @@ func TestInstallRollbackRestoresPrevious(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
-	first, err := e.in.Install(ctx, "acme/omaphoto", nil)
+	first, err := e.in.Install(ctx, "acme/omaphoto", Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +341,7 @@ func TestInstallRollbackRestoresPrevious(t *testing.T) {
 	e.publish(t, "v2", appTarGz(t, "2"), asset.FormatTarGz, true)
 	testHookBeforeSave = func() error { return errors.New("simulated failure") }
 	defer func() { testHookBeforeSave = nil }()
-	_, err = e.in.Install(ctx, "acme/omaphoto", nil)
+	_, err = e.in.Install(ctx, "acme/omaphoto", Options{})
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -348,10 +366,10 @@ func TestInstallNotInstallable(t *testing.T) {
 	ctx := context.Background()
 	e.st.SaveIndexed(ctx, store.Repo{FullName: "acme/lib", LatestTag: "v1"},
 		store.App{Name: "lib"}, []store.Asset{{Tag: "v1", Name: "x-arm64", Arch: "arm64", Format: "binary", URL: "https://x"}})
-	if _, err := e.in.Install(ctx, "acme/lib", nil); !errors.Is(err, ErrNotInstallable) {
+	if _, err := e.in.Install(ctx, "acme/lib", Options{}); !errors.Is(err, ErrNotInstallable) {
 		t.Errorf("err = %v", err)
 	}
-	if _, err := e.in.Install(ctx, "acme/none", nil); !errors.Is(err, store.ErrNotFound) {
+	if _, err := e.in.Install(ctx, "acme/none", Options{}); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("missing: %v", err)
 	}
 }
@@ -360,7 +378,7 @@ func TestInstallBinaryAndPkg(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	e.publish(t, "v1", elfBin, asset.FormatBinary, true)
-	inst, err := e.in.Install(ctx, "acme/omaphoto", nil)
+	inst, err := e.in.Install(ctx, "acme/omaphoto", Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +392,7 @@ func TestInstallBinaryAndPkg(t *testing.T) {
 		{name: "usr/share/icons/hicolor/scalable/apps/omaphoto.svg", body: `<svg xmlns="http://www.w3.org/2000/svg"/>`},
 	})
 	e.publish(t, "v2", pkg, asset.FormatPkg, true)
-	inst, err = e.in.Install(ctx, "acme/omaphoto", nil)
+	inst, err = e.in.Install(ctx, "acme/omaphoto", Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,7 +414,7 @@ func TestInstallRefusesForeignBinLink(t *testing.T) {
 	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
 	os.MkdirAll(e.paths.BinDir, 0o755)
 	os.WriteFile(filepath.Join(e.paths.BinDir, "omaphoto"), []byte("#!/bin/sh\n"), 0o755)
-	_, err := e.in.Install(context.Background(), "acme/omaphoto", nil)
+	_, err := e.in.Install(context.Background(), "acme/omaphoto", Options{})
 	if !errors.Is(err, ErrConflict) {
 		t.Errorf("err = %v", err)
 	}
@@ -411,7 +429,7 @@ func TestInstallRefusesShadowingCommands(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "omaphoto"), []byte("x"), 0o755)
 
 	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
-	_, err := e.in.Install(context.Background(), "acme/omaphoto", nil)
+	_, err := e.in.Install(context.Background(), "acme/omaphoto", Options{})
 	if !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "shadowed") {
 		t.Fatalf("err = %v", err)
 	}
@@ -503,7 +521,7 @@ exec = "app/bin/real-app"
 	d.App.Manifest = m.Encode()
 	e.st.SaveIndexed(ctx, d.Repo, d.App, d.Assets)
 
-	inst, err := e.in.Install(ctx, "acme/omaphoto", nil)
+	inst, err := e.in.Install(ctx, "acme/omaphoto", Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -544,7 +562,7 @@ func TestInstallExecWithVersionPlaceholder(t *testing.T) {
 	m, _, _ := manifest.Parse([]byte("[linux.x86_64]\nexec = \"tool-{version}-x86_64-linux/bin/tool-cli\"\n"), true)
 	d.App.Manifest = m.Encode()
 	e.st.SaveIndexed(ctx, d.Repo, d.App, d.Assets)
-	inst, err := e.in.Install(ctx, "acme/omaphoto", nil)
+	inst, err := e.in.Install(ctx, "acme/omaphoto", Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -561,7 +579,7 @@ func TestInstallRejectsControlCharsInExecPath(t *testing.T) {
 	e.publish(t, "v1", tarGz(t, []entry{
 		{name: "omaphoto\n1/omaphoto", body: string(elfBin), mode: 0o755},
 	}), asset.FormatTarGz, true)
-	_, err := e.in.Install(context.Background(), "acme/omaphoto", nil)
+	_, err := e.in.Install(context.Background(), "acme/omaphoto", Options{})
 	if !errors.Is(err, ErrUnsafePath) {
 		t.Fatalf("err = %v, want ErrUnsafePath", err)
 	}
@@ -598,14 +616,64 @@ func TestInstallBusyInAnotherProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.in.Install(ctx, "ACME/OmaPhoto", nil); !errors.Is(err, ErrBusy) {
+	if _, err := e.in.Install(ctx, "ACME/OmaPhoto", Options{}); !errors.Is(err, ErrBusy) {
 		t.Fatalf("install: %v", err)
 	}
-	if err := e.in.Uninstall(ctx, "acme/omaphoto"); !errors.Is(err, ErrBusy) {
+	if err := e.in.Uninstall(ctx, "acme/omaphoto", false); !errors.Is(err, ErrBusy) {
 		t.Fatalf("uninstall: %v", err)
 	}
 	unlock()
-	if _, err := e.in.Install(ctx, "ACME/OmaPhoto", nil); err != nil {
+	if _, err := e.in.Install(ctx, "ACME/OmaPhoto", Options{}); err != nil {
 		t.Fatalf("install after unlock: %v", err)
+	}
+}
+
+// A file nothing can check is installed only when the caller says so, before
+// any download: the same rule for a first install and an update.
+func TestUnverifiedNeedsConsent(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, false)
+	hits := e.hits.Load()
+	if _, err := e.in.Install(ctx, "acme/omaphoto", Options{}); !errors.Is(err, ErrUnverified) {
+		t.Fatalf("install without consent: %v", err)
+	}
+	if e.hits.Load() != hits {
+		t.Error("downloaded before asking")
+	}
+	assertClean(t, e)
+	if _, err := e.in.Install(ctx, "acme/omaphoto", Options{AllowUnverified: true}); err != nil {
+		t.Fatalf("install with consent: %v", err)
+	}
+
+	// The next release has a digest: no question. The one after has nothing.
+	e.publish(t, "v2", appTarGz(t, "2"), asset.FormatTarGz, true)
+	if _, err := e.in.Update(ctx, "acme/omaphoto", Options{}); err != nil {
+		t.Fatalf("verifiable update: %v", err)
+	}
+	e.publish(t, "v3", appTarGz(t, "3"), asset.FormatTarGz, false)
+	if _, err := e.in.Update(ctx, "acme/omaphoto", Options{}); !errors.Is(err, ErrUnverified) {
+		t.Errorf("unverifiable update without consent: %v", err)
+	}
+	if inst, _ := e.st.GetInstall(ctx, "acme/omaphoto"); inst.Version != "v2" {
+		t.Errorf("version after the refused update: %s", inst.Version)
+	}
+}
+
+func TestVerifiable(t *testing.T) {
+	for _, c := range []struct {
+		a    store.Asset
+		want bool
+	}{
+		{store.Asset{Digest: "sha256:" + strings.Repeat("ab", 32)}, true},
+		{store.Asset{Digest: "sha512:" + strings.Repeat("ab", 64)}, true},
+		{store.Asset{Digest: "sha256:x"}, false},
+		{store.Asset{Digest: "md5:" + strings.Repeat("ab", 16)}, false},
+		{store.Asset{ChecksumURL: "https://x/checksums.txt"}, true},
+		{store.Asset{}, false},
+	} {
+		if got := Verifiable(c.a); got != c.want {
+			t.Errorf("Verifiable(%+v) = %v", c.a, got)
+		}
 	}
 }

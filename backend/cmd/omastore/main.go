@@ -41,9 +41,13 @@ commands:
   lint-manifest [dir|file]          validate an omastore.toml (default: current directory)
   check [--manifest file] [--json] owner/repo
                                     tell an app author what the store sees and what to fix
-  install owner/repo...             install the latest release
-  uninstall owner/repo...           remove an installed app
-  update [owner/repo...]            update the given apps (or every installed one)
+  install [--allow-unverified] owner/repo...
+                                    install the latest release (a file without a
+                                    checksum only with --allow-unverified)
+  uninstall [--force] owner/repo... remove an installed app (--force: even while it runs)
+  rollback owner/repo               go back to the version the last update replaced
+  update [--allow-unverified] [owner/repo...]
+                                    update the given apps (or every installed one)
   update --check [--notify]         list updates (OmaStore's own too); --notify shows a
                                     desktop notification
   self-update [--check]             update OmaStore itself (installations made by install.sh)
@@ -94,6 +98,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		"check":       cmdCheck,
 		"install":     cmdInstall,
 		"uninstall":   cmdUninstall,
+		"rollback":    cmdRollback,
 		"update":      cmdUpdate,
 		"self-update": cmdSelfUpdate,
 		"deps":        cmdDeps,
@@ -580,13 +585,22 @@ func needRepos(name string, args []string, stderr io.Writer) error {
 }
 
 func cmdInstall(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
+	fs := newFlags("install", stderr)
+	allow := fs.Bool("allow-unverified", false, "install even when the release publishes no checksum for the file")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	args = fs.Args()
 	if err := needRepos("install", args, stderr); err != nil {
 		return err
 	}
 	var errs []error
 	for _, name := range args {
-		inst, err := a.Install(ctx, name, progressPrinter(stderr, name))
+		inst, err := a.Install(ctx, name, install.Options{AllowUnverified: *allow, Progress: progressPrinter(stderr, name)})
 		endLine(stderr)
+		if errors.Is(err, install.ErrUnverified) {
+			err = fmt.Errorf("%w (nothing can check the download; --allow-unverified installs it anyway)", err)
+		}
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
 			continue
@@ -627,8 +641,28 @@ func cmdDeps(ctx context.Context, a *app.App, args []string, stdout, stderr io.W
 		}
 		return err
 	}
+	if rep.WrongArch != "" {
+		fmt.Fprintf(stdout, "the installed executable is built for %s and cannot run here\n", rep.WrongArch)
+	}
+	for _, l := range rep.Libraries {
+		detail := "missing"
+		switch l.Status {
+		case sysdeps.StatusAvailable:
+			detail += " (" + l.Package + ")"
+		case sysdeps.StatusUnavailable:
+			detail += ", in no pacman repository"
+		default:
+			detail += " (sudo pacman -Fy lets OmaStore find the package)"
+		}
+		fmt.Fprintf(stdout, "  %-9s %-30s %s\n", "library", l.Name, detail)
+	}
 	if len(rep.Deps) == 0 {
-		fmt.Fprintf(stdout, "%s declares no system dependencies\n", name)
+		if len(rep.Libraries) == 0 && rep.WrongArch == "" {
+			fmt.Fprintf(stdout, "%s declares no system dependencies\n", name)
+		}
+		if pkgs := rep.ToInstall(); len(pkgs) > 0 && !*doInstall {
+			fmt.Fprintf(stdout, "missing: run omastore deps --install %s\n", name)
+		}
 		return nil
 	}
 	fmt.Fprintf(stdout, "from %s:\n", rep.Source)
@@ -679,18 +713,44 @@ func cmdStar(ctx context.Context, a *app.App, args []string, stdout, stderr io.W
 }
 
 func cmdUninstall(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
+	fs := newFlags("uninstall", stderr)
+	force := fs.Bool("force", false, "remove it even while it runs")
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	args = fs.Args()
 	if err := needRepos("uninstall", args, stderr); err != nil {
 		return err
 	}
 	var errs []error
 	for _, name := range args {
-		if err := a.Uninstall(ctx, name); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", name, err))
+		if err := a.Uninstall(ctx, name, *force); err != nil {
+			if errors.Is(err, install.ErrInUse) {
+				err = fmt.Errorf("%w (close it, or use --force)", err)
+			}
+			// The installer's errors already start with the app's name.
+			if !strings.HasPrefix(strings.ToLower(err.Error()), strings.ToLower(name)+":") {
+				err = fmt.Errorf("%s: %w", name, err)
+			}
+			errs = append(errs, err)
 			continue
 		}
 		fmt.Fprintf(stdout, "%s removed\n", name)
 	}
 	return errors.Join(errs...)
+}
+
+func cmdRollback(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
+	if len(args) != 1 {
+		fmt.Fprintln(stderr, "usage: omastore rollback owner/repo")
+		return errUsage
+	}
+	inst, err := a.Rollback(ctx, args[0])
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "%s is back at %s (%s stays installed beside it)\n", inst.FullName, inst.Version, inst.PreviousVersion)
+	return nil
 }
 
 // newNotifier creates the desktop notifier (replaced in tests).
@@ -714,6 +774,7 @@ func cmdUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io
 	fs := newFlags("update", stderr)
 	check := fs.Bool("check", false, "only list the available updates, without installing")
 	notifyFlag := fs.Bool("notify", false, "with --check: desktop notification if there are new updates")
+	allow := fs.Bool("allow-unverified", false, "update even when the new release publishes no checksum for the file")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -740,7 +801,10 @@ func cmdUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io
 	}
 	var errs []error
 	for _, name := range names {
-		inst, err := a.Update(ctx, name, progressPrinter(stderr, name))
+		inst, err := a.Update(ctx, name, install.Options{AllowUnverified: *allow, Progress: progressPrinter(stderr, name)})
+		if errors.Is(err, install.ErrUnverified) {
+			err = fmt.Errorf("%w (nothing can check the download; --allow-unverified updates it anyway)", err)
+		}
 		switch {
 		case errors.Is(err, install.ErrUpToDate):
 			fmt.Fprintf(stdout, "%s is already at %s\n", name, inst.Version)

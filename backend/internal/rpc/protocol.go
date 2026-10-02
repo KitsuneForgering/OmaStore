@@ -16,8 +16,20 @@ import (
 	"github.com/KitsuneSemCalda/OmaStore/backend/internal/sysdeps"
 )
 
-// Protocol version, returned by daemon.hello.
-const ProtocolVersion = 1
+// ProtocolVersion is returned by daemon.hello. Bump it whenever a method or
+// a DTO changes: the interface compares it with the one it was built for and
+// tells the user when the running daemon is older (docs/ipc.md).
+const ProtocolVersion = 2
+
+// Methods are the methods this daemon answers, also returned by
+// daemon.hello so an interface can check for the ones it needs.
+var Methods = []string{
+	"daemon.hello",
+	"catalog.list", "catalog.get", "catalog.similar", "catalog.categories",
+	"installs.list", "index.start", "install.start", "update.start", "install.uninstall", "install.rollback",
+	"jobs.list", "jobs.cancel", "author.check", "star.get", "star.set", "deps.check", "deps.install",
+	"self.status", "self.update", "self.restart", "image.get",
+}
 
 // request is a JSON-RPC request or notification.
 type request struct {
@@ -73,6 +85,10 @@ const (
 	CodeDenied         = -32012
 	CodeUnsupported    = -32013
 	CodeUnavailable    = -32014
+	CodeInUse          = -32015
+	CodeNoPrevious     = -32016
+	CodeUnverified     = -32017
+	CodeStaleDatabase  = -32018
 )
 
 // ErrBusy means an equivalent job is already running.
@@ -111,12 +127,20 @@ func toError(err error) *Error {
 		code = CodeCanceled
 	case errors.Is(err, install.ErrIncomplete):
 		code = CodeIncomplete
+	case errors.Is(err, install.ErrInUse):
+		code = CodeInUse
+	case errors.Is(err, install.ErrNoPrevious):
+		code = CodeNoPrevious
+	case errors.Is(err, install.ErrUnverified):
+		code = CodeUnverified
 	case errors.Is(err, github.ErrNoToken), errors.Is(err, github.ErrStarForbidden):
 		code = CodeAuthRequired
 	case errors.Is(err, sysdeps.ErrDenied):
 		code = CodeDenied
 	case errors.Is(err, sysdeps.ErrNoPacman):
 		code = CodeUnsupported
+	case errors.Is(err, sysdeps.ErrStaleDatabase):
+		code = CodeStaleDatabase
 	case errors.Is(err, sysdeps.ErrUnavailable):
 		code = CodeUnavailable
 	case errors.Is(err, github.ErrNotFound):
