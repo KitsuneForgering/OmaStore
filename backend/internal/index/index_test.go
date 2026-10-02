@@ -12,9 +12,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/asset"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/github"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/asset"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/github"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
 )
 
 type fakeRepo struct {

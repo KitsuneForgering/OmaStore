@@ -1,6 +1,6 @@
 [Unit]
 Description=Daily OmaStore catalog refresh
-Documentation=https://github.com/KitsuneSemCalda/OmaStore
+Documentation=https://github.com/KitsuneForgering/OmaStore
 
 [Timer]
 OnCalendar=daily

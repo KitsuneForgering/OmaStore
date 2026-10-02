@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/repoid"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/repoid"
 	gh "github.com/google/go-github/v92/github"
 )
 

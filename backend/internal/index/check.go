@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/asset"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/github"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/manifest"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/asset"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/github"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/manifest"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
 )
 
 // Check statuses: a failure keeps the app out of the catalog or from

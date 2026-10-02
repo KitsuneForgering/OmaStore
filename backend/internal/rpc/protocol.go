@@ -9,11 +9,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/github"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/index"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/install"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/store"
-	"github.com/KitsuneSemCalda/OmaStore/backend/internal/sysdeps"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/github"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/index"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/install"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/sysdeps"
 )
 
 // ProtocolVersion is returned by daemon.hello. Bump it whenever a method or

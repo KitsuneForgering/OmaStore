@@ -35,7 +35,7 @@ sha256sum "$fixture/omastore-1.2.3-x86_64-linux.tar.gz" | \
 cat > "$fixture/mock-bin/curl" <<'MOCK'
 #!/bin/sh
 case " $* " in
-  *url_effective*) printf '%s\n' 'https://github.com/KitsuneSemCalda/OmaStore/releases/tag/v1.2.3'; exit ;;
+  *url_effective*) printf '%s\n' 'https://github.com/KitsuneForgering/OmaStore/releases/tag/v1.2.3'; exit ;;
 esac
 while [ "$#" -gt 0 ]; do
   if [ "$1" = -o ]; then output=$2; shift 2; else url=$1; shift; fi
