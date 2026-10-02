@@ -43,26 +43,27 @@ Page {
 
     component Card: Rectangle {
         default property alias content: inner.data
-        property int padding: 20
+        property int padding: theme.spaceXl
         Layout.fillWidth: true
         implicitHeight: inner.implicitHeight + padding * 2
-        radius: 8
+        radius: theme.radiusM
         color: theme.surface
-        border.color: theme.selection
+        border.color: theme.outline
         ColumnLayout {
             id: inner
             anchors.fill: parent
             anchors.margins: parent.padding
-            spacing: 12
+            spacing: theme.spaceM
         }
     }
 
     component Heading: Text {
         Layout.fillWidth: true
         color: theme.foreground
-        font.pixelSize: 17
-        font.bold: true
+        font.pixelSize: theme.fontSubtitle
+        font.weight: Font.DemiBold
         wrapMode: Text.Wrap
+        Accessible.role: Accessible.Heading
     }
 
     component Body: Text {
@@ -77,28 +78,28 @@ Page {
         property string text: ""
         property bool copyable: true
         Layout.fillWidth: true
-        implicitHeight: codeColumn.implicitHeight + 20
-        radius: 6
+        implicitHeight: codeColumn.implicitHeight + theme.spaceM * 2
+        radius: theme.radiusS
         color: theme.background
-        border.color: theme.selection
+        border.color: theme.outline
         ColumnLayout {
             id: codeColumn
             anchors.fill: parent
-            anchors.margins: 10
-            spacing: 4
+            anchors.margins: theme.spaceM
+            spacing: theme.spaceXs
             Text {
                 Layout.fillWidth: true
                 text: code.text.replace(/\n+$/, "")
                 color: theme.foreground
-                font.family: "monospace"
-                font.pixelSize: 13
+                font.family: theme.monoFamily
+                font.pixelSize: theme.fontBody
                 wrapMode: Text.Wrap
             }
-            Button {
+            ActionButton {
+                kind: "quiet"
                 Layout.alignment: Qt.AlignRight
                 visible: code.copyable
                 text: qsTr("Copy")
-                flat: true
                 onClicked: backend.copyText(code.text)
             }
         }
@@ -107,26 +108,27 @@ Page {
     Flickable {
         id: flick
         anchors.fill: parent
-        contentHeight: column.implicitHeight + 48
+        contentHeight: column.implicitHeight + theme.spaceXxl * 2
         clip: true
         ScrollBar.vertical: ScrollBar {}
 
         ColumnLayout {
             id: column
             objectName: "publishContent"
-            x: Math.max(24, (flick.width - width) / 2)
-            y: 24
-            width: Math.min(flick.width - 48, 880)
-            spacing: 24
+            x: Math.max(theme.spaceXl, (flick.width - width) / 2)
+            y: theme.spaceXl
+            width: Math.min(flick.width - theme.spaceXl * 2, 880)
+            spacing: theme.spaceXl
 
             ColumnLayout {
                 Layout.fillWidth: true
-                spacing: 8
+                spacing: theme.spaceS
                 Text {
                     text: qsTr("Publish your app")
                     color: theme.foreground
-                    font.pixelSize: 28
-                    font.bold: true
+                    font.pixelSize: theme.fontHeadline
+                    font.weight: Font.Bold
+                    Accessible.role: Accessible.Heading
                 }
                 Body {
                     text: qsTr("OmaStore lists standalone Omarchy apps straight from GitHub. There is no sign-up: an omastore.toml at the root of your repository is the opt-in, and the store installs the Linux binary of your latest release.")
@@ -142,11 +144,25 @@ Page {
                 }
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 10
+                    spacing: theme.spaceS
                     TextField {
                         id: repoField
                         objectName: "checkRepoField"
                         Layout.fillWidth: true
+                        color: theme.foreground
+                        placeholderTextColor: theme.muted
+                        selectionColor: theme.focus
+                        selectedTextColor: theme.onFocus
+                        font.family: theme.monoFamily
+                        leftPadding: theme.spaceM
+                        rightPadding: theme.spaceM
+                        background: Rectangle {
+                            implicitHeight: Math.max(38, theme.fontBody * 2.6)
+                            radius: theme.radiusS
+                            color: theme.background
+                            border.color: repoField.activeFocus ? theme.focus : theme.border
+                            border.width: repoField.activeFocus ? 2 : 1
+                        }
                         placeholderText: qsTr("owner/repo or https://github.com/owner/repo")
                         onAccepted: page.runCheck()
                     }
@@ -170,14 +186,15 @@ Page {
                     Layout.preferredHeight: 140
                     visible: testManifest.checked
                     placeholderText: qsTr("Paste your local omastore.toml here")
-                    font.family: "monospace"
+                    font.family: theme.monoFamily
+                    placeholderTextColor: theme.muted
                     wrapMode: TextEdit.WrapAnywhere
                     color: theme.foreground
                     background: Rectangle {
                         color: theme.background
                         border.color: manifestArea.activeFocus ? theme.focus : theme.border
                         border.width: manifestArea.activeFocus ? 2 : 1
-                        radius: 6
+                        radius: theme.radiusS
                     }
                 }
                 BusyIndicator {
@@ -201,7 +218,7 @@ Page {
 
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 12
+                    spacing: theme.spaceM
                     Rectangle {
                         Layout.preferredWidth: 36
                         Layout.preferredHeight: 36
@@ -211,8 +228,8 @@ Page {
                             anchors.centerIn: parent
                             text: page.report.compatible ? "✓" : "✕"
                             color: theme.background
-                            font.pixelSize: 18
-                            font.bold: true
+                            font.pixelSize: theme.fontSubtitle
+                            font.weight: Font.Bold
                         }
                     }
                     ColumnLayout {
@@ -246,14 +263,15 @@ Page {
                 Rectangle {
                     Layout.fillWidth: true
                     visible: !!page.report.name
-                    implicitHeight: preview.implicitHeight + 24
-                    radius: 6
+                    implicitHeight: preview.implicitHeight + theme.spaceM * 2
+                    radius: theme.radiusS
                     color: theme.background
+                    border.color: theme.outline
                     RowLayout {
                         id: preview
                         anchors.fill: parent
-                        anchors.margins: 12
-                        spacing: 12
+                        anchors.margins: theme.spaceM
+                        spacing: theme.spaceM
                         AppIcon {
                             Layout.preferredWidth: 48
                             Layout.preferredHeight: 48
@@ -267,8 +285,8 @@ Page {
                                 Layout.fillWidth: true
                                 text: page.report.name || ""
                                 color: theme.foreground
-                                font.bold: true
-                                font.pixelSize: 16
+                                font.weight: Font.DemiBold
+                                font.pixelSize: theme.fontSubtitle
                                 elide: Text.ElideRight
                             }
                             Text {
@@ -282,7 +300,7 @@ Page {
                             Text {
                                 text: [page.report.category, page.report.tag].filter(s => !!s).join("  ·  ")
                                 color: theme.muted
-                                font.pixelSize: 12
+                                font.pixelSize: theme.fontCaption
                             }
                         }
                     }
@@ -293,14 +311,14 @@ Page {
                     delegate: RowLayout {
                         required property var modelData
                         Layout.fillWidth: true
-                        spacing: 12
+                        spacing: theme.spaceM
                         Text {
                             Layout.alignment: Qt.AlignTop
                             Layout.preferredWidth: 18
                             horizontalAlignment: Text.AlignHCenter
                             text: page.statusGlyph(modelData.status)
                             color: page.statusColor(modelData.status)
-                            font.bold: true
+                            font.weight: Font.Bold
                         }
                         ColumnLayout {
                             Layout.fillWidth: true
@@ -309,7 +327,7 @@ Page {
                                 Layout.fillWidth: true
                                 text: modelData.item
                                 color: theme.foreground
-                                font.bold: true
+                                font.weight: Font.DemiBold
                                 wrapMode: Text.Wrap
                             }
                             Text {
@@ -336,7 +354,7 @@ Page {
                     objectName: "readyNotes"
                     Layout.fillWidth: true
                     visible: !!page.report.compatible && !page.report.localManifest
-                    spacing: 8
+                    spacing: theme.spaceS
                     Heading { text: qsTr("When it shows up") }
                     Body {
                         text: qsTr("It is listed once a catalog refresh finds it. Users without a GitHub token only find repositories with the omarchy topic, and a repository checked before it had an omastore.toml can wait up to 7 days to be looked at again. To see it in your own catalog now:")
@@ -351,7 +369,7 @@ Page {
                 ColumnLayout {
                     Layout.fillWidth: true
                     visible: !!page.report.suggestedManifest
-                    spacing: 8
+                    spacing: theme.spaceS
                     Heading { text: qsTr("Suggested omastore.toml") }
                     Body {
                         text: qsTr("Built from your release and repository. Commit it at the root of the default branch, then check again.")
@@ -368,8 +386,8 @@ Page {
             GridLayout {
                 Layout.fillWidth: true
                 columns: width >= 1040 ? 3 : 1
-                columnSpacing: 16
-                rowSpacing: 16
+                columnSpacing: theme.spaceL
+                rowSpacing: theme.spaceL
 
                 Card {
                     Layout.alignment: Qt.AlignTop
@@ -406,7 +424,7 @@ Page {
             }
             Flow {
                 Layout.fillWidth: true
-                spacing: 24
+                spacing: theme.spaceXl
                 LinkText { text: qsTr("Full authors guide ↗"); url: page.guideUrl }
                 LinkText { text: qsTr("Agent skills for authors ↗"); url: page.skillsUrl }
             }

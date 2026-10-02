@@ -146,6 +146,41 @@ private slots:
         QVERIFY(!m.loading());
     }
 
+    // Two reloads of the same app (e.g. catalog.changed right after opening
+    // it): the older answer arriving last must not overwrite the newer one.
+    void staleDetailIsIgnored()
+    {
+        FakeDaemon d;
+        int gets = 0;
+        d.handler = [&gets](const QString &m, const QJsonObject &p) -> QJsonObject {
+            if (m != "catalog.get")
+                return {{"result", QJsonArray{}}};
+            if (++gets == 1)
+                return {}; // held back, answered later by the test
+            return {{"result", QJsonObject{{"repo", p.value("repo")}, {"latestVersion", "v2"}}}};
+        };
+        QVERIFY(d.listen());
+        RpcClient rpc(d.path());
+        rpc.setAutoStart(false);
+        Backend backend(&rpc);
+        rpc.start();
+        QTRY_VERIFY(rpc.isConnected());
+        backend.openDetail("a/app");
+        QTRY_COMPARE(gets, 1);
+        QJsonValue heldId;
+        for (const QJsonObject &r : d.received)
+            if (r.value("method").toString() == "catalog.get")
+                heldId = r.value("id");
+        d.notify("catalog.changed", QJsonObject{{"repo", "a/app"}});
+        QTRY_COMPARE(backend.detail().value("latestVersion").toString(), QStringLiteral("v2"));
+
+        d.writeRaw(QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", heldId},
+                                             {"result", QJsonObject{{"repo", "a/app"}, {"latestVersion", "v1"}}}})
+                       .toJson(QJsonDocument::Compact) + '\n');
+        QTest::qWait(100);
+        QCOMPARE(backend.detail().value("latestVersion").toString(), QStringLiteral("v2"));
+    }
+
     void errorIsExposed()
     {
         FakeDaemon d;
@@ -158,6 +193,69 @@ private slots:
         CatalogModel m(&rpc);
         rpc.start();
         QTRY_COMPARE(m.error(), QStringLiteral("banco travado"));
+    }
+
+    // daemon.hello decides whether the running daemon fits this window: an
+    // older one (protocol 1, before methods were advertised) gets a warning,
+    // one with every needed method does not, a newer one asks to reopen.
+    void helloWarning()
+    {
+        QVERIFY(!Backend::helloWarning(QJsonObject{{"name", "omastored"}, {"protocol", 1}}).isEmpty());
+        QJsonArray all;
+        for (const QString &m : Backend::requiredMethods())
+            all.append(m);
+        QVERIFY(Backend::helloWarning(QJsonObject{{"protocol", Backend::Protocol}, {"methods", all}}).isEmpty());
+        QJsonArray missing = all;
+        missing.removeAt(0);
+        QVERIFY(!Backend::helloWarning(QJsonObject{{"protocol", Backend::Protocol}, {"methods", missing}}).isEmpty());
+        QVERIFY(Backend::helloWarning(QJsonObject{{"protocol", Backend::Protocol + 1}, {"methods", all}}).contains("newer"));
+    }
+
+    void daemonWarningFromHello()
+    {
+        FakeDaemon d;
+        d.handler = [](const QString &m, const QJsonObject &) -> QJsonObject {
+            if (m == "daemon.hello") // the daemon of 2026-09-29: no methods, no self.restart
+                return {{"result", QJsonObject{{"name", "omastored"}, {"protocol", 1}}}};
+            return {{"result", QJsonArray{}}};
+        };
+        QVERIFY(d.listen());
+        RpcClient rpc(d.path());
+        rpc.setAutoStart(false);
+        Backend backend(&rpc);
+        rpc.start();
+        QTRY_VERIFY(!backend.daemonWarning().isEmpty());
+        QVERIFY(!backend.canRestartDaemon());
+    }
+
+    // Reopening the interface while the daemon runs: jobs that finished
+    // before are history. Their "installed" notices (and the dependencies
+    // dialog) must not show again; a job still running is tracked, and its
+    // end is news.
+    void jobsHistoryIsNotNews()
+    {
+        FakeDaemon d;
+        d.handler = [](const QString &m, const QJsonObject &) -> QJsonObject {
+            if (m == "jobs.list")
+                return {{"result", QJsonArray{
+                    QJsonObject{{"id", "old"}, {"kind", "install"}, {"repo", "a/old"}, {"state", "done"}},
+                    QJsonObject{{"id", "live"}, {"kind", "install"}, {"repo", "a/live"}, {"state", "running"}}}}};
+            return {{"result", QJsonArray{}}};
+        };
+        QVERIFY(d.listen());
+        RpcClient rpc(d.path());
+        rpc.setAutoStart(false);
+        JobsModel jobs(&rpc);
+        QSignalSpy finished(&jobs, &JobsModel::finished);
+        rpc.start();
+        QTRY_COMPARE(jobs.rowCount(), 2);
+        QCOMPARE(jobs.runningCount(), 1);
+        QTest::qWait(50);
+        QCOMPARE(finished.count(), 0);
+
+        d.notify("job.done", QJsonObject{{"id", "live"}, {"kind", "install"}, {"repo", "a/live"}, {"state", "done"}});
+        QTRY_COMPARE(finished.count(), 1);
+        QCOMPARE(finished.at(0).at(0).toMap().value("id").toString(), QStringLiteral("live"));
     }
 
     void jobsModelTracksNotifications()

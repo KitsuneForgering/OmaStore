@@ -6,6 +6,15 @@ Rectangle {
     id: root
     color: theme.surface
 
+    // The edge against the content, for themes where surface and background
+    // are close.
+    Rectangle {
+        anchors.right: parent.right
+        width: 1
+        height: parent.height
+        color: theme.outline
+    }
+
     property string section: "discover"
     property bool detailActive: false
     signal sectionSelected(string section)
@@ -17,40 +26,60 @@ Rectangle {
         property string badge: ""
         Layout.fillWidth: true
         highlighted: selected
+        leftPadding: theme.spaceM
+        rightPadding: theme.spaceS
+        topPadding: theme.spaceS
+        bottomPadding: theme.spaceS
+        Accessible.name: badge !== "" ? text + ", " + badge : text
         contentItem: RowLayout {
+            spacing: theme.spaceS
             Text {
                 Layout.fillWidth: true
                 text: item.text
                 color: item.selected ? theme.accent : theme.foreground
-                font.bold: item.selected
+                font.weight: item.selected ? Font.DemiBold : Font.Normal
                 elide: Text.ElideRight
             }
             Text {
                 visible: item.badge !== ""
                 text: item.badge
                 color: theme.muted
+                font.pixelSize: theme.fontCaption
             }
         }
         background: Rectangle {
             color: item.selected ? theme.selection : (item.hovered ? theme.hover : "transparent")
-            radius: 4
+            radius: theme.radiusS
             border.color: theme.focus
             border.width: item.visualFocus ? 2 : 0
             Behavior on color { ColorAnimation { duration: theme.durationShort } }
+            // Selected: a bar on the left, so the state does not rely on color alone.
+            Rectangle {
+                visible: item.selected
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: 3
+                height: parent.height - theme.spaceS * 2
+                radius: 2
+                color: theme.focus
+            }
         }
     }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 12
+        anchors.margins: theme.spaceM
+        anchors.topMargin: theme.spaceXl
         spacing: 2
 
         Text {
+            Layout.leftMargin: theme.spaceM
             text: "OmaStore"
-            color: root.detailActive ? theme.muted : theme.accent
-            font.pixelSize: root.detailActive ? 20 : 22
-            font.bold: true
-            Layout.bottomMargin: 12
+            color: theme.accent
+            font.pixelSize: theme.fontTitle
+            font.weight: Font.Bold
+            Layout.bottomMargin: theme.spaceL
+            Accessible.role: Accessible.Heading
         }
 
         NavItem {
@@ -66,11 +95,16 @@ Rectangle {
         }
 
         Text {
-            text: qsTr("Categories")
+            Layout.leftMargin: theme.spaceM
+            text: qsTr("Categories").toUpperCase()
             color: theme.muted
-            font.pixelSize: 12
-            Layout.topMargin: 16
-            Layout.bottomMargin: 4
+            font.pixelSize: theme.fontCaption
+            font.weight: Font.DemiBold
+            font.letterSpacing: 0.8
+            Layout.topMargin: theme.spaceXl
+            Layout.bottomMargin: theme.spaceXs
+            Accessible.name: qsTr("Categories")
+            Accessible.role: Accessible.Heading
         }
 
         ListView {
@@ -90,9 +124,9 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
-            Layout.topMargin: 6
-            Layout.bottomMargin: 6
-            color: theme.selection
+            Layout.topMargin: theme.spaceS
+            Layout.bottomMargin: theme.spaceS
+            color: theme.outline
         }
         NavItem {
             objectName: "publishNav"
@@ -114,9 +148,9 @@ Rectangle {
             onVisibleChanged: if (visible) selfFade.restart()
             NumberAnimation on opacity { id: selfFade; from: 0; to: 1; duration: theme.durationMedium; running: false }
             Layout.fillWidth: true
-            Layout.topMargin: 6
-            implicitHeight: selfColumn.implicitHeight + 20
-            radius: 6
+            Layout.topMargin: theme.spaceS
+            implicitHeight: selfColumn.implicitHeight + theme.spaceM * 2
+            radius: theme.radiusM
             color: theme.background
             border.color: theme.accent
             border.width: 1
@@ -124,8 +158,8 @@ Rectangle {
             ColumnLayout {
                 id: selfColumn
                 anchors.fill: parent
-                anchors.margins: 10
-                spacing: 6
+                anchors.margins: theme.spaceM
+                spacing: theme.spaceS
                 Text {
                     Layout.fillWidth: true
                     wrapMode: Text.Wrap
@@ -155,9 +189,9 @@ Rectangle {
             }
         }
 
-        Button {
+        ActionButton {
             Layout.fillWidth: true
-            Layout.topMargin: 6
+            Layout.topMargin: theme.spaceS
             visible: !root.detailActive
             readonly property var job: { backend.jobs.revision; return backend.jobs.indexJob() }
             enabled: backend.connected && !job.id
@@ -168,7 +202,9 @@ Rectangle {
         }
 
         RowLayout {
-            Layout.topMargin: 6
+            Layout.topMargin: theme.spaceS
+            Layout.leftMargin: theme.spaceXs
+            spacing: theme.spaceS
             Rectangle {
                 Layout.preferredWidth: 8
                 Layout.preferredHeight: 8
@@ -178,7 +214,7 @@ Rectangle {
             Text {
                 text: backend.connected ? qsTr("connected") : qsTr("connecting to omastored…")
                 color: theme.muted
-                font.pixelSize: 11
+                font.pixelSize: theme.fontCaption
             }
         }
     }

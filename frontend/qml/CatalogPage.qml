@@ -17,51 +17,106 @@ Page {
 
     background: Rectangle { color: theme.background }
 
+    // Card heights from the font sizes: icon row, three summary lines and the
+    // footer, so every card fits its text at any system font size.
+    FontMetrics { id: bodyMetrics; font.pixelSize: theme.fontBody }
+    FontMetrics { id: subtitleMetrics; font.pixelSize: theme.fontSubtitle }
+    FontMetrics { id: captionMetrics; font.pixelSize: theme.fontCaption }
+
     header: ToolBar {
         background: Rectangle { color: theme.background }
-        contentHeight: 56
+        topPadding: theme.spaceXl
+        bottomPadding: theme.spaceL
+        leftPadding: theme.spaceXl
+        rightPadding: theme.spaceXl
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 20
-            anchors.rightMargin: 20
-            spacing: 12
+            spacing: theme.spaceM
 
-            Text {
-                text: page.installedView ? qsTr("Installed")
-                                         : (page.model.category !== "" ? page.model.category : qsTr("Discover"))
-                color: theme.foreground
-                font.pixelSize: 20
-                font.bold: true
+            ColumnLayout {
+                spacing: 2
+                Text {
+                    objectName: "catalogTitle"
+                    text: page.installedView ? qsTr("Installed")
+                                             : (page.model.category !== "" ? page.model.category : qsTr("Discover"))
+                    color: theme.foreground
+                    font.pixelSize: theme.fontTitle
+                    font.weight: Font.DemiBold
+                    Accessible.role: Accessible.Heading
+                }
+                Text {
+                    objectName: "catalogCount"
+                    visible: grid.count > 0
+                    text: page.model.query !== "" ? qsTr("%n result(s)", "", grid.count) : qsTr("%n app(s)", "", grid.count)
+                    color: theme.muted
+                    font.pixelSize: theme.fontCaption
+                }
             }
             Item { Layout.fillWidth: true }
             PrimaryButton {
                 visible: page.installedView && backend.updatesAvailable > 0
-                text: qsTr("Update all")
+                text: qsTr("Update all (%1)").arg(backend.updatesAvailable)
                 onClicked: backend.updateAll()
             }
             TextField {
                 id: search
-                Layout.preferredWidth: 280
+                objectName: "searchField"
+                Layout.preferredWidth: Math.min(320, page.width * 0.4)
                 placeholderText: qsTr("Search apps  ( / )")
+                placeholderTextColor: theme.muted
+                color: theme.foreground
+                selectionColor: theme.focus
+                selectedTextColor: theme.onFocus
+                leftPadding: theme.spaceM
+                rightPadding: clearSearch.visible ? clearSearch.width + theme.spaceS : theme.spaceM
+                topPadding: theme.spaceS
+                bottomPadding: theme.spaceS
                 text: page.model.query
                 onTextChanged: page.model.query = text
                 Keys.onDownPressed: grid.forceActiveFocus()
                 Keys.onEscapePressed: { text = ""; grid.forceActiveFocus() }
+                Accessible.name: qsTr("Search apps")
+                background: Rectangle {
+                    implicitHeight: Math.max(38, theme.fontBody * 2.6)
+                    radius: theme.radiusS
+                    color: theme.surface
+                    border.color: search.activeFocus ? theme.focus : theme.border
+                    border.width: search.activeFocus ? 2 : 1
+                }
+                // Clearing is one click, not only Esc.
+                ActionButton {
+                    id: clearSearch
+                    kind: "quiet"
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: search.text !== ""
+                    text: "✕"
+                    Accessible.name: qsTr("Clear search")
+                    onClicked: { search.text = ""; search.forceActiveFocus() }
+                }
             }
         }
     }
 
     GridView {
         id: grid
+        objectName: "catalogGrid"
         anchors.fill: parent
-        anchors.margins: 16
+        // The cards' gutter (spaceS on each side) makes the outer edges line
+        // up with the header's spaceXl margin.
+        anchors.leftMargin: theme.spaceXl - theme.spaceS
+        anchors.rightMargin: theme.spaceXl - theme.spaceS
+        anchors.bottomMargin: theme.spaceL
         clip: true
         model: page.model
         keyNavigationEnabled: true
         focus: true
         readonly property int columns: Math.max(1, Math.floor(width / 300))
-        cellWidth: width / columns
-        cellHeight: 190
+        cellWidth: Math.floor(width / columns)
+        cellHeight: theme.spaceS * 2 + theme.spaceL * 2
+                    + Math.max(48, subtitleMetrics.height + captionMetrics.height + 2)
+                    + theme.spaceM + bodyMetrics.lineSpacing * 3
+                    + theme.spaceM + captionMetrics.height + theme.spaceXs + 2
         ScrollBar.vertical: ScrollBar {}
 
         populate: Transition {
@@ -90,7 +145,7 @@ Page {
 
             AppCard {
                 anchors.fill: parent
-                anchors.margins: 6
+                anchors.margins: theme.spaceS
                 repo: parent.repo
                 name: parent.name
                 summary: parent.summary
@@ -110,9 +165,9 @@ Page {
         id: empty
         objectName: "emptyState"
         anchors.centerIn: parent
-        width: Math.min(parent.width - 64, 640)
+        width: Math.min(parent.width - theme.spaceXxl * 2, 640)
         visible: grid.count === 0
-        spacing: 16
+        spacing: theme.spaceL
         readonly property var job: { backend.jobs.revision; return backend.jobs.indexJob() }
         readonly property bool waiting: !backend.connected || !!job.id || page.model.loading
         // A fresh catalog: nothing indexed, no search, not the installed list.
@@ -130,8 +185,8 @@ Page {
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap
             color: theme.foreground
-            font.pixelSize: 20
-            font.bold: true
+            font.pixelSize: theme.fontTitle
+            font.weight: Font.DemiBold
             text: {
                 if (!backend.connected)
                     return qsTr("Connecting to omastored…")
@@ -151,6 +206,7 @@ Page {
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap
             color: theme.muted
+            lineHeight: 1.3
             text: {
                 if (!backend.connected)
                     return ""
@@ -176,14 +232,19 @@ Page {
         }
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
-            spacing: 12
+            spacing: theme.spaceM
             visible: !empty.waiting
             PrimaryButton {
                 visible: page.installedView
                 text: qsTr("Discover apps")
                 onClicked: page.discoverRequested()
             }
-            Button {
+            ActionButton {
+                visible: !page.installedView && page.model.query !== ""
+                text: qsTr("Clear search")
+                onClicked: { search.text = ""; search.forceActiveFocus() }
+            }
+            ActionButton {
                 visible: !page.installedView && page.model.query === ""
                 text: qsTr("Refresh catalog")
                 onClicked: backend.refreshIndex(false)
@@ -194,25 +255,25 @@ Page {
         Rectangle {
             objectName: "authorInvite"
             Layout.fillWidth: true
-            Layout.topMargin: 8
+            Layout.topMargin: theme.spaceS
             visible: empty.welcome
-            implicitHeight: invite.implicitHeight + 32
-            radius: 8
+            implicitHeight: invite.implicitHeight + theme.spaceL * 2
+            radius: theme.radiusM
             color: theme.surface
-            border.color: theme.selection
+            border.color: theme.outline
             RowLayout {
                 id: invite
                 anchors.fill: parent
-                anchors.margins: 16
-                spacing: 16
+                anchors.margins: theme.spaceL
+                spacing: theme.spaceL
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 4
+                    spacing: theme.spaceXs
                     Text {
                         Layout.fillWidth: true
                         text: qsTr("Do you make an app for Omarchy?")
                         color: theme.foreground
-                        font.bold: true
+                        font.weight: Font.DemiBold
                         wrapMode: Text.Wrap
                     }
                     Text {
