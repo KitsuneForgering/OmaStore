@@ -185,7 +185,9 @@ Rules:
   is refused.
 - **Asset:** the declared one takes priority over the automatic choice and is accepted
   even with a name the heuristics would not understand. If the pattern does not match
-  any asset of the release, the store falls back to the automatic choice.
+  any asset of the release, the app is not installable on that architecture (the store
+  does not guess, so it never installs a file you did not mean). Architectures the
+  manifest does not declare use the automatic choice.
 - **Invalid fields:** are ignored, with a warning; the rest of the manifest
   still applies. A file that is not valid TOML removes the repository from the
   catalog, so validate it before publishing.

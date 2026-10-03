@@ -21,6 +21,7 @@ import (
 	"github.com/KitsuneForgering/OmaStore/backend/internal/asset"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/github"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/gitrepo"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/install"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/manifest"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/sysdeps"
@@ -30,7 +31,7 @@ import (
 // when changing rules that affect what is stored (assets, categories, README...):
 // repositories stored with a lower version are reprocessed even without changes
 // on GitHub.
-const Version = 10
+const Version = 11
 
 // GitHub is the subset of the client used by the indexer.
 type GitHub interface {
@@ -905,12 +906,7 @@ func (ix *Indexer) extract(ctx context.Context, repo *github.Repo, sha string, r
 	}
 
 	assets := releaseAssets(rel, m)
-	for _, a := range assets {
-		if (asset.Info{Format: a.Format, Arch: a.Arch}).Installable(ix.goarch()) {
-			app.Installable = true
-			break
-		}
-	}
+	_, app.Installable = install.SelectAsset(assets, ix.goarch(), m)
 	return app, assets, nil
 }
 

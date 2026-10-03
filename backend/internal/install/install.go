@@ -222,9 +222,11 @@ func appID(owner, repo string) string {
 	return strings.ToLower("omastore-" + owner + "-" + repo)
 }
 
-// SelectAsset picks the asset for goarch: the one declared in the manifest (if
-// any and present in the release), otherwise exact architecture before
-// generic and then the preferred format.
+// SelectAsset picks the asset for goarch: the one declared in the manifest,
+// otherwise exact architecture before generic and then the preferred format.
+// A declared asset missing from the release leaves goarch without one: the
+// heuristic could pick a file the author did not mean as the app (e.g. a
+// plugin backend shipped beside it).
 func SelectAsset(assets []store.Asset, goarch string, m *manifest.Manifest) (store.Asset, bool) {
 	if t, ok := m.Target(goarch); ok && t.Asset != "" {
 		for _, a := range assets {
@@ -232,6 +234,7 @@ func SelectAsset(assets []store.Asset, goarch string, m *manifest.Manifest) (sto
 				return a, true
 			}
 		}
+		return store.Asset{}, false
 	}
 	var cands []store.Asset
 	for _, a := range assets {

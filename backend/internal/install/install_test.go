@@ -493,10 +493,15 @@ func TestSelectAssetPrefersManifest(t *testing.T) {
 	if a, _ := SelectAsset(assets, "amd64", m); a.Name != "A-2-x86_64.AppImage" {
 		t.Errorf("manifest ignored: %s", a.Name)
 	}
-	// A pattern that matches nothing falls back to the heuristic.
+	// A pattern that matches nothing leaves the architecture without an asset.
 	m2, _, _ := manifest.Parse([]byte("[linux.x86_64]\nasset = \"nothing-{version}\"\n"), true)
-	if a, _ := SelectAsset(assets, "amd64", m2); a.Name != "a-2-x86_64.tar.gz" {
-		t.Errorf("fallback: %s", a.Name)
+	if a, ok := SelectAsset(assets, "amd64", m2); ok {
+		t.Errorf("declared asset missing, picked %s", a.Name)
+	}
+	// Architectures the manifest does not declare still use the heuristic.
+	arm := []store.Asset{{Tag: "v2", Name: "a-2-aarch64.tar.gz", Format: asset.FormatTarGz, Arch: "arm64"}}
+	if a, _ := SelectAsset(arm, "arm64", m2); a.Name != "a-2-aarch64.tar.gz" {
+		t.Errorf("undeclared arch: %s", a.Name)
 	}
 }
 

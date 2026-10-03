@@ -40,7 +40,10 @@ Anything else is an error, as in `desktop-file-validate`; the reserved
 
 1. If `[linux.<machine arch>].asset` exists and matches an asset of the latest
    stable release, that is the one. The name does not need to follow any convention.
-2. Otherwise, heuristics: architecture in the name (`x86_64`/`amd64`, `aarch64`/`arm64`),
+   If it matches none, the app is not installable on that architecture: the store
+   does not guess. Declaring the asset is how to keep it from installing, say, a
+   plugin backend shipped beside the app before there is a build of the app itself.
+2. Without a declared asset for the machine's architecture, heuristics: architecture in the name (`x86_64`/`amd64`, `aarch64`/`arm64`),
    formats in the order `.tar.gz`/`.tar.xz`/`.tar.zst`/`.tar.bz2` > `.zip` >
    plain binary > `.AppImage` > `.pkg.tar.zst`. `.deb`, `.rpm`, sources and
    builds for other systems are ignored.
