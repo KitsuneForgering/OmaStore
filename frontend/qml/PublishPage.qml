@@ -298,7 +298,8 @@ Page {
                                 elide: Text.ElideRight
                             }
                             Text {
-                                text: [page.report.category, page.report.tag].filter(s => !!s).join("  ·  ")
+                                text: [page.report.category === "AudioVideo" ? "Audio/Video" : page.report.category,
+                                       page.report.tag].filter(s => !!s).join("  ·  ")
                                 color: theme.muted
                                 font.pixelSize: theme.fontCaption
                             }

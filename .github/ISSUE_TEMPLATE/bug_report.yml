@@ -28,7 +28,7 @@ body:
     attributes:
       label: OmaStore version
       description: The release tag, or the commit if you built from source.
-      placeholder: v0.2.0
+      placeholder: v0.3.0
     validations:
       required: true
   - type: dropdown

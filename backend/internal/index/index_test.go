@@ -456,6 +456,26 @@ exec = "bin/omaphoto"
 	}
 }
 
+// A declared asset missing from the release makes the app not installable on
+// that architecture instead of falling back to a file the author did not mean.
+func TestMissingDeclaredAssetIsNotInstallable(t *testing.T) {
+	ix, gh, st := setup(t)
+	ctx := context.Background()
+	r := gh.repos["acme/omaphoto"]
+	r.files = append(r.files, "omastore.toml")
+	r.toml = "[linux.x86_64]\nasset = \"omaphoto-app-{version}-x86_64.tar.gz\"\n"
+	if _, err := ix.Run(ctx, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	d, err := st.GetApp(ctx, "acme/omaphoto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Installable {
+		t.Error("installable with the declared asset missing")
+	}
+}
+
 func TestOnlyAppsWithManifestAreIndexed(t *testing.T) {
 	for _, batched := range []bool{false, true} {
 		ix, gh, st := setup(t)
