@@ -240,7 +240,7 @@ Page {
                         spacing: theme.spaceS
                         Badge {
                             visible: !!page.app.category
-                            text: page.app.category || ""
+                            text: page.app.category === "AudioVideo" ? "Audio/Video" : page.app.category || ""
                         }
                         Badge {
                             visible: page.installed
@@ -862,7 +862,7 @@ Page {
                             Behavior on color { ColorAnimation { duration: theme.durationShort } }
                             activeFocusOnTab: true
                             Accessible.role: Accessible.Button
-                            Accessible.name: qsTr("%1, %2").arg(modelData.name).arg(modelData.category)
+                            Accessible.name: qsTr("%1, %2").arg(modelData.name).arg(modelData.category === "AudioVideo" ? "Audio/Video" : modelData.category)
                             Accessible.onPressAction: page.appActivated(modelData.repo)
                             Keys.onReturnPressed: page.appActivated(modelData.repo)
                             Keys.onEnterPressed: page.appActivated(modelData.repo)
@@ -892,7 +892,7 @@ Page {
                                     }
                                     Text {
                                         Layout.fillWidth: true
-                                        text: modelData.category
+                                        text: modelData.category === "AudioVideo" ? "Audio/Video" : modelData.category
                                         color: theme.muted
                                         font.pixelSize: theme.fontCaption
                                         elide: Text.ElideRight

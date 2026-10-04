@@ -114,7 +114,7 @@ Rectangle {
             model: backend.categories
             delegate: NavItem {
                 width: ListView.view.width
-                text: modelData.name
+                text: modelData.name === "AudioVideo" ? "Audio/Video" : modelData.name
                 badge: modelData.count
                 selected: !root.detailActive && root.section === "discover" && backend.catalog.category === modelData.name
                 onClicked: root.categorySelected(modelData.name)

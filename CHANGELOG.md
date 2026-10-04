@@ -8,6 +8,7 @@ All notable changes to OmaStore are listed here. The format follows
 
 ### Changed
 
+- The audio and video category is displayed as “Audio/Video” in the interface.
 - An asset declared in `omastore.toml` that the release does not have makes
   the app not installable on that architecture, instead of falling back to the
   automatic choice. A release that ships something else beside the app (a
