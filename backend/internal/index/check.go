@@ -202,8 +202,8 @@ func (ix *Indexer) Check(ctx context.Context, name string, override *string) (*R
 			}
 		}
 		if !matched {
-			r.add(CheckWarn, "Declared asset", fmt.Sprintf("%q (%s) matches no file of %s: the store falls back to the automatic choice",
-				t.Asset, archLabel(arch), rel.Tag), "fix the pattern; {version} is the tag without the v")
+			r.add(CheckWarn, "Declared asset", fmt.Sprintf("%q (%s) matches no file of %s: the app is not installable on %s",
+				t.Asset, archLabel(arch), rel.Tag, archLabel(arch)), "fix the pattern; {version} is the tag without the v")
 		}
 	}
 	names := make([]string, 0, len(rel.Assets))

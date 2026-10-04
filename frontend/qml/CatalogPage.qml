@@ -38,7 +38,8 @@ Page {
                 Text {
                     objectName: "catalogTitle"
                     text: page.installedView ? qsTr("Installed")
-                                             : (page.model.category !== "" ? page.model.category : qsTr("Discover"))
+                                             : (page.model.category === "AudioVideo" ? "Audio/Video"
+                                                : page.model.category !== "" ? page.model.category : qsTr("Discover"))
                     color: theme.foreground
                     font.pixelSize: theme.fontTitle
                     font.weight: Font.DemiBold
