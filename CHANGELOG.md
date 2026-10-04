@@ -6,6 +6,52 @@ All notable changes to OmaStore are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-02
+
+### Added
+
+- Updates can be undone: an update keeps the version it replaced on disk, and
+  "Go back" on the app's page (`omastore rollback`) returns to it without
+  downloading anything.
+- Missing libraries: after installing, OmaStore reads the app's executable
+  (never runs it) and lists the shared libraries the system lacks, or a
+  binary built for another architecture, with the package that provides them
+  when pacman's file database is available (`pacman -F`).
+- "Repair" for an installed app whose executable disappeared.
+- The screenshot gallery is a slideshow: it advances every 5 seconds and
+  pauses while the pointer or the keyboard focus is on it, with the Pause
+  button, and from the start with reduced motion.
+- A banner when the interface talks to an older daemon that lacks some of
+  its features.
+
+### Changed
+
+- Every action shows its state: the star takes the accent fill when starred
+  and says why it cannot be used, removing an app shows progress, canceling
+  and going back ask first, the jobs bar names each stage and notices can be
+  closed. Finished jobs are no longer announced again when the window opens.
+- New look built on the system UI font and Omarchy's fonts, with a consistent
+  type scale, spacing and buttons; disabled buttons keep a readable label.
+- A file with neither a GitHub digest nor a published checksum is installed
+  only after you confirm it, for the file actually downloaded, the same way in
+  the interface, the CLI (`--allow-unverified`) and updates.
+- Installing OmaStore over an older installation (`make install`,
+  `install.sh`) takes over from it: the catalog and the apps are kept and the
+  OmaStore that was running is closed. `scripts/install.sh` reinstalls over a
+  per-user installation without `--force`.
+
+### Fixed
+
+- A release whose files were replaced under the same tag is indexed again:
+  before, every install of it failed the checksum. A release indexed while it
+  was still being uploaded is completed on the next refresh.
+- Removing an app that is running is refused instead of pulling its files out
+  from under it ("Remove anyway" forces it).
+- An outdated pacman database is reported with the fix (`omarchy update`)
+  instead of a generic download error.
+- The gallery controls no longer widen the app's page in a narrow window or
+  with a large font.
+
 ## [0.2.0] - 2026-09-30
 
 ### Added
@@ -117,6 +163,7 @@ First public release.
 - `install.sh`, `omastore-bin` PKGBUILD, reproducible release tarball with
   build provenance attestation, and optional systemd socket and daily timer.
 
-[Unreleased]: https://github.com/KitsuneForgering/OmaStore/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/KitsuneForgering/OmaStore/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/KitsuneForgering/OmaStore/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/KitsuneForgering/OmaStore/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/KitsuneForgering/OmaStore/releases/tag/v0.1.0
