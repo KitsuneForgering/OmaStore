@@ -296,6 +296,35 @@ private slots:
         QCOMPARE(carousel->property("currentIndex").toInt(), 0);
     }
 
+    // The category is written the way the user reads it (AudioVideo is the
+    // freedesktop name, kept in the manifest and the .desktop).
+    void categoryBadgeShowsTheDisplayName_data()
+    {
+        QTest::addColumn<QString>("category");
+        QTest::addColumn<QString>("shown");
+        QTest::newRow("audio") << QStringLiteral("AudioVideo") << QStringLiteral("Audio/Video");
+        QTest::newRow("other") << QStringLiteral("Utility") << QStringLiteral("Utility");
+    }
+
+    void categoryBadgeShowsTheDisplayName()
+    {
+        QFETCH(QString, category);
+        QFETCH(QString, shown);
+        DetailHarness h([category](const QString &method, const QJsonObject &) -> QJsonObject {
+            if (method == "catalog.get") {
+                QJsonObject detail = appDetail(QStringLiteral("demo/app"), 0);
+                detail.insert("category", category);
+                return {{"result", detail}};
+            }
+            return {{"result", QJsonArray{}}};
+        });
+        QVERIFY2(h.page, qPrintable(h.error));
+        QVERIFY(h.open("demo/app"));
+        auto *badge = h.find("categoryBadge");
+        QVERIFY(badge);
+        QTRY_COMPARE(badge->property("text").toString(), shown);
+    }
+
     // Starring shows: the button takes the accent fill (not only another
     // glyph), the count moves and a notice confirms it.
     void starredStateIsVisible()

@@ -21,6 +21,11 @@ ARGS ?=
 
 GO_CMDS := omastore omastored
 
+# The version the interface reports. A release build gets the tag
+# (`make dist VERSION=v1.2.3`); a development build, the last tag of the
+# checkout. GUI_VERSION=1.2.3 builds a tree that says so.
+GUI_VERSION ?= $(patsubst v%,%,$(shell git describe --tags --abbrev=0 2>/dev/null || echo dev))
+
 # Installation (used by the PKGBUILD): make install DESTDIR=... PREFIX=/usr
 PREFIX  ?= /usr/local
 DESTDIR ?=
@@ -78,14 +83,14 @@ run-daemon: $(BIN)/omastored ## Run the daemon
 check-cmake:
 	@command -v $(CMAKE) >/dev/null || { echo "cmake not found (sudo pacman -S cmake ninja)"; exit 1; }
 
-# The .type-<BUILD_TYPE> stamp forces a reconfigure when the build type changes
-# (CMake keeps CMAKE_BUILD_TYPE in its cache).
-$(BUILD_DIR)/.type-$(BUILD_TYPE): $(FRONTEND)/CMakeLists.txt | check-cmake
-	$(CMAKE) -S $(FRONTEND) -B $(BUILD_DIR) -G $(GENERATOR) -DCMAKE_BUILD_TYPE=$(BUILD_TYPE)
+# The .type-<BUILD_TYPE>-<version> stamp forces a reconfigure when the build
+# type or the reported version changes (CMake keeps both in its cache).
+$(BUILD_DIR)/.type-$(BUILD_TYPE)-$(GUI_VERSION): $(FRONTEND)/CMakeLists.txt | check-cmake
+	$(CMAKE) -S $(FRONTEND) -B $(BUILD_DIR) -G $(GENERATOR) -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) -DOMASTORE_VERSION=$(GUI_VERSION)
 	rm -f $(BUILD_DIR)/.type-*
 	touch $@
 
-frontend: $(BUILD_DIR)/.type-$(BUILD_TYPE) ## Build the frontend
+frontend: $(BUILD_DIR)/.type-$(BUILD_TYPE)-$(GUI_VERSION) ## Build the frontend
 	$(CMAKE) --build $(BUILD_DIR)
 
 run-gui: frontend $(BIN)/omastored ## Build and open the interface (the built daemon stays in bin/)
@@ -169,7 +174,7 @@ SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || echo 0)
 
 dist: ## Release tarball in dist/ (VERSION=v1.2.3), with .sha256
 	rm -rf $(DIST_DIR)/root
-	$(MAKE) release GOFLAGS='-trimpath -buildvcs=false' GOLDFLAGS='-s -w'
+	$(MAKE) release GUI_VERSION=$(DIST_VERSION) GOFLAGS='-trimpath -buildvcs=false' GOLDFLAGS='-s -w'
 	$(MAKE) install DESTDIR=$(CURDIR)/$(DIST_DIR)/root PREFIX=/usr
 	tar --sort=name --owner=0 --group=0 --numeric-owner --mtime=@$(SOURCE_DATE_EPOCH) \
 		-C $(DIST_DIR)/root -cf - usr | gzip -n9 > $(DIST_DIR)/$(DIST_NAME)

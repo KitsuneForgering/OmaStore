@@ -30,7 +30,6 @@ The catalog starts nearly empty until authors adopt `omastore.toml`, so first ru
 ## Smaller features
 
 - [ ] Read `.PKGINFO` `depend` lines from `.pkg.tar.zst` assets when the repository has no PKGBUILD
-- [ ] The OmaStore version in reports comes from the frontend's CMake `project(VERSION)`: take it from the release tag instead (`make dist VERSION=...`)
 
 ## Distribution
 

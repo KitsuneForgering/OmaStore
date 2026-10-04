@@ -129,7 +129,7 @@ Rules:
 - `apps` — display data derived from the repo: name, summary, README, icon, category, score.
 - `assets` — release assets per repo/tag (name, url, arch, format, checksum).
 - `installs` — installed app, version, date, list of created files, and the previous version kept on disk.
-- `not_apps` — repositories recently found without an app `omastore.toml`; skipped without requests for 7 days.
+- `not_apps` — repositories recently found without an app `omastore.toml`; skipped without requests for 7 days unless a direct seed, manifest search result or GraphQL snapshot warrants rechecking.
 - `apps.sysdeps` — `depends`/`optdepends` read from the repository's PKGBUILD/.SRCINFO at index time (JSON).
 - `repos.release_notes` — body of the latest release (markdown, capped at 16 KiB), shown as "What's new".
 
@@ -195,6 +195,12 @@ make pkgbuild-bin VERSION=v1.2.3   # omastore-bin PKGBUILD with the tarball's sh
 
 Useful variables: `BUILD_TYPE` (default `Debug`), `GENERATOR` (default `Ninja`), `TESTFLAGS`, `ARGS`.
 The Makefile exports `CGO_ENABLED=1` (required by go-sqlite3). CI calls the same targets.
+
+Publishing is `git tag v1.2.3 && git push origin v1.2.3`: the `Release` workflow
+builds the tarball, its `.sha256`, the PKGBUILD and the attestation. Never
+`gh release create` — a release published before the workflow is the latest one
+with no tarball, and `install.sh` / `omastore self-update` fail on it. Rename
+the **Unreleased** section of `CHANGELOG.md` to the version in the tag's commit.
 
 ## Conventions
 

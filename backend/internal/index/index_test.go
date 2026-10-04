@@ -901,6 +901,42 @@ func TestRESTChecksManifestFirst(t *testing.T) {
 	}
 }
 
+// A manifest merged after a negative check must be noticed on the next run.
+// A direct seed or manifest search result is enough evidence to recheck; a
+// GraphQL snapshot also carries the manifest itself.
+func TestNewManifestInvalidatesNotAppMark(t *testing.T) {
+	for _, source := range []string{"seed", "manifest search", "snapshot"} {
+		t.Run(source, func(t *testing.T) {
+			ix, gh, st := setup(t)
+			name := "acme/omaphoto"
+			gh.repos[name].noToml = true
+			switch source {
+			case "seed":
+				ix.Seeds = []string{name}
+			case "manifest search":
+				ix.GH = &fakeManifestGH{fakeGH: gh}
+			case "snapshot":
+				ix.GH = &fakeBatchGH{fakeGH: gh}
+			}
+			if stats := mustRun(t, ix, Options{}); stats.NotApps == 0 {
+				t.Fatalf("first run did not record a negative check: %+v", stats)
+			}
+			gh.repos[name].noToml = false
+			gh.repos[name].sha = "sha-with-manifest"
+			gh.repos[name].repo.PushedAt = gh.repos[name].repo.PushedAt.Add(time.Hour)
+			if source == "manifest search" {
+				ix.GH.(*fakeManifestGH).found = []string{name}
+			}
+			if stats := mustRun(t, ix, Options{}); stats.Updated == 0 {
+				t.Fatalf("manifest was skipped: %+v", stats)
+			}
+			if _, err := st.GetApp(context.Background(), name); err != nil {
+				t.Fatalf("app absent after manifest appeared: %v", err)
+			}
+		})
+	}
+}
+
 func TestSysDepsFromPKGBUILD(t *testing.T) {
 	ix, gh, st := setup(t)
 	ctx := context.Background()

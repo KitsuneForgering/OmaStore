@@ -81,3 +81,22 @@ Before opening a pull request:
    [CHANGELOG.md](CHANGELOG.md).
 
 Contributions are released under the [MIT license](LICENSE).
+
+## Cutting a release
+
+The **Release** workflow publishes everything: the reproducible tarball, its
+`.sha256`, the `omastore-bin` PKGBUILD and the provenance attestation. It runs
+on a tag push, so the release *is* the tag:
+
+```sh
+make check && make test      # the workflow runs them again
+git tag v1.2.3 && git push origin v1.2.3
+gh run watch                 # the Release workflow
+gh release view v1.2.3 --json assets   # the four assets must be there
+```
+
+Never create the release by hand (`gh release create`): published before the
+workflow, it advertises itself as the latest release with no tarball, and
+`install.sh` and `omastore self-update` fail on it until the workflow catches
+up. Also rename the **Unreleased** section of [CHANGELOG.md](CHANGELOG.md) to
+the version being tagged, in the same commit.

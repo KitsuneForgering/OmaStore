@@ -6,6 +6,18 @@ All notable changes to OmaStore are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-04
+
+### Fixed
+
+- A repository found through a direct seed, manifest search or GraphQL snapshot
+  is rechecked after its `omastore.toml` is merged, even if an earlier check
+  marked it as not an app.
+- The app reports the release tag as its version, and category and topic labels
+  are shown consistently across the interface.
+
+## [0.3.1] - 2026-10-04
+
 ### Changed
 
 - The audio and video category is displayed as “Audio/Video” in the interface.
@@ -171,7 +183,9 @@ First public release.
 - `install.sh`, `omastore-bin` PKGBUILD, reproducible release tarball with
   build provenance attestation, and optional systemd socket and daily timer.
 
-[Unreleased]: https://github.com/KitsuneForgering/OmaStore/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/KitsuneForgering/OmaStore/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/KitsuneForgering/OmaStore/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/KitsuneForgering/OmaStore/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/KitsuneForgering/OmaStore/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/KitsuneForgering/OmaStore/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/KitsuneForgering/OmaStore/releases/tag/v0.1.0

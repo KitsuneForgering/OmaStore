@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "categories.js" as Categories
 
 Rectangle {
     id: root
@@ -114,7 +115,7 @@ Rectangle {
             model: backend.categories
             delegate: NavItem {
                 width: ListView.view.width
-                text: modelData.name === "AudioVideo" ? "Audio/Video" : modelData.name
+                text: Categories.display(modelData.name)
                 badge: modelData.count
                 selected: !root.detailActive && root.section === "discover" && backend.catalog.category === modelData.name
                 onClicked: root.categorySelected(modelData.name)

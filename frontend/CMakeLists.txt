@@ -1,5 +1,28 @@
 cmake_minimum_required(VERSION 3.21)
-project(omastore-gui VERSION 0.3.0 LANGUAGES CXX)
+project(omastore-gui LANGUAGES CXX)
+
+# The version the interface reports (in the bug report it builds). The Makefile
+# passes the release tag; a build configured by hand takes the last tag of the
+# checkout. Never hardcoded here: a forgotten bump is a release that lies about
+# its own version.
+if(NOT OMASTORE_VERSION)
+  set(described 1)
+  find_package(Git QUIET)
+  if(Git_FOUND)
+    execute_process(COMMAND git describe --tags --abbrev=0
+      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+      RESULT_VARIABLE described OUTPUT_VARIABLE described_tag
+      OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+  endif()
+  if(described EQUAL 0)
+    set(OMASTORE_VERSION "${described_tag}")
+  endif()
+  string(REGEX REPLACE "^v" "" OMASTORE_VERSION "${OMASTORE_VERSION}")
+endif()
+if(NOT OMASTORE_VERSION MATCHES "^[0-9]")
+  set(OMASTORE_VERSION "dev")
+endif()
+message(STATUS "OmaStore version: ${OMASTORE_VERSION}")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,7 +47,7 @@ add_library(omastore-core STATIC
 target_include_directories(omastore-core PUBLIC src)
 target_link_libraries(omastore-core PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Quick)
 target_compile_options(omastore-core PRIVATE -Wall -Wextra)
-target_compile_definitions(omastore-core PUBLIC OMASTORE_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(omastore-core PUBLIC OMASTORE_VERSION="${OMASTORE_VERSION}")
 
 qt_add_executable(omastore-gui src/main.cpp)
 
@@ -44,6 +67,7 @@ qt_add_qml_module(omastore-gui
         qml/Badge.qml
         qml/LinkText.qml
         qml/PublishPage.qml
+        qml/categories.js
 )
 
 target_link_libraries(omastore-gui PRIVATE omastore-core Qt6::QuickControls2)
