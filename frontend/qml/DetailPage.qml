@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "categories.js" as Categories
 
 Page {
     id: page
@@ -239,14 +240,34 @@ Page {
                     RowLayout {
                         spacing: theme.spaceS
                         Badge {
+                            objectName: "categoryBadge"
                             visible: !!page.app.category
-                            text: page.app.category === "AudioVideo" ? "Audio/Video" : page.app.category || ""
+                            text: Categories.display(page.app.category)
                         }
                         Badge {
                             visible: page.installed
                             text: page.app.updateAvailable ? qsTr("update available")
                                   : qsTr("installed %1").arg(page.installed ? page.app.install.version : "")
                             tone: page.app.updateAvailable ? "warning" : "success"
+                        }
+                    }
+                    // The repository's topics: what the app is made of and who
+                    // it is for (the search weighs them). GitHub keeps them
+                    // lowercase; they are words, not sentences.
+                    Flow {
+                        objectName: "topicBadges"
+                        Layout.fillWidth: true
+                        visible: topicRepeater.count > 0
+                        spacing: theme.spaceS
+                        Repeater {
+                            id: topicRepeater
+                            model: page.app.topics || []
+                            delegate: Badge {
+                                required property string modelData
+                                objectName: "topicBadge"
+                                text: modelData
+                                Accessible.name: qsTr("Topic: %1").arg(modelData)
+                            }
                         }
                     }
                 }
@@ -862,7 +883,7 @@ Page {
                             Behavior on color { ColorAnimation { duration: theme.durationShort } }
                             activeFocusOnTab: true
                             Accessible.role: Accessible.Button
-                            Accessible.name: qsTr("%1, %2").arg(modelData.name).arg(modelData.category === "AudioVideo" ? "Audio/Video" : modelData.category)
+                            Accessible.name: qsTr("%1, %2").arg(modelData.name).arg(Categories.display(modelData.category))
                             Accessible.onPressAction: page.appActivated(modelData.repo)
                             Keys.onReturnPressed: page.appActivated(modelData.repo)
                             Keys.onEnterPressed: page.appActivated(modelData.repo)
@@ -892,7 +913,7 @@ Page {
                                     }
                                     Text {
                                         Layout.fillWidth: true
-                                        text: modelData.category === "AudioVideo" ? "Audio/Video" : modelData.category
+                                        text: Categories.display(modelData.category)
                                         color: theme.muted
                                         font.pixelSize: theme.fontCaption
                                         elide: Text.ElideRight

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "categories.js" as Categories
 
 Page {
     id: page
@@ -38,8 +39,7 @@ Page {
                 Text {
                     objectName: "catalogTitle"
                     text: page.installedView ? qsTr("Installed")
-                                             : (page.model.category === "AudioVideo" ? "Audio/Video"
-                                                : page.model.category !== "" ? page.model.category : qsTr("Discover"))
+                                             : (page.model.category !== "" ? Categories.display(page.model.category) : qsTr("Discover"))
                     color: theme.foreground
                     font.pixelSize: theme.fontTitle
                     font.weight: Font.DemiBold

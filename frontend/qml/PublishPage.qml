@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "categories.js" as Categories
 
 // For app authors: how to get into the store and a checker that shows what
 // the store understands of a repository (author.check), with a starter
@@ -298,7 +299,7 @@ Page {
                                 elide: Text.ElideRight
                             }
                             Text {
-                                text: [page.report.category === "AudioVideo" ? "Audio/Video" : page.report.category,
+                                text: [Categories.display(page.report.category),
                                        page.report.tag].filter(s => !!s).join("  ·  ")
                                 color: theme.muted
                                 font.pixelSize: theme.fontCaption

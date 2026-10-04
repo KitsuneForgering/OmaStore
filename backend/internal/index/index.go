@@ -173,7 +173,7 @@ func (ix *Indexer) goarch() string {
 
 // Discover returns the duplicate-free union of the topic searches and the seeds.
 func (ix *Indexer) Discover(ctx context.Context) ([]string, error) {
-	names, _, err := ix.discover(ctx)
+	names, _, _, err := ix.discover(ctx)
 	return names, err
 }
 
@@ -182,7 +182,7 @@ func (ix *Indexer) Discover(ctx context.Context) ([]string, error) {
 // answer within DiscoveryTimeout): the list is then partial and must not be
 // used to prune the catalog. The sources are queried in parallel; the result
 // keeps their order (seeds, manifest search, topics).
-func (ix *Indexer) discover(ctx context.Context) (names []string, partial bool, err error) {
+func (ix *Indexer) discover(ctx context.Context) (names []string, recheck map[string]bool, partial bool, err error) {
 	topics := ix.Topics
 	if len(topics) == 0 {
 		topics = []string{"omarchy"}
@@ -204,11 +204,12 @@ func (ix *Indexer) discover(ctx context.Context) (names []string, partial bool, 
 	// sources only make the list partial when they fail; a failed hard source
 	// (a topic search) aborts the run. A rate limit always aborts.
 	type slot struct {
-		label string
-		fetch func(context.Context) ([]string, error)
-		soft  bool
-		names []string
-		err   error
+		label   string
+		fetch   func(context.Context) ([]string, error)
+		soft    bool
+		recheck bool // direct seed or manifest search: bypass a negative cache mark
+		names   []string
+		err     error
 	}
 	var slots []*slot
 	for _, s := range seeds {
@@ -217,11 +218,11 @@ func (ix *Indexer) discover(ctx context.Context) (names []string, partial bool, 
 				fetch: func(ctx context.Context) ([]string, error) { return ix.fromList(ctx, list) }})
 			continue
 		}
-		slots = append(slots, &slot{names: []string{s}})
+		slots = append(slots, &slot{names: []string{s}, recheck: true})
 	}
 	// Repositories with omastore.toml at the root, even without the topic.
 	if ms, ok := ix.GH.(ManifestSearcher); ok {
-		slots = append(slots, &slot{label: "manifest search", soft: true,
+		slots = append(slots, &slot{label: "manifest search", soft: true, recheck: true,
 			fetch: func(ctx context.Context) ([]string, error) { return ms.SearchManifests(ctx, max) }})
 	}
 	for _, t := range topics {
@@ -251,14 +252,15 @@ func (ix *Indexer) discover(ctx context.Context) (names []string, partial bool, 
 	for _, sl := range slots {
 		var rl *github.RateLimitError
 		if errors.As(sl.err, &rl) {
-			return nil, false, sl.err
+			return nil, nil, false, sl.err
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	timedOut := errors.Is(dctx.Err(), context.DeadlineExceeded)
 	seen := map[string]bool{}
+	recheck = map[string]bool{}
 	var out []string
 	for _, sl := range slots {
 		switch {
@@ -271,16 +273,20 @@ func (ix *Indexer) discover(ctx context.Context) (names []string, partial bool, 
 			ix.log().Warn("discovery source failed", "source", sl.label, "err", sl.err)
 			partial = true
 		default:
-			return nil, false, fmt.Errorf("%s: %w", sl.label, sl.err)
+			return nil, nil, false, fmt.Errorf("%s: %w", sl.label, sl.err)
 		}
 		for _, n := range sl.names {
-			if k := strings.ToLower(n); !seen[k] {
+			k := strings.ToLower(n)
+			if sl.recheck && sl.err == nil {
+				recheck[k] = true
+			}
+			if !seen[k] {
 				seen[k] = true
 				out = append(out, n)
 			}
 		}
 	}
-	return out, partial, nil
+	return out, recheck, partial, nil
 }
 
 // maxFromList limits how many repositories a curated list can bring in.
@@ -359,6 +365,7 @@ func (ix *Indexer) run(ctx context.Context, opts Options) (Stats, error) {
 	// discovered is what this run found; canPrune is false when discovery did
 	// not run or was partial.
 	var discovered []string
+	var recheck map[string]bool
 	canPrune := false
 	report := func(p Progress) {
 		if opts.Progress != nil {
@@ -367,11 +374,12 @@ func (ix *Indexer) run(ctx context.Context, opts Options) (Stats, error) {
 	}
 	if len(names) == 0 {
 		report(Progress{Stage: StageDiscover})
-		found, partial, err := ix.discover(ctx)
+		found, candidates, partial, err := ix.discover(ctx)
 		if err != nil {
 			return Stats{}, fmt.Errorf("discovery: %w", err)
 		}
 		discovered, canPrune = found, !partial
+		recheck = candidates
 		if partial && ix.Prune {
 			ix.log().Warn("discovery was partial; not pruning")
 		}
@@ -430,7 +438,8 @@ func (ix *Indexer) run(ctx context.Context, opts Options) (Stats, error) {
 				snap, batched := snaps[name]
 				// With a local manifest, reprocess: the published one did not change, but the one that counts did.
 				canonical := name
-				out, err := ix.process(ctx, name, opts.Force || len(opts.ManifestOverride) > 0, len(opts.Only) > 0,
+				out, err := ix.process(ctx, name, opts.Force || len(opts.ManifestOverride) > 0,
+					len(opts.Only) > 0 || recheck[strings.ToLower(name)] || (batched && snap != nil && snap.Manifest != nil),
 					snap, batched, opts.ManifestOverride, &canonical)
 				mu.Lock()
 				if canonical != name {
@@ -538,8 +547,8 @@ func (ix *Indexer) prune(ctx context.Context, found []string) (int, error) {
 // state fetched in batch through GraphQL (nil = repository does not exist);
 // without a batch, the state comes from the REST API with conditional requests.
 // canonical receives the name the API answered (renamed/transferred repo).
-// explicit means the run named the repository (opts.Only): it is checked even
-// if it was recently found without a manifest.
+// explicit means the repository was named for this run or newly identified
+// as a manifest candidate: it is checked despite a recent negative mark.
 func (ix *Indexer) process(ctx context.Context, name string, force, explicit bool, snap *github.Snapshot, batched bool,
 	overrides map[string]string, canonical *string) (outcome, error) {
 	prev, err := ix.Store.RepoState(ctx, name)
@@ -560,9 +569,8 @@ func (ix *Indexer) process(ctx context.Context, name string, force, explicit boo
 		force = true
 	}
 
-	// A new repository found recently without an app manifest is skipped
-	// without any request: adding the manifest is a push, and the mark
-	// expires after notAppTTL.
+	// A recent negative result saves requests unless discovery explicitly
+	// identified this repo or a batch already found its manifest.
 	if !known && !force && !explicit {
 		skip, err := ix.Store.NotAppFresh(ctx, name, Version, now.Add(-notAppTTL))
 		if err != nil {
