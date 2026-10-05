@@ -425,8 +425,11 @@ private slots:
         DetailHarness h([](const QString &method, const QJsonObject &params) -> QJsonObject {
             if (method == "catalog.get") {
                 QJsonObject d = appDetail(params.value("repo").toString(), 0);
-                d.insert("install", QJsonObject{{"repo", "demo/app"}, {"version", "v2"}, {"previousVersion", "v1"},
-                                                {"broken", true}});
+                d.insert("install", QJsonObject{
+                    {"repo", "demo/app"}, {"version", "v2"}, {"previousVersion", "v1"}, {"broken", true},
+                    {"history", QJsonArray{QJsonObject{{"action", "update"}, {"fromVersion", "v1"},
+                                                       {"toVersion", "v2"}, {"at", "2026-10-05T12:00:00Z"}}}}
+                });
                 return {{"result", d}};
             }
             if (method == "deps.check")
@@ -445,7 +448,12 @@ private slots:
         auto *repair = h.find("repairButton");
         auto *open = h.find("openButton");
         auto *deps = h.find("depsBox");
-        QVERIFY(rollback && repair && open && deps);
+        auto *history = h.find("installHistory");
+        QVERIFY(rollback && repair && open && deps && history);
+        QTRY_VERIFY(history->isVisible());
+        auto *historyRepeater = h.find("installHistoryRepeater");
+        QVERIFY(historyRepeater);
+        QCOMPARE(historyRepeater->property("count").toInt(), 1);
         QTRY_VERIFY(rollback->isVisible());
         QVERIFY(rollback->property("text").toString().contains("v1"));
         QVERIFY(repair->isVisible());

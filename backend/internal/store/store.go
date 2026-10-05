@@ -122,10 +122,19 @@ type Install struct {
 	ExecPath    string
 	DesktopPath string
 	Files       []string
+	History     []InstallEvent
 	// The version this one replaced, still on disk (see install.Rollback);
 	// "" when there is none.
 	PreviousVersion string
 	PreviousExec    string
+}
+
+// InstallEvent records a version transition for an installed app.
+type InstallEvent struct {
+	Action      string
+	FromVersion string
+	ToVersion   string
+	At          time.Time
 }
 
 // AppDetail gathers everything known about an app.
@@ -436,9 +445,44 @@ func (s *Store) Assets(ctx context.Context, fullName, tag string) ([]Asset, erro
 	return out, rows.Err()
 }
 
-// SaveInstall records (or replaces) an app installation.
+// SaveInstall records (or replaces) an app installation. Version changes are
+// recorded in history in the same transaction as the current installation.
 func (s *Store) SaveInstall(ctx context.Context, in Install) error {
-	_, err := s.db.ExecContext(ctx, `
+	return s.SaveInstallTransition(ctx, in, "")
+}
+
+// SaveInstallTransition records an install state and its version transition.
+// An empty action infers install/update; callers use "rollback" for rollback.
+func (s *Store) SaveInstallTransition(ctx context.Context, in Install, action string) (err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin installation transaction: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			tx.Rollback()
+		}
+	}()
+
+	var from string
+	err = tx.QueryRowContext(ctx, `SELECT version FROM installs WHERE full_name = ? COLLATE NOCASE`, in.FullName).Scan(&from)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		from = ""
+		if action == "" {
+			action = "install"
+		}
+	case err != nil:
+		return fmt.Errorf("read previous installation of %s: %w", in.FullName, err)
+	case from == in.Version:
+		if action != "rollback" {
+			action = ""
+		}
+	case action == "":
+		action = "update"
+	}
+
+	if _, err = tx.ExecContext(ctx, `
 		INSERT INTO installs (full_name, version, installed_at, exec_path, desktop_path, files,
 		                      previous_version, previous_exec)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -447,11 +491,44 @@ func (s *Store) SaveInstall(ctx context.Context, in Install) error {
 			exec_path = excluded.exec_path, desktop_path = excluded.desktop_path, files = excluded.files,
 			previous_version = excluded.previous_version, previous_exec = excluded.previous_exec`,
 		in.FullName, in.Version, in.InstalledAt.UTC(), in.ExecPath, in.DesktopPath, encodeList(in.Files),
-		in.PreviousVersion, in.PreviousExec)
-	if err != nil {
+		in.PreviousVersion, in.PreviousExec); err != nil {
 		return fmt.Errorf("record installation of %s: %w", in.FullName, err)
 	}
+	if action != "" {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO install_history
+			(full_name, action, from_version, to_version, occurred_at) VALUES (?, ?, ?, ?, ?)`,
+			in.FullName, action, from, in.Version, in.InstalledAt.UTC()); err != nil {
+			return fmt.Errorf("record %s history of %s: %w", action, in.FullName, err)
+		}
+	}
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("commit installation of %s: %w", in.FullName, err)
+	}
 	return nil
+}
+
+// InstallHistory returns the most recent version transitions, newest first.
+func (s *Store) InstallHistory(ctx context.Context, fullName string, limit int) ([]InstallEvent, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT action, from_version, to_version, occurred_at
+		FROM install_history WHERE full_name = ? COLLATE NOCASE
+		ORDER BY id DESC LIMIT ?`, fullName, limit)
+	if err != nil {
+		return nil, fmt.Errorf("read version history of %s: %w", fullName, err)
+	}
+	defer rows.Close()
+	out := []InstallEvent{}
+	for rows.Next() {
+		var event InstallEvent
+		if err := rows.Scan(&event.Action, &event.FromVersion, &event.ToVersion, &event.At); err != nil {
+			return nil, err
+		}
+		out = append(out, event)
+	}
+	return out, rows.Err()
 }
 
 // GetInstall returns an app's installation, or ErrNotFound. The name is
@@ -472,6 +549,10 @@ func (s *Store) GetInstall(ctx context.Context, fullName string) (*Install, erro
 		return nil, fmt.Errorf("read installation of %s: %w", fullName, err)
 	}
 	in.Files = decodeList(files)
+	in.History, err = s.InstallHistory(ctx, in.FullName, 20)
+	if err != nil {
+		return nil, err
+	}
 	return &in, nil
 }
 

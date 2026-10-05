@@ -626,7 +626,7 @@ func (in *Installer) Rollback(ctx context.Context, fullName string) (*store.Inst
 		back.Version, back.PreviousVersion = inst.PreviousVersion, inst.Version
 		back.ExecPath, back.PreviousExec = inst.PreviousExec, inst.ExecPath
 		back.InstalledAt = time.Now()
-		if err := in.Store.SaveInstall(ctx, back); err != nil {
+		if err := in.Store.SaveInstallTransition(ctx, back, "rollback"); err != nil {
 			return err
 		}
 		*inst = back

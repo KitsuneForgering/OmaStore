@@ -148,6 +148,9 @@ func TestInstallUpdateUninstall(t *testing.T) {
 	if target, ok := launcherTarget(link); !ok || target != filepath.Join(versionDir, "omaphoto-1", "omaphoto") {
 		t.Errorf("launcher → %q (%v)", target, ok)
 	}
+	if !registered(inst.Files, link) {
+		t.Errorf("launcher path is not tracked for uninstall: %v", inst.Files)
+	}
 	if inst.ExecPath != filepath.Join(versionDir, "omaphoto-1", "omaphoto") {
 		t.Errorf("exec = %s", inst.ExecPath)
 	}
@@ -216,6 +219,13 @@ func TestInstallUpdateUninstall(t *testing.T) {
 	}
 	if inst3.PreviousVersion != "v2.0.0" {
 		t.Errorf("v3: %+v", inst3)
+	}
+	saved, err := e.st.GetInstall(ctx, "acme/omaphoto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved.History) != 3 || saved.History[0].Action != "update" || saved.History[0].FromVersion != "v2.0.0" || saved.History[0].ToVersion != "v3.0.0" {
+		t.Errorf("version history = %+v", saved.History)
 	}
 	if _, err := os.Stat(versionDir); !os.IsNotExist(err) {
 		t.Error("the version before the previous one was not removed")

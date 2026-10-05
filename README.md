@@ -42,8 +42,8 @@ packages in a `PKGBUILD`, the store can install them with pacman for you
   download arrived intact, not who built it.
 - **Updates you can undo:** an update keeps the version it replaced, so an app
   that is open keeps working and **Go back** returns to the previous version
-  without downloading anything. An app is not removed while it is running
-  unless you insist.
+  without downloading anything. The app detail shows its install, update and
+  rollback history. An app is not removed while it is running unless you insist.
 - **The whole app, not only the binary:** the `depends` and `optdepends` of the
   app's `PKGBUILD`, and the shared libraries its installed executable needs and
   your system lacks (read from the file, never run), are listed on its page; the
@@ -90,7 +90,8 @@ packages in a `PKGBUILD`, the store can install them with pacman for you
     repositories only.
 - **Where apps live:**
   - binaries in `~/.local/share/omastore/apps/<owner>__<repo>/<version>/`;
-  - launcher in `~/.local/bin/`;
+  - tracked launcher in `~/.local/bin/`, removed on uninstall only while it is
+    still OmaStore's launcher for that app;
   - icon in the user's `hicolor` theme;
   - shortcut in `~/.local/share/applications/omastore-<owner>-<repo>.desktop`.
 - **Look:** follows the colors of the active Omarchy theme and changes along when you

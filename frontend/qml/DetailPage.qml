@@ -47,6 +47,14 @@ Page {
         }
     }
 
+    function installEventText(event) {
+        if (event.action === "install")
+            return qsTr("Installed %1").arg(event.toVersion)
+        if (event.action === "rollback")
+            return qsTr("Rolled back from %1 to %2").arg(event.fromVersion).arg(event.toVersion)
+        return qsTr("Updated from %1 to %2").arg(event.fromVersion).arg(event.toVersion)
+    }
+
     // A section title with its rule, shared by the long-text sections.
     component SectionTitle: ColumnLayout {
         property string text: ""
@@ -640,6 +648,29 @@ Page {
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: 1
                                 color: theme.outline
+                            }
+                            ColumnLayout {
+                                objectName: "installHistory"
+                                Layout.fillWidth: true
+                                spacing: theme.spaceS
+                                visible: page.installed && (page.app.install.history || []).length > 0
+                                Text {
+                                    text: qsTr("Version history")
+                                    color: theme.muted
+                                    font.pixelSize: theme.fontCaption
+                                    font.weight: Font.DemiBold
+                                }
+                                Repeater {
+                                    objectName: "installHistoryRepeater"
+                                    model: page.installed ? page.app.install.history : []
+                                    delegate: Text {
+                                        Layout.fillWidth: true
+                                        text: page.installEventText(modelData) + " · " + (modelData.at || "").slice(0, 10)
+                                        color: theme.foreground
+                                        font.pixelSize: theme.fontCaption
+                                        wrapMode: Text.Wrap
+                                    }
+                                }
                             }
                             LinkText {
                                 visible: !!page.app.htmlUrl

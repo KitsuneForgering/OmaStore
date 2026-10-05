@@ -61,10 +61,12 @@ func (f *fakeBackend) GetApp(ctx context.Context, name string) (*store.AppDetail
 		return nil, store.ErrNotFound
 	}
 	return &store.AppDetail{
-		App:     store.App{FullName: name, Name: "Photo", Readme: "# Photo"},
-		Repo:    store.Repo{FullName: name, LatestTag: "v2", License: "MIT"},
-		Assets:  []store.Asset{{Name: "p.tar.gz", Format: "tar.gz", Digest: "sha256:" + strings.Repeat("ab", 32)}, {Name: "p.bin", Format: "binary"}},
-		Install: &store.Install{FullName: name, Version: "v1"},
+		App:    store.App{FullName: name, Name: "Photo", Readme: "# Photo"},
+		Repo:   store.Repo{FullName: name, LatestTag: "v2", License: "MIT"},
+		Assets: []store.Asset{{Name: "p.tar.gz", Format: "tar.gz", Digest: "sha256:" + strings.Repeat("ab", 32)}, {Name: "p.bin", Format: "binary"}},
+		Install: &store.Install{FullName: name, Version: "v1", History: []store.InstallEvent{{
+			Action: "update", FromVersion: "v0.9", ToVersion: "v1", At: time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC),
+		}}},
 	}, nil
 }
 
@@ -439,6 +441,9 @@ func TestCatalogDTOs(t *testing.T) {
 	if d.License != "MIT" || d.Install == nil || d.Install.Version != "v1" || len(d.Assets) != 2 ||
 		d.Assets[0].Checksum == "" || d.Assets[1].Checksum != "" || !d.UpdateAvailable {
 		t.Errorf("detail = %+v", d)
+	}
+	if d.Install.History == nil || d.Install.History[0].FromVersion != "v0.9" {
+		t.Errorf("install history = %+v", d.Install.History)
 	}
 
 	var sim []AppItem

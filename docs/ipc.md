@@ -162,8 +162,14 @@ AssetInfo {
 InstallInfo {
   repo, version, installedAt, execPath, desktopPath: string
   previousVersion: string          // what install.rollback goes back to ("" if none)
+  history?: InstallEventInfo[]     // catalog.get: newest 20 transitions, newest first
   broken: boolean                  // the executable is gone (removed outside OmaStore):
                                    // install.start again repairs it
+}
+InstallEventInfo {
+  action: "install" | "update" | "rollback"
+  fromVersion, toVersion: string    // fromVersion is empty on initial install
+  at: string                        // RFC 3339
 }
 SelfInfo {
   mode: "self" | "package" | "dev"

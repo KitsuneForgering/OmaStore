@@ -201,6 +201,51 @@ func TestInstalls(t *testing.T) {
 	}
 }
 
+func TestInstallHistory(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	base := Install{FullName: "a/vm", Version: "v1", InstalledAt: time.Now()}
+	if err := s.SaveInstall(ctx, base); err != nil {
+		t.Fatal(err)
+	}
+	updated := base
+	updated.Version = "v2"
+	updated.InstalledAt = time.Now().Add(time.Second)
+	if err := s.SaveInstall(ctx, updated); err != nil {
+		t.Fatal(err)
+	}
+	// Saving cleanup state for the same version must not create another event.
+	updated.Files = []string{"/tmp/leftover"}
+	updated.InstalledAt = time.Now().Add(2 * time.Second)
+	if err := s.SaveInstall(ctx, updated); err != nil {
+		t.Fatal(err)
+	}
+	rolledBack := updated
+	rolledBack.Version = "v1"
+	rolledBack.InstalledAt = time.Now().Add(3 * time.Second)
+	if err := s.SaveInstallTransition(ctx, rolledBack, "rollback"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.GetInstall(ctx, "a/vm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.History) != 3 {
+		t.Fatalf("history = %+v", got.History)
+	}
+	want := []InstallEvent{
+		{Action: "rollback", FromVersion: "v2", ToVersion: "v1"},
+		{Action: "update", FromVersion: "v1", ToVersion: "v2"},
+		{Action: "install", FromVersion: "", ToVersion: "v1"},
+	}
+	for i := range want {
+		if got.History[i].Action != want[i].Action || got.History[i].FromVersion != want[i].FromVersion || got.History[i].ToVersion != want[i].ToVersion {
+			t.Errorf("history[%d] = %+v, want %+v", i, got.History[i], want[i])
+		}
+	}
+}
+
 func TestUpdateStatsAndNames(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()

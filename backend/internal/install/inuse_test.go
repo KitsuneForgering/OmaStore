@@ -168,6 +168,9 @@ func TestRollback(t *testing.T) {
 	if stored.Version != "v1" {
 		t.Errorf("stored = %+v", stored)
 	}
+	if len(stored.History) != 3 || stored.History[0].Action != "rollback" || stored.History[0].FromVersion != "v2" || stored.History[0].ToVersion != "v1" {
+		t.Errorf("version history after rollback = %+v", stored.History)
+	}
 
 	// Twice: forward again, nothing downloaded.
 	hits := e.hits.Load()

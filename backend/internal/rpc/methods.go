@@ -82,7 +82,16 @@ type InstallInfo struct {
 	// The version install.rollback goes back to; "" when there is none.
 	PreviousVersion string `json:"previousVersion"`
 	// The executable is gone (removed outside OmaStore): reinstall to repair.
-	Broken bool `json:"broken"`
+	Broken  bool               `json:"broken"`
+	History []InstallEventInfo `json:"history,omitempty"`
+}
+
+// InstallEventInfo is one recorded install, update or rollback.
+type InstallEventInfo struct {
+	Action      string    `json:"action"`
+	FromVersion string    `json:"fromVersion"`
+	ToVersion   string    `json:"toVersion"`
+	At          time.Time `json:"at"`
 }
 
 // AppDetail is an app's detail.
@@ -200,9 +209,14 @@ func toItem(it store.ListItem) AppItem {
 }
 
 func toInstall(in store.Install) InstallInfo {
-	return InstallInfo{Repo: in.FullName, Version: in.Version, InstalledAt: in.InstalledAt,
+	out := InstallInfo{Repo: in.FullName, Version: in.Version, InstalledAt: in.InstalledAt,
 		ExecPath: in.ExecPath, DesktopPath: in.DesktopPath, PreviousVersion: in.PreviousVersion,
 		Broken: install.IsBroken(in)}
+	for _, event := range in.History {
+		out.History = append(out.History, InstallEventInfo{Action: event.Action, FromVersion: event.FromVersion,
+			ToVersion: event.ToVersion, At: event.At})
+	}
+	return out
 }
 
 func toDetail(d *store.AppDetail) AppDetail {
