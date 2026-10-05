@@ -50,6 +50,11 @@ type ManifestSearcher interface {
 	SearchManifests(ctx context.Context, max int) ([]string, error)
 }
 
+// TopicSliceSearcher returns one page of topic results in a pushed-date range.
+type TopicSliceSearcher interface {
+	SearchByTopicPushed(ctx context.Context, topic string, after, before time.Time) ([]string, error)
+}
+
 // Batcher is implemented by clients that fetch the state of many
 // repositories at once (GraphQL). If Snapshots returns
 // github.ErrNoToken, the indexer uses the REST API.
@@ -131,6 +136,10 @@ type Stats struct {
 
 const defaultDiscoveryTimeout = 2 * time.Minute
 
+// Extra topic searches are deliberately bounded so broader discovery cannot
+// consume an unbounded part of GitHub's search quota.
+const extraTopicSearchBudget = 5
+
 // Stages of a run, reported in Progress.Stage.
 const (
 	StageDiscover = "discover" // searching for repositories (Total is 0)
@@ -202,14 +211,15 @@ func (ix *Indexer) discover(ctx context.Context) (names []string, recheck map[st
 
 	// A slot holds either fixed names (a seed) or a source to query. Soft
 	// sources only make the list partial when they fail; a failed hard source
-	// (a topic search) aborts the run. A rate limit always aborts.
+	// (the main topic search) aborts the run. Bounded topic slices are optional.
 	type slot struct {
-		label   string
-		fetch   func(context.Context) ([]string, error)
-		soft    bool
-		recheck bool // direct seed or manifest search: bypass a negative cache mark
-		names   []string
-		err     error
+		label      string
+		fetch      func(context.Context) ([]string, error)
+		soft       bool
+		recheck    bool // direct seed or manifest search: bypass a negative cache mark
+		topicSlice bool
+		names      []string
+		err        error
 	}
 	var slots []*slot
 	for _, s := range seeds {
@@ -229,6 +239,37 @@ func (ix *Indexer) discover(ctx context.Context) (names []string, recheck map[st
 		slots = append(slots, &slot{label: "topic " + t,
 			fetch: func(ctx context.Context) ([]string, error) { return ix.GH.SearchByTopic(ctx, t, max) }})
 	}
+	if sliced, ok := ix.GH.(TopicSliceSearcher); ok {
+		// Two non-overlapping recency bands complement the existing stars-ranked
+		// page. The recent band runs through today; older ends the day before it.
+		today := ix.now().UTC().Truncate(24 * time.Hour)
+		recentStart := today.AddDate(0, 0, -30)
+		olderStart := today.AddDate(0, 0, -180)
+		windows := [][2]time.Time{
+			{recentStart, today},
+			{olderStart, recentStart.AddDate(0, 0, -1)},
+		}
+		budget := extraTopicSearchBudget
+		for _, topic := range topics {
+			for _, w := range windows {
+				if budget == 0 {
+					break
+				}
+				topic, after, before := topic, w[0], w[1]
+				slots = append(slots, &slot{
+					label: "topic " + topic + " pushed " + after.Format("2006-01-02") + ".." + before.Format("2006-01-02"),
+					soft:  true, topicSlice: true,
+					fetch: func(ctx context.Context) ([]string, error) {
+						return sliced.SearchByTopicPushed(ctx, topic, after, before)
+					},
+				})
+				budget--
+			}
+			if budget == 0 {
+				break
+			}
+		}
+	}
 
 	dctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -242,7 +283,7 @@ func (ix *Indexer) discover(ctx context.Context) (names []string, recheck map[st
 			defer wg.Done()
 			sl.names, sl.err = sl.fetch(dctx)
 			var rl *github.RateLimitError
-			if errors.As(sl.err, &rl) {
+			if errors.As(sl.err, &rl) && !sl.topicSlice {
 				cancel() // the other sources would hit the same limit
 			}
 		}()
@@ -251,7 +292,7 @@ func (ix *Indexer) discover(ctx context.Context) (names []string, recheck map[st
 
 	for _, sl := range slots {
 		var rl *github.RateLimitError
-		if errors.As(sl.err, &rl) {
+		if errors.As(sl.err, &rl) && !sl.topicSlice {
 			return nil, nil, false, sl.err
 		}
 	}
@@ -263,6 +304,7 @@ func (ix *Indexer) discover(ctx context.Context) (names []string, recheck map[st
 	recheck = map[string]bool{}
 	var out []string
 	for _, sl := range slots {
+		added := 0
 		switch {
 		case sl.err == nil:
 		case errors.Is(sl.err, github.ErrNoToken):
@@ -283,7 +325,11 @@ func (ix *Indexer) discover(ctx context.Context) (names []string, recheck map[st
 			if !seen[k] {
 				seen[k] = true
 				out = append(out, n)
+				added++
 			}
+		}
+		if sl.topicSlice {
+			ix.log().Info("topic discovery slice", "source", sl.label, "returned", len(sl.names), "new", added)
 		}
 	}
 	return out, recheck, partial, nil

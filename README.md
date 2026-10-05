@@ -57,7 +57,12 @@ packages in a `PKGBUILD`, the store can install them with pacman for you
 - **Discovery:** only **app** repositories with an `omastore.toml` at the root
   get in (plugins and themes are left out). They are found through GitHub
   code search, the `omarchy` topic and curated lists. To be
-  installable, the latest release must have a Linux binary.
+  installable, the latest release must have a Linux binary. Topic discovery
+  keeps its stars-ranked results and adds up to two pushed-date searches (the
+  last 30 days and days 31–180), one page each. Extra topic searches are capped
+  at five per refresh; their logs report returned and newly found candidates.
+  GitHub search is bounded, so this improves coverage without claiming to find
+  every repository with the topic.
 - **App downloads:** the manifest selects a file by name from the repository's
   latest stable GitHub release. OmaStore downloads the binary from that release,
   not from a URL in the manifest or README. Icons and screenshots are fetched

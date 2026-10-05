@@ -7,9 +7,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -21,7 +23,9 @@ import (
 // Client accesses the GitHub API.
 type Client struct {
 	gh            *gh.Client
+	anonymous     *gh.Client
 	authenticated bool
+	authRejected  atomic.Bool
 	requests      atomic.Int64
 }
 
@@ -51,40 +55,188 @@ func New(o Options) (*Client, error) {
 	cl := &Client{authenticated: o.Token != ""}
 	hc = &http.Client{Transport: countingTransport{etagTransport{base}, &cl.requests}, Timeout: hc.Timeout, Jar: hc.Jar}
 
-	opts := []gh.ClientOptionsFunc{gh.WithHTTPClient(hc), gh.WithUserAgent("omastore")}
-	if o.Token != "" {
-		opts = append(opts, gh.WithAuthToken(o.Token))
-	}
+	baseOpts := []gh.ClientOptionsFunc{gh.WithHTTPClient(hc), gh.WithUserAgent("omastore")}
 	if o.BaseURL != "" {
 		u := strings.TrimSuffix(o.BaseURL, "/") + "/"
-		opts = append(opts, gh.WithURLs(&u, &u))
+		baseOpts = append(baseOpts, gh.WithURLs(&u, &u))
 	}
-	c, err := gh.NewClient(opts...)
+	anonymous, err := gh.NewClient(baseOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create GitHub client: %w", err)
 	}
-	cl.gh = c
+	cl.anonymous = anonymous
+	cl.gh = anonymous
+	if o.Token != "" {
+		authOpts := append(append([]gh.ClientOptionsFunc(nil), baseOpts...), gh.WithAuthToken(o.Token))
+		cl.gh, err = gh.NewClient(authOpts...)
+		if err != nil {
+			return nil, fmt.Errorf("create authenticated GitHub client: %w", err)
+		}
+	}
 	return cl, nil
 }
 
-// TokenFromEnv looks for a token in GITHUB_TOKEN, GH_TOKEN and, last,
-// `gh auth token`. Returns "" if none exists.
+func (c *Client) api() *gh.Client {
+	if c.authenticated && !c.authRejected.Load() {
+		return c.gh
+	}
+	return c.anonymous
+}
+
+func (c *Client) rejectAuth() {
+	if c.authRejected.CompareAndSwap(false, true) {
+		slog.Warn("GitHub rejected the configured token; public requests will continue anonymously")
+	}
+}
+
+// TokenFromEnv checks explicit environment credentials, gh, Git helpers, then ~/.netrc.
 func TokenFromEnv(ctx context.Context) string {
 	for _, k := range []string{"GITHUB_TOKEN", "GH_TOKEN"} {
 		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
 			return v
 		}
 	}
-	if _, err := exec.LookPath("gh"); err != nil {
+	if _, err := exec.LookPath("gh"); err == nil {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		out, err := exec.CommandContext(ctx, "gh", "auth", "token").Output()
+		cancel()
+		if err == nil && strings.TrimSpace(string(out)) != "" {
+			return strings.TrimSpace(string(out))
+		}
+	}
+	if token := gitCredentialToken(ctx); token != "" {
+		return token
+	}
+	return netrcToken()
+}
+
+func gitCredentialToken(ctx context.Context) string {
+	if _, err := exec.LookPath("git"); err != nil {
 		return ""
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "gh", "auth", "token").Output()
+	cmd := exec.CommandContext(ctx, "git", "credential", "fill")
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Stdin = strings.NewReader("protocol=https\nhost=github.com\n\n")
+	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(out))
+	var username, password string
+	for _, line := range strings.Split(string(out), "\n") {
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "username":
+			username = value
+		case "password":
+			password = value
+		}
+	}
+	if username != "" && password != "" {
+		return password
+	}
+	return ""
+}
+
+func netrcToken() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	b, err := os.ReadFile(filepath.Join(home, ".netrc"))
+	if err != nil {
+		return ""
+	}
+	tokens, err := netrcTokens(string(b))
+	if err != nil {
+		return ""
+	}
+	for i := 0; i < len(tokens); {
+		if tokens[i] != "machine" || i+1 >= len(tokens) {
+			i++
+			continue
+		}
+		host := tokens[i+1]
+		i += 2
+		var login, password string
+		for i < len(tokens) && tokens[i] != "machine" && tokens[i] != "default" {
+			if i+1 >= len(tokens) {
+				break
+			}
+			key, value := tokens[i], tokens[i+1]
+			i += 2
+			switch key {
+			case "login":
+				login = value
+			case "password":
+				password = value
+			}
+		}
+		if (host == "github.com" || host == "api.github.com") && login != "" && password != "" {
+			return password
+		}
+	}
+	return ""
+}
+
+// netrcTokens handles the quoting and comments used by ordinary .netrc
+// machine entries; malformed input is ignored instead of partially trusted.
+func netrcTokens(s string) ([]string, error) {
+	var tokens []string
+	for i := 0; i < len(s); {
+		for i < len(s) && (s[i] == ' ' || s[i] == '\t' || s[i] == '\r' || s[i] == '\n') {
+			i++
+		}
+		if i == len(s) {
+			break
+		}
+		if s[i] == '#' {
+			for i < len(s) && s[i] != '\n' {
+				i++
+			}
+			continue
+		}
+		var token strings.Builder
+		quote := byte(0)
+		if s[i] == '\'' || s[i] == '"' {
+			quote = s[i]
+			i++
+		}
+		closed := quote == 0
+		for i < len(s) {
+			ch := s[i]
+			if ch == '\\' && i+1 < len(s) {
+				i++
+				token.WriteByte(s[i])
+				i++
+				continue
+			}
+			if quote != 0 {
+				if ch == quote {
+					i++
+					closed = true
+					break
+				}
+				token.WriteByte(ch)
+				i++
+				continue
+			}
+			if ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n' {
+				break
+			}
+			token.WriteByte(ch)
+			i++
+		}
+		if !closed {
+			return nil, errors.New("unterminated .netrc quote")
+		}
+		tokens = append(tokens, token.String())
+	}
+	return tokens, nil
 }
 
 // RateLimitError means the API limit is exhausted until Reset.
@@ -135,6 +287,18 @@ func call[T any](ctx context.Context, fn func() (T, *gh.Response, error)) (T, *g
 	}
 }
 
+// callGitHub retries a public read once without credentials after a 401. Once
+// rejected, the token is disabled for the rest of this client lifetime.
+func callGitHub[T any](ctx context.Context, c *Client, fn func(*gh.Client) (T, *gh.Response, error)) (T, *gh.Response, error) {
+	api := c.api()
+	v, resp, err := call(ctx, func() (T, *gh.Response, error) { return fn(api) })
+	if statusOf(err) != http.StatusUnauthorized || api == c.anonymous || !c.authenticated {
+		return v, resp, err
+	}
+	c.rejectAuth()
+	return call(ctx, func() (T, *gh.Response, error) { return fn(c.anonymous) })
+}
+
 func statusOf(err error) int {
 	var er *gh.ErrorResponse
 	if errors.As(err, &er) && er.Response != nil {
@@ -168,8 +332,8 @@ func (c *Client) SearchByTopic(ctx context.Context, topic string, max int) ([]st
 	opts := &gh.SearchOptions{Sort: "stars", Order: "desc", ListOptions: gh.ListOptions{PerPage: 100}}
 	var out []string
 	for {
-		res, resp, err := call(ctx, func() (*gh.RepositoriesSearchResult, *gh.Response, error) {
-			return c.gh.Search.Repositories(ctx, q, opts)
+		res, resp, err := callGitHub(ctx, c, func(api *gh.Client) (*gh.RepositoriesSearchResult, *gh.Response, error) {
+			return api.Search.Repositories(ctx, q, opts)
 		})
 		if err != nil {
 			return out, fmt.Errorf("search topic:%s: %w", topic, err)
@@ -185,6 +349,32 @@ func (c *Client) SearchByTopic(ctx context.Context, topic string, max int) ([]st
 		}
 		opts.Page = resp.NextPage
 	}
+}
+
+// SearchByTopicPushed returns one page from a pushed-date slice. It makes
+// exactly one API request so the indexer can enforce a per-run search budget.
+func (c *Client) SearchByTopicPushed(ctx context.Context, topic string, after, before time.Time) ([]string, error) {
+	q := fmt.Sprintf("topic:%s archived:false fork:false pushed:%s..%s", topic,
+		after.UTC().Format("2006-01-02"), before.UTC().Format("2006-01-02"))
+	opts := &gh.SearchOptions{Sort: "updated", Order: "desc", ListOptions: gh.ListOptions{PerPage: 100}}
+	api := c.api()
+	res, _, err := api.Search.Repositories(ctx, q, opts)
+	if err != nil {
+		if statusOf(err) == http.StatusUnauthorized && api != c.anonymous {
+			c.rejectAuth()
+		}
+		var rl *gh.RateLimitError
+		if errors.As(err, &rl) {
+			return nil, &RateLimitError{Reset: rl.Rate.Reset.Time, Err: err}
+		}
+		return nil, fmt.Errorf("search topic:%s pushed:%s..%s: %w", topic,
+			after.UTC().Format("2006-01-02"), before.UTC().Format("2006-01-02"), err)
+	}
+	out := make([]string, 0, len(res.Repositories))
+	for _, r := range res.Repositories {
+		out = append(out, r.GetFullName())
+	}
+	return out, nil
 }
 
 // Repo is a repository's metadata.
@@ -212,8 +402,8 @@ func (c *Client) GetRepo(ctx context.Context, fullName, etag string) (repo *Repo
 		return nil, "", false, err
 	}
 	ctx = withETag(ctx, etag)
-	r, resp, err := call(ctx, func() (*gh.Repository, *gh.Response, error) {
-		return c.gh.Repositories.Get(ctx, owner, name)
+	r, resp, err := callGitHub(ctx, c, func(api *gh.Client) (*gh.Repository, *gh.Response, error) {
+		return api.Repositories.Get(ctx, owner, name)
 	})
 	if isNotModified(err) {
 		return nil, etag, true, nil
@@ -259,8 +449,8 @@ func (c *Client) HeadSHA(ctx context.Context, fullName, ref, lastSHA string) (st
 	if ref == "" {
 		ref = "HEAD"
 	}
-	sha, _, err := call(ctx, func() (string, *gh.Response, error) {
-		return c.gh.Repositories.GetCommitSHA1(ctx, owner, name, ref, lastSHA)
+	sha, _, err := callGitHub(ctx, c, func(api *gh.Client) (string, *gh.Response, error) {
+		return api.Repositories.GetCommitSHA1(ctx, owner, name, ref, lastSHA)
 	})
 	if isNotModified(err) {
 		return lastSHA, nil
@@ -296,8 +486,8 @@ func (c *Client) LatestRelease(ctx context.Context, fullName string) (*Release, 
 	if err != nil {
 		return nil, err
 	}
-	r, _, err := call(ctx, func() (*gh.RepositoryRelease, *gh.Response, error) {
-		return c.gh.Repositories.GetLatestRelease(ctx, owner, name)
+	r, _, err := callGitHub(ctx, c, func(api *gh.Client) (*gh.RepositoryRelease, *gh.Response, error) {
+		return api.Repositories.GetLatestRelease(ctx, owner, name)
 	})
 	if IsNotFound(err) {
 		return nil, nil
@@ -330,8 +520,8 @@ func (c *Client) Readme(ctx context.Context, fullName string) (content, path str
 	if err != nil {
 		return "", "", err
 	}
-	rc, _, err := call(ctx, func() (*gh.RepositoryContent, *gh.Response, error) {
-		return c.gh.Repositories.GetReadme(ctx, owner, name, nil)
+	rc, _, err := callGitHub(ctx, c, func(api *gh.Client) (*gh.RepositoryContent, *gh.Response, error) {
+		return api.Repositories.GetReadme(ctx, owner, name, nil)
 	})
 	if IsNotFound(err) {
 		return "", "", nil
@@ -385,8 +575,8 @@ func (c *Client) Tree(ctx context.Context, fullName, sha string) (files []string
 	if err != nil {
 		return nil, false, err
 	}
-	t, _, err := call(ctx, func() (*gh.Tree, *gh.Response, error) {
-		return c.gh.Git.GetTree(ctx, owner, name, sha, true)
+	t, _, err := callGitHub(ctx, c, func(api *gh.Client) (*gh.Tree, *gh.Response, error) {
+		return api.Git.GetTree(ctx, owner, name, sha, true)
 	})
 	if err != nil {
 		return nil, false, fmt.Errorf("list tree of %s: %w", fullName, err)
@@ -408,8 +598,8 @@ func (c *Client) File(ctx context.Context, fullName, path, ref string, maxBytes 
 		return "", false, err
 	}
 	type res struct{ fc *gh.RepositoryContent }
-	r, _, err := call(ctx, func() (res, *gh.Response, error) {
-		fc, _, resp, err := c.gh.Repositories.GetContents(ctx, owner, name, path, &gh.RepositoryContentGetOptions{Ref: ref})
+	r, _, err := callGitHub(ctx, c, func(api *gh.Client) (res, *gh.Response, error) {
+		fc, _, resp, err := api.Repositories.GetContents(ctx, owner, name, path, &gh.RepositoryContentGetOptions{Ref: ref})
 		return res{fc}, resp, err
 	})
 	if IsNotFound(err) {
@@ -434,7 +624,7 @@ func (c *Client) File(ctx context.Context, fullName, path, ref string, maxBytes 
 // SearchManifests finds repositories with omastore.toml at the root through
 // code search (requires a token). Returns owner/repo in a stable order.
 func (c *Client) SearchManifests(ctx context.Context, max int) ([]string, error) {
-	if !c.authenticated {
+	if !c.Authenticated() {
 		return nil, ErrNoToken
 	}
 	if max <= 0 || max > 1000 {
@@ -444,10 +634,15 @@ func (c *Client) SearchManifests(ctx context.Context, max int) ([]string, error)
 	seen := map[string]bool{}
 	var out []string
 	for {
+		api := c.api()
 		res, resp, err := call(ctx, func() (*gh.CodeSearchResult, *gh.Response, error) {
-			return c.gh.Search.Code(ctx, "filename:"+ManifestPath, opts)
+			return api.Search.Code(ctx, "filename:"+ManifestPath, opts)
 		})
 		if err != nil {
+			if statusOf(err) == http.StatusUnauthorized {
+				c.rejectAuth()
+				return out, ErrNoToken
+			}
 			return out, fmt.Errorf("search %s: %w", ManifestPath, err)
 		}
 		for _, r := range res.CodeResults {
@@ -477,7 +672,7 @@ func (c *Client) SearchManifests(ctx context.Context, max int) ([]string, error)
 var ErrStarForbidden = errors.New("the GitHub token is not allowed to star repositories")
 
 // Authenticated reports whether the client has a token.
-func (c *Client) Authenticated() bool { return c.authenticated }
+func (c *Client) Authenticated() bool { return c.authenticated && !c.authRejected.Load() }
 
 // IsStarred reports whether the authenticated user starred the repository.
 func (c *Client) IsStarred(ctx context.Context, fullName string) (bool, error) {
@@ -485,10 +680,15 @@ func (c *Client) IsStarred(ctx context.Context, fullName string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	api := c.api()
 	starred, _, err := call(ctx, func() (bool, *gh.Response, error) {
-		return c.gh.Activity.IsStarred(ctx, owner, name)
+		return api.Activity.IsStarred(ctx, owner, name)
 	})
 	if err != nil {
+		if statusOf(err) == http.StatusUnauthorized {
+			c.rejectAuth()
+			return false, ErrNoToken
+		}
 		return false, starError(fullName, err)
 	}
 	return starred, nil
@@ -501,24 +701,29 @@ func (c *Client) SetStarred(ctx context.Context, fullName string, starred bool) 
 	if err != nil {
 		return err
 	}
+	api := c.api()
 	_, _, err = call(ctx, func() (struct{}, *gh.Response, error) {
 		var resp *gh.Response
 		var err error
 		if starred {
-			resp, err = c.gh.Activity.Star(ctx, owner, name)
+			resp, err = api.Activity.Star(ctx, owner, name)
 		} else {
-			resp, err = c.gh.Activity.Unstar(ctx, owner, name)
+			resp, err = api.Activity.Unstar(ctx, owner, name)
 		}
 		return struct{}{}, resp, err
 	})
 	if err != nil {
+		if statusOf(err) == http.StatusUnauthorized {
+			c.rejectAuth()
+			return ErrNoToken
+		}
 		return starError(fullName, err)
 	}
 	return nil
 }
 
 func (c *Client) starTarget(fullName string) (owner, name string, err error) {
-	if !c.authenticated {
+	if !c.Authenticated() {
 		return "", "", ErrNoToken
 	}
 	return SplitFullName(fullName)

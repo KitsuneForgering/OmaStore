@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -13,7 +14,7 @@ import (
 // ErrNoToken means the operation requires authentication (GraphQL, code
 // search and starring do not allow anonymous access). The indexer falls back
 // to the REST API.
-var ErrNoToken = errors.New("a GitHub token is required (set GITHUB_TOKEN or run `gh auth login`)")
+var ErrNoToken = errors.New("a usable GitHub token is required for this operation (set GITHUB_TOKEN or run `gh auth login`)")
 
 // batchSize is how many repositories go in each GraphQL query and
 // batchParallel how many queries run at once. Measured with ~230 real
@@ -166,7 +167,7 @@ type gqlResponse struct {
 // repository (the caller should use REST for it). Without a token, returns
 // ErrNoToken.
 func (c *Client) Snapshots(ctx context.Context, names []string) (map[string]*Snapshot, error) {
-	if !c.authenticated {
+	if !c.Authenticated() {
 		return nil, ErrNoToken
 	}
 	// Batches run in parallel with a low limit: GitHub discourages many
@@ -234,16 +235,21 @@ func (c *Client) snapshotBatch(ctx context.Context, names []string, out map[stri
 	query := fmt.Sprintf("query(%s) {\n%s}", strings.TrimSuffix(decl.String(), ", "), body.String())
 
 	var resp gqlResponse
+	api := c.api()
 	if _, _, err := call(ctx, func() (struct{}, *ghResponse, error) {
 		// The request is built on every attempt: the body is consumed when sent.
-		req, err := c.gh.NewRequest(ctx, "POST", "graphql", map[string]any{"query": query, "variables": vars})
+		req, err := api.NewRequest(ctx, "POST", "graphql", map[string]any{"query": query, "variables": vars})
 		if err != nil {
 			return struct{}{}, nil, err
 		}
 		resp = gqlResponse{}
-		r, err := c.gh.Do(req, &resp)
+		r, err := api.Do(req, &resp)
 		return struct{}{}, r, err
 	}); err != nil {
+		if statusOf(err) == http.StatusUnauthorized {
+			c.rejectAuth()
+			return ErrNoToken
+		}
 		return fmt.Errorf("GraphQL query: %w", err)
 	}
 
