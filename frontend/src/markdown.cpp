@@ -2,7 +2,10 @@
 
 #include <QRegularExpression>
 
-QString Markdown::stripImages(const QString &markdown)
+namespace {
+QString protectCodeSpans(const QString &text, QStringList &spans);
+
+QString stripImagesFromProse(const QString &markdown)
 {
     static const QRegularExpression mdImage(QStringLiteral(R"(!\[([^\]]*)\]\([^)]*\))"));
     static const QRegularExpression refImage(QStringLiteral(R"(!\[([^\]]*)\]\[[^\]]*\])"));
@@ -33,7 +36,6 @@ QString Markdown::stripImages(const QString &markdown)
     return result;
 }
 
-namespace {
 // Code spans hold literal text (`<br>` documents a tag): they are swapped for
 // private-use placeholders while the HTML is simplified, then restored. A span
 // closes on a backtick run of the same length and never crosses a blank line.
@@ -125,9 +127,25 @@ QString simplifyHtml(const QString &source)
 }
 } // namespace
 
+QString Markdown::stripImages(const QString &markdown)
+{
+    QStringList spans;
+    const QString protectedText = protectCodeSpans(markdown, spans);
+    QString result = stripImagesFromProse(protectedText);
+    static const QRegularExpression placeholder(QStringLiteral("\uE000(\\d+)\uE001"));
+    QString restored;
+    qsizetype last = 0;
+    for (auto it = placeholder.globalMatch(result); it.hasNext();) {
+        const auto m = it.next();
+        restored += result.mid(last, m.capturedStart() - last) + spans.value(m.captured(1).toInt());
+        last = m.capturedEnd();
+    }
+    return restored + result.mid(last);
+}
+
 QString Markdown::forDisplay(const QString &markdown)
 {
-    const QString input = stripImages(markdown);
+    const QString &input = markdown;
     static const QRegularExpression fence(QStringLiteral(R"(^ {0,3}(`{3,}|~{3,}))"));
     QString output, prose;
     QChar fenceChar;
@@ -140,7 +158,7 @@ QString Markdown::forDisplay(const QString &markdown)
         const auto match = fence.match(line);
         const bool blank = line.trimmed().isEmpty();
         if (fenceLength == 0 && match.hasMatch()) {
-            output += simplifyHtml(prose);
+            output += simplifyHtml(stripImages(prose));
             prose.clear();
             fenceChar = match.captured(1).at(0);
             fenceLength = match.captured(1).size();
@@ -153,7 +171,7 @@ QString Markdown::forDisplay(const QString &markdown)
                 fenceLength = 0;
         } else if (!blank && (afterBlank || indented) &&
                    (line.startsWith(QLatin1String("    ")) || line.startsWith(QLatin1Char('\t')))) {
-            output += simplifyHtml(prose);
+            output += simplifyHtml(stripImages(prose));
             prose.clear();
             output += line + QLatin1Char('\n');
             indented = true;
@@ -164,5 +182,5 @@ QString Markdown::forDisplay(const QString &markdown)
         }
         afterBlank = blank || fenceLength > 0 || match.hasMatch();
     }
-    return output + simplifyHtml(prose);
+    return output + simplifyHtml(stripImages(prose));
 }

@@ -136,6 +136,8 @@ displayed. The carousel keeps the image's aspect ratio.
   heading when they match (e.g. repo `omaphoto`, heading `# OmaPhoto`).
 - The README is shown on the app page, with relative links converted to
   absolute ones.
+- A root `CHANGELOG.md` is shown after the README, with relative links converted
+  to absolute ones. Repositories without one need no extra file request.
 
 ## 5b. System dependencies
 

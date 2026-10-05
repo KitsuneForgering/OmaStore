@@ -22,6 +22,8 @@ private slots:
         QTest::newRow("html without alt") << "x<IMG SRC='https://x/a.png'/>y" << "xy";
         QTest::newRow("picture") << "<picture><source srcset=\"https://x/d.png\"><img src=\"https://x/l.png\"></picture>" << "";
         QTest::newRow("plain link stays") << "[site](https://omarchy.org)" << "[site](https://omarchy.org)";
+        QTest::newRow("inline code image") << "a `![literal](image.png)` ![logo](https://x/l.png)"
+                                             << "a `![literal](image.png)` logo";
     }
 
     void stripImages()
@@ -74,6 +76,20 @@ private slots:
         QVERIFY2(rendered.contains(QStringLiteral("Use <br> for breaks and <div> blocks.")),
                  qPrintable(rendered));
         QVERIFY2(rendered.contains(QStringLiteral("<p>indented code</p>")), qPrintable(rendered));
+    }
+
+    void imagesInCodeAreKept()
+    {
+        const QString source = QStringLiteral(
+            "![real image](https://example.com/logo.png)\n\n"
+            "```markdown\n![literal](logo.png)\n<img src=\"logo.png\">\n```\n\n"
+            "    ![indented literal](logo.png)\n");
+        const QString prepared = Markdown::forDisplay(source);
+        QVERIFY(prepared.contains(QStringLiteral("real image")));
+        QVERIFY(!prepared.contains(QStringLiteral("https://example.com/logo.png")));
+        QVERIFY(prepared.contains(QStringLiteral("![literal](logo.png)")));
+        QVERIFY(prepared.contains(QStringLiteral("<img src=\"logo.png\">")));
+        QVERIFY(prepared.contains(QStringLiteral("    ![indented literal](logo.png)")));
     }
 
     void offlineNamBlocksRemote()

@@ -144,6 +144,7 @@ AppItem {
 }
 AppDetail extends AppItem {
   readme: string                   // markdown with URLs already absolute
+  changelog: string                // root CHANGELOG.md, markdown with URLs absolute
   releaseNotes: string             // markdown body of the latest release, as the
                                    // author wrote it (up to ~16 KiB); "" if none
   description, license, htmlUrl: string

@@ -32,7 +32,8 @@ packages in a `PKGBUILD`, the store can install them with pacman for you
 ## Why use it
 
 - **Discover community apps:** find projects with descriptions, images,
-  categories and search in one place.
+  categories and search in one place. App pages render the README and root
+  `CHANGELOG.md` with working repository links.
 - **Install without touching the system:** apps live in your account, with menu
   shortcuts, and can be removed from the store.
 - **An intact download:** the file is checked against GitHub's digest or the
@@ -94,8 +95,8 @@ packages in a `PKGBUILD`, the store can install them with pacman for you
     still OmaStore's launcher for that app;
   - icon in the user's `hicolor` theme;
   - shortcut in `~/.local/share/applications/omastore-<owner>-<repo>.desktop`.
-- **Look:** follows the colors of the active Omarchy theme and changes along when you
-  switch themes.
+- **Look:** follows the active Omarchy theme's colors and typography, and updates
+  when you switch themes.
 
 ## Installation
 

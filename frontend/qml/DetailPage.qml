@@ -74,6 +74,27 @@ Page {
         }
     }
 
+    // One theme-aware renderer for all repository prose: README, changelog and
+    // release notes share typography, wrapping and safe external links.
+    component MarkdownBody: Text {
+        property string markdown: ""
+        Layout.fillWidth: true
+        text: markdown ? backend.readmeForDisplay(markdown) : ""
+        textFormat: Text.MarkdownText
+        wrapMode: Text.Wrap
+        font.family: theme.fontFamily
+        font.pixelSize: theme.fontReading
+        lineHeight: 1.5
+        lineHeightMode: Text.ProportionalHeight
+        color: theme.foreground
+        linkColor: theme.accent
+        onLinkActivated: (link) => {
+            if (link.startsWith("https://") || link.startsWith("http://"))
+                Qt.openUrlExternally(link)
+        }
+        HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
+    }
+
     Dialog {
         id: confirmUnverified
         objectName: "confirmUnverified"
@@ -847,21 +868,9 @@ Page {
                           ? qsTr("What's new in %1 (you have %2)").arg(page.app.latestVersion).arg(page.app.install.version)
                           : qsTr("What's new in %1").arg(page.app.latestVersion)
                 }
-                Text {
+                MarkdownBody {
                     Layout.fillWidth: true
-                    text: page.app.releaseNotes ? backend.readmeForDisplay(page.app.releaseNotes) : ""
-                    textFormat: Text.MarkdownText
-                    wrapMode: Text.Wrap
-                    font.pixelSize: theme.fontReading
-                    lineHeight: 1.5
-                    lineHeightMode: Text.ProportionalHeight
-                    color: theme.foreground
-                    linkColor: theme.accent
-                    onLinkActivated: (link) => {
-                        if (link.startsWith("https://") || link.startsWith("http://"))
-                            Qt.openUrlExternally(link)
-                    }
-                    HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
+                    markdown: page.app.releaseNotes || ""
                 }
             }
 
@@ -871,22 +880,23 @@ Page {
                 visible: !!page.app.readme
                 spacing: theme.spaceL
                 SectionTitle { text: qsTr("About") }
-                Text {
+                MarkdownBody {
                     objectName: "detailReadme"
                     Layout.fillWidth: true
-                    text: page.app.readme ? backend.readmeForDisplay(page.app.readme) : ""
-                    textFormat: Text.MarkdownText
-                    wrapMode: Text.Wrap
-                    font.pixelSize: theme.fontReading
-                    lineHeight: 1.5
-                    lineHeightMode: Text.ProportionalHeight
-                    color: theme.foreground
-                    linkColor: theme.accent
-                    onLinkActivated: (link) => {
-                        if (link.startsWith("https://") || link.startsWith("http://"))
-                            Qt.openUrlExternally(link)
-                    }
-                    HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
+                    markdown: page.app.readme || ""
+                }
+            }
+
+            ColumnLayout {
+                objectName: "changelogSection"
+                Layout.fillWidth: true
+                Layout.maximumWidth: 860
+                visible: !!page.app.changelog
+                spacing: theme.spaceL
+                SectionTitle { text: qsTr("Changelog") }
+                MarkdownBody {
+                    objectName: "detailChangelog"
+                    markdown: page.app.changelog || ""
                 }
             }
 

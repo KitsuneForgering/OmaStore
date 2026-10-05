@@ -61,7 +61,7 @@ func (f *fakeBackend) GetApp(ctx context.Context, name string) (*store.AppDetail
 		return nil, store.ErrNotFound
 	}
 	return &store.AppDetail{
-		App:    store.App{FullName: name, Name: "Photo", Readme: "# Photo"},
+		App:    store.App{FullName: name, Name: "Photo", Readme: "# Photo", Changelog: "# Changes"},
 		Repo:   store.Repo{FullName: name, LatestTag: "v2", License: "MIT"},
 		Assets: []store.Asset{{Name: "p.tar.gz", Format: "tar.gz", Digest: "sha256:" + strings.Repeat("ab", 32)}, {Name: "p.bin", Format: "binary"}},
 		Install: &store.Install{FullName: name, Version: "v1", History: []store.InstallEvent{{
@@ -444,6 +444,9 @@ func TestCatalogDTOs(t *testing.T) {
 	}
 	if d.Install.History == nil || d.Install.History[0].FromVersion != "v0.9" {
 		t.Errorf("install history = %+v", d.Install.History)
+	}
+	if d.Changelog != "# Changes" {
+		t.Errorf("changelog = %q", d.Changelog)
 	}
 
 	var sim []AppItem

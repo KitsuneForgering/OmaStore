@@ -98,6 +98,7 @@ type InstallEventInfo struct {
 type AppDetail struct {
 	AppItem
 	Readme       string      `json:"readme"`
+	Changelog    string      `json:"changelog"`
 	ReleaseNotes string      `json:"releaseNotes"`
 	Description  string      `json:"description"`
 	License      string      `json:"license"`
@@ -225,7 +226,7 @@ func toDetail(d *store.AppDetail) AppDetail {
 		it.InstalledVersion = d.Install.Version
 	}
 	out := AppDetail{
-		AppItem: toItem(it), Readme: d.Readme, ReleaseNotes: d.Repo.ReleaseNotes,
+		AppItem: toItem(it), Readme: d.Readme, Changelog: d.Changelog, ReleaseNotes: d.Repo.ReleaseNotes,
 		Description: d.Repo.Description, License: d.Repo.License,
 		Topics: nonNil(d.Repo.Topics), HTMLURL: d.Repo.HTMLURL, PushedAt: d.Repo.PushedAt,
 		IndexedAt: d.Repo.IndexedAt, Assets: []AssetInfo{},

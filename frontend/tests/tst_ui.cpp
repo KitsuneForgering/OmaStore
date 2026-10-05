@@ -69,6 +69,7 @@ QJsonObject appDetail(const QString &repo, int screenshots, int stars = 4)
         shots.append(QStringLiteral("https://example.com/%1.png").arg(i));
     return QJsonObject{{"repo", repo}, {"name", "Demo App"}, {"summary", "A sample app"},
                        {"latestVersion", "v1.2.3"}, {"license", "MIT"}, {"readme", "# Demo App\nDetails"},
+                       {"changelog", "# Changes\n\n- Improved the interface."},
                        {"category", "Utility"}, {"installable", true}, {"screenshots", shots},
                        {"stars", stars}, {"assets", QJsonArray{}}};
 }
@@ -160,6 +161,7 @@ private slots:
                 return {{"result", QJsonObject{
                     {"repo", repo}, {"name", "Demo App"}, {"summary", "A sample app"},
                     {"latestVersion", "v1.2.3"}, {"license", "MIT"}, {"readme", "# Demo App\nDetails"},
+                    {"changelog", "# Changes\n\n- Improved the interface."},
                     {"category", "Utility"}, {"installable", true}, {"screenshots", shots},
                     {"assets", QJsonArray{}}}}};
             }
@@ -201,12 +203,13 @@ private slots:
         auto *panel = page->findChild<QQuickItem *>("detailInfoPanel");
         auto *strip = page->findChild<QQuickItem *>("previewStrip");
         auto *readme = page->findChild<QQuickItem *>("detailReadme");
+        auto *changelog = page->findChild<QQuickItem *>("detailChangelog");
         auto *previous = page->findChild<QQuickItem *>("previewPrevious");
         auto *next = page->findChild<QQuickItem *>("previewNext");
         auto *position = page->findChild<QQuickItem *>("previewPosition");
         auto *install = page->findChild<QQuickItem *>("installButton");
         auto *name = page->findChild<QQuickItem *>("detailName");
-        QVERIFY(content && controls && carousel && hero && panel && strip && readme &&
+        QVERIFY(content && controls && carousel && hero && panel && strip && readme && changelog &&
                 previous && next && position && install && name);
         // The slideshow would move the gallery under the checks below.
         carousel->setProperty("autoplay", false);
@@ -250,6 +253,8 @@ private slots:
         };
         QTRY_VERIFY2_WITH_TIMEOUT(layoutProblem().isEmpty(), qPrintable(layoutProblem()), 5000);
         QVERIFY(readme->width() <= 900);
+        QVERIFY(changelog->isVisible());
+        QVERIFY(leftTop(changelog, page).y() > leftTop(readme, page).y());
         QVERIFY(readme->property("font").value<QFont>().pixelSize() >= 17);
         QVERIFY(readme->property("lineHeight").toReal() >= 1.5);
         QVERIFY(contrast(readme->property("color").value<QColor>(), theme.background()) >= 7);

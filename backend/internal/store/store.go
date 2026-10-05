@@ -90,6 +90,7 @@ type App struct {
 	Name        string
 	Summary     string
 	Readme      string
+	Changelog   string
 	IconURL     string
 	Screenshots []string
 	Category    string
@@ -268,15 +269,15 @@ func (s *Store) SaveIndexed(ctx context.Context, r Repo, a App, assets []Asset) 
 	}
 
 	if _, err = tx.ExecContext(ctx, `
-		INSERT INTO apps (full_name, name, summary, readme, icon_url, screenshots, category, score, installable,
+		INSERT INTO apps (full_name, name, summary, readme, changelog, icon_url, screenshots, category, score, installable,
 		                  manifest, sysdeps)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(full_name) DO UPDATE SET
-			name = excluded.name, summary = excluded.summary, readme = excluded.readme,
+			name = excluded.name, summary = excluded.summary, readme = excluded.readme, changelog = excluded.changelog,
 			icon_url = excluded.icon_url, screenshots = excluded.screenshots,
 			category = excluded.category, score = excluded.score, installable = excluded.installable,
 			manifest = excluded.manifest, sysdeps = excluded.sysdeps`,
-		a.FullName, a.Name, a.Summary, a.Readme, a.IconURL, encodeList(a.Screenshots),
+		a.FullName, a.Name, a.Summary, a.Readme, a.Changelog, a.IconURL, encodeList(a.Screenshots),
 		a.Category, a.Score, a.Installable, a.Manifest, a.SysDeps); err != nil {
 		return fmt.Errorf("save app %s: %w", a.FullName, err)
 	}
@@ -390,13 +391,13 @@ func (s *Store) GetApp(ctx context.Context, fullName string) (*AppDetail, error)
 	var shots, topics string
 	var pushed, indexed sql.NullTime
 	err := s.db.QueryRowContext(ctx, `
-		SELECT a.full_name, a.name, a.summary, a.readme, a.icon_url, a.screenshots, a.category, a.score,
+		SELECT a.full_name, a.name, a.summary, a.readme, a.changelog, a.icon_url, a.screenshots, a.category, a.score,
 		       a.installable, a.manifest, a.sysdeps, r.description, r.stars, r.topics, r.license, r.html_url, r.default_branch,
 		       r.pushed_at, r.head_sha, r.latest_tag, r.release_notes, r.etag, r.indexed_at
 		FROM repos r JOIN apps a ON a.full_name = r.full_name
 		WHERE r.full_name = ? COLLATE NOCASE
 		ORDER BY r.full_name = ? DESC LIMIT 1`, fullName, fullName).
-		Scan(&d.FullName, &d.Name, &d.Summary, &d.Readme, &d.IconURL, &shots, &d.Category, &d.Score,
+		Scan(&d.FullName, &d.Name, &d.Summary, &d.Readme, &d.Changelog, &d.IconURL, &shots, &d.Category, &d.Score,
 			&d.Installable, &d.Manifest, &d.SysDeps, &d.Repo.Description, &d.Repo.Stars, &topics, &d.Repo.License, &d.Repo.HTMLURL,
 			&d.Repo.DefaultBranch, &pushed, &d.Repo.HeadSHA, &d.Repo.LatestTag, &d.Repo.ReleaseNotes, &d.Repo.ETag, &indexed)
 	if errors.Is(err, sql.ErrNoRows) {

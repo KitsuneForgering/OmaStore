@@ -28,10 +28,11 @@ import (
 )
 
 // Version is the version of the extraction and classification logic. Bump it
-// when changing rules that affect what is stored (assets, categories, README...):
+// when changing rules that affect what is stored (assets, categories, README,
+// changelog...):
 // repositories stored with a lower version are reprocessed even without changes
 // on GitHub.
-const Version = 11
+const Version = 12
 
 // GitHub is the subset of the client used by the indexer.
 type GitHub interface {
@@ -911,6 +912,23 @@ func (ix *Indexer) extract(ctx context.Context, repo *github.Repo, sha string, r
 		// Without the file list we can still index with the README.
 		ix.log().Warn("no file list", "repo", name, "err", err)
 	}
+	if filesKnown {
+		for _, file := range files {
+			if strings.EqualFold(file, "CHANGELOG.md") {
+				content, found, err := ix.GH.File(ctx, name, file, sha, maxChangelogSize)
+				if err != nil {
+					var rl *github.RateLimitError
+					if errors.As(err, &rl) {
+						return app, nil, err
+					}
+					ix.log().Warn("could not read changelog", "repo", name, "err", err)
+				} else if found {
+					app.Changelog = RewriteReadme(content, urls)
+				}
+				break
+			}
+		}
+	}
 	if m.Icon != "" && (!filesKnown || contains(files, m.Icon)) {
 		app.IconURL = urls.Raw(m.Icon)
 	} else if icon := gitrepo.FindIcon(files, repo.Name); icon != "" {
@@ -963,6 +981,8 @@ func (ix *Indexer) extract(ctx context.Context, repo *github.Repo, sha string, r
 	_, app.Installable = install.SelectAsset(assets, ix.goarch(), m)
 	return app, assets, nil
 }
+
+const maxChangelogSize = 64 << 10
 
 // sysDeps reads the system dependencies declared in the repository's best
 // PKGBUILD/.SRCINFO, as JSON ("" if there is none). A failure only loses the

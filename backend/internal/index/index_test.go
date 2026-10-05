@@ -166,7 +166,8 @@ func photoRepo() *fakeRepo {
 			{Name: "omaphoto-source.tar.gz", URL: "https://dl/src.tgz"},
 		}},
 		readme: "# OmaPhoto\n\nFast photo editor for Omarchy.\n\n![shot](docs/shot.png)\n",
-		files:  []string{"README.md", "assets/icon.svg", "screenshots/main.png"},
+		files:  []string{"README.md", "CHANGELOG.md", "assets/icon.svg", "screenshots/main.png"},
+		extra:  map[string]string{"CHANGELOG.md": "# Changelog\n\n- Added a feature.\n"},
 	}
 }
 
@@ -214,6 +215,9 @@ func TestIndexNewRepo(t *testing.T) {
 	}
 	if d.Name != "OmaPhoto" || d.Summary != "Fast photo editor for Omarchy." || d.Category != CatGraphics || !d.Installable {
 		t.Errorf("app = %+v", d.App)
+	}
+	if !strings.Contains(d.Changelog, "Added a feature") {
+		t.Errorf("changelog = %q", d.Changelog)
 	}
 	if d.IconURL != "https://raw.githubusercontent.com/acme/omaphoto/sha1/assets/icon.svg" {
 		t.Errorf("icon = %q", d.IconURL)
