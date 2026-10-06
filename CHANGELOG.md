@@ -6,6 +6,8 @@ All notable changes to OmaStore are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-06
+
 ### Added
 
 - Apps can declare user services in `omastore.toml` (`[services.<id>]`,
@@ -21,7 +23,6 @@ All notable changes to OmaStore are listed here. The format follows
 - The interface is translated into Brazilian Portuguese, including category
   names, and follows the system language. Building the translations needs
   `qt6-tools`; `make translations` refreshes `frontend/i18n/*.ts`.
-
 - Automatic updates, on by default: installed apps whose new release can be
   verified update on their own after `omarchy update`, when the store opens
   (refreshing the installed apps at most every 12 hours) and from the daily
@@ -30,7 +31,6 @@ All notable changes to OmaStore are listed here. The format follows
   `omastore auto-update on|off` turn it off; `omastore update --auto` is the
   command the hook and the timer run. Self-update upgrades the Omarchy hook
   install.sh wrote. Protocol 3 adds `settings.get`/`settings.set`.
-
 - Build provenance: when indexing, OmaStore verifies with Sigstore the GitHub
   artifact attestation of the file each architecture would install, and
   accepts only one signed by a workflow of the app's own repository. The app
@@ -49,6 +49,26 @@ All notable changes to OmaStore are listed here. The format follows
   and `omastore://` links.
 - The catalog loads 60 apps at a time and the next ones as you scroll, so a
   large catalog opens quickly; the count shows “60+ apps” until the end.
+- The README was rewritten around installing and using the store.
+
+## [0.3.5] - 2026-10-05
+
+### Added
+
+- App pages render the app's `CHANGELOG.md` with the theme's Markdown styles.
+
+## [0.3.4] - 2026-10-05
+
+### Added
+
+- Each installed app shows its install, update and rollback history.
+
+## [0.3.3] - 2026-10-05
+
+### Changed
+
+- GitHub discovery finds more repositories and falls back to other credentials
+  when one is rejected.
 
 ## [0.3.2] - 2026-10-04
 
@@ -227,7 +247,11 @@ First public release.
 - `install.sh`, `omastore-bin` PKGBUILD, reproducible release tarball with
   build provenance attestation, and optional systemd socket and daily timer.
 
-[Unreleased]: https://github.com/KitsuneForgering/OmaStore/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/KitsuneForgering/OmaStore/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/KitsuneForgering/OmaStore/compare/v0.3.5...v0.4.0
+[0.3.5]: https://github.com/KitsuneForgering/OmaStore/compare/v0.3.4...v0.3.5
+[0.3.4]: https://github.com/KitsuneForgering/OmaStore/compare/v0.3.3...v0.3.4
+[0.3.3]: https://github.com/KitsuneForgering/OmaStore/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/KitsuneForgering/OmaStore/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/KitsuneForgering/OmaStore/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/KitsuneForgering/OmaStore/compare/v0.2.0...v0.3.0
