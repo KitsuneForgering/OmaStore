@@ -34,6 +34,8 @@ void serveCatalog(FakeDaemon &d, QJsonArray *all)
                     continue;
                 out.append(o);
             }
+            for (int i = p.value("offset").toInt(); i > 0 && !out.isEmpty(); --i)
+                out.removeFirst();
             if (p.value("limit").toInt() > 0)
                 while (out.size() > p.value("limit").toInt())
                     out.removeLast();
@@ -117,6 +119,51 @@ private slots:
         QTRY_VERIFY(d.hasClient());
         d.notify("catalog.changed", QJsonObject{});
         QTRY_COMPARE(m.rowCount(), 3);
+    }
+
+    // Pages load as the view asks for more; catalog.changed keeps them.
+    void catalogLoadsPages()
+    {
+        FakeDaemon d;
+        QJsonArray all;
+        for (int i = 0; i < 5; ++i)
+            all.append(app(QStringLiteral("a/app%1").arg(i), "Utility"));
+        serveCatalog(d, &all);
+        QVERIFY(d.listen());
+        RpcClient rpc(d.path());
+        rpc.setAutoStart(false);
+        CatalogModel m(&rpc);
+        m.setDebounce(0);
+        m.setPageSize(2);
+        rpc.start();
+
+        QTRY_COMPARE(m.rowCount(), 2);
+        QVERIFY(m.hasMore());
+        QTRY_VERIFY(m.canFetchMore({}));
+        m.fetchMore({});
+        QTRY_COMPARE(m.rowCount(), 4);
+        QCOMPARE(m.data(m.index(3), CatalogModel::RepoRole).toString(), QStringLiteral("a/app3"));
+        QTRY_VERIFY(m.canFetchMore({}));
+        m.fetchMore({});
+        QTRY_COMPARE(m.rowCount(), 5);
+        QVERIFY(!m.hasMore());
+        QVERIFY(!m.canFetchMore({}));
+
+        // A change keeps what was scrolled through...
+        all.append(app("a/app5", "Utility"));
+        QTRY_VERIFY(d.hasClient());
+        d.notify("catalog.changed", QJsonObject{});
+        QTRY_COMPARE(m.rowCount(), 6);
+        // A full page cannot tell whether more follow; an empty one ends it.
+        QTRY_VERIFY(m.canFetchMore({}));
+        m.fetchMore({});
+        QTRY_VERIFY(!m.hasMore());
+        QCOMPARE(m.rowCount(), 6);
+        // ...and a new filter starts over at one page.
+        m.setQuery("app");
+        QTRY_COMPARE(d.received.last().value("params").toObject().value("query").toString(), QStringLiteral("app"));
+        QTRY_COMPARE(m.rowCount(), 2);
+        QVERIFY(m.hasMore());
     }
 
     void staleResponsesAreIgnored()

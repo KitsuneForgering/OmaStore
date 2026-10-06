@@ -4,6 +4,9 @@
 
 #include <QJsonObject>
 
+#include <algorithm>
+#include <utility>
+
 CatalogModel::CatalogModel(RpcClient *rpc, QObject *parent)
     : QAbstractListModel(parent), m_rpc(rpc)
 {
@@ -15,8 +18,11 @@ CatalogModel::CatalogModel(RpcClient *rpc, QObject *parent)
             reload();
     });
     connect(rpc, &RpcClient::notification, this, [this](const QString &method, const QJsonValue &) {
-        if (method == QLatin1String("catalog.changed"))
-            scheduleReload();
+        if (method == QLatin1String("catalog.changed")) {
+            // Same filters: keep what was scrolled through.
+            m_keepCount = true;
+            m_debounce.start();
+        }
     });
 }
 
@@ -93,14 +99,12 @@ void CatalogModel::setInstalledOnly(bool on)
 
 void CatalogModel::scheduleReload()
 {
+    m_keepCount = false;
     m_debounce.start();
 }
 
-void CatalogModel::reload()
+QJsonObject CatalogModel::filterParams() const
 {
-    m_debounce.stop();
-    if (!m_rpc)
-        return;
     QJsonObject params;
     if (!m_category.isEmpty())
         params.insert(QStringLiteral("category"), m_category);
@@ -108,10 +112,31 @@ void CatalogModel::reload()
         params.insert(QStringLiteral("query"), m_query.trimmed());
     if (m_installedOnly)
         params.insert(QStringLiteral("installed"), true);
+    return params;
+}
+
+void CatalogModel::reload()
+{
+    load(std::exchange(m_keepCount, false));
+}
+
+void CatalogModel::load(bool keepCount)
+{
+    m_debounce.stop();
+    if (!m_rpc)
+        return;
+    QJsonObject params = filterParams();
+    int limit = 0;
+    if (m_pageSize > 0) {
+        limit = m_pageSize;
+        if (keepCount)
+            limit = std::max(limit, int((m_items.size() + m_pageSize - 1) / m_pageSize) * m_pageSize);
+        params.insert(QStringLiteral("limit"), limit);
+    }
     const quint64 gen = ++m_generation;
     setLoading(true);
     m_rpc->call(QStringLiteral("catalog.list"), params,
-                [this, gen, guard = QPointer<CatalogModel>(this)](const QJsonValue &result, const RpcError &err) {
+                [this, gen, limit, guard = QPointer<CatalogModel>(this)](const QJsonValue &result, const RpcError &err) {
         if (!guard || gen != m_generation)
             return; // response to a request that was already superseded
         setLoading(false);
@@ -120,7 +145,56 @@ void CatalogModel::reload()
             return;
         }
         setError({});
-        setItems(result.toArray());
+        const QJsonArray items = result.toArray();
+        const bool complete = limit == 0 || items.size() < limit;
+        const bool changed = complete != m_complete;
+        m_complete = complete;
+        setItems(items);
+        if (changed)
+            emit countChanged();
+    });
+}
+
+bool CatalogModel::canFetchMore(const QModelIndex &parent) const
+{
+    return !parent.isValid() && m_pageSize > 0 && !m_complete && !m_loading && m_rpc && m_rpc->isConnected();
+}
+
+void CatalogModel::fetchMore(const QModelIndex &parent)
+{
+    if (!canFetchMore(parent))
+        return;
+    QJsonObject params = filterParams();
+    params.insert(QStringLiteral("limit"), m_pageSize);
+    params.insert(QStringLiteral("offset"), int(m_items.size()));
+    const quint64 gen = m_generation;
+    setLoading(true);
+    m_rpc->call(QStringLiteral("catalog.list"), params,
+                [this, gen, guard = QPointer<CatalogModel>(this)](const QJsonValue &result, const RpcError &err) {
+        if (!guard || gen != m_generation)
+            return; // the filters changed: a reload replaces everything
+        setLoading(false);
+        if (!err.ok()) {
+            setError(err.message);
+            return;
+        }
+        const QJsonArray page = result.toArray();
+        if (page.size() < m_pageSize) {
+            m_complete = true;
+            emit countChanged();
+        }
+        // The catalog may have changed between pages: skip apps already shown.
+        QJsonArray fresh;
+        for (const QJsonValue &v : page)
+            if (indexOf(v.toObject().value(QStringLiteral("repo")).toString()) < 0)
+                fresh.append(v);
+        if (fresh.isEmpty())
+            return;
+        beginInsertRows({}, int(m_items.size()), int(m_items.size() + fresh.size()) - 1);
+        for (const QJsonValue &v : fresh)
+            m_items.append(v);
+        endInsertRows();
+        emit countChanged();
     });
 }
 

@@ -48,7 +48,9 @@ Page {
                 Text {
                     objectName: "catalogCount"
                     visible: grid.count > 0
-                    text: page.model.query !== "" ? qsTr("%n result(s)", "", grid.count) : qsTr("%n app(s)", "", grid.count)
+                    text: page.model.hasMore
+                          ? (page.model.query !== "" ? qsTr("%n+ result(s)", "", grid.count) : qsTr("%n+ app(s)", "", grid.count))
+                          : (page.model.query !== "" ? qsTr("%n result(s)", "", grid.count) : qsTr("%n app(s)", "", grid.count))
                     color: theme.muted
                     font.pixelSize: theme.fontCaption
                 }

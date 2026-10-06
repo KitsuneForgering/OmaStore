@@ -19,6 +19,11 @@ All notable changes to OmaStore are listed here. The format follows
 - `omastore://owner/repo` links open the app's page. A second launch (a link,
   the menu) goes to the window already open instead of opening another one.
 
+### Changed
+
+- The catalog loads 60 apps at a time and the next ones as you scroll, so a
+  large catalog opens quickly; the count shows “60+ apps” until the end.
+
 ## [0.3.2] - 2026-10-04
 
 ### Fixed

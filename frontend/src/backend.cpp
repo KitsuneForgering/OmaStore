@@ -31,6 +31,8 @@ Backend::Backend(RpcClient *rpc, QObject *parent)
       m_installed(new CatalogModel(rpc, this)), m_jobs(new JobsModel(rpc, this))
 {
     m_installed->setInstalledOnly(true);
+    // The installed list stays whole: update counts and "Update all" read it.
+    m_catalog->setPageSize(60);
     connect(m_installed, &CatalogModel::countChanged, this, &Backend::updatesAvailableChanged);
     connect(m_installed, &QAbstractItemModel::modelReset, this, &Backend::updatesAvailableChanged);
 
