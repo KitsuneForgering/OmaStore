@@ -159,6 +159,19 @@ Page {
             }
         }
         Keys.onReturnPressed: if (currentIndex >= 0) page.appActivated(page.model.get(currentIndex).repo)
+        // Vim keys, next to the arrows.
+        Keys.onPressed: (event) => {
+            if (event.modifiers & ~Qt.KeypadModifier)
+                return
+            switch (event.key) {
+            case Qt.Key_J: moveCurrentIndexDown(); break
+            case Qt.Key_K: moveCurrentIndexUp(); break
+            case Qt.Key_H: moveCurrentIndexLeft(); break
+            case Qt.Key_L: moveCurrentIndexRight(); break
+            default: return
+            }
+            event.accepted = true
+        }
     }
 
     // Empty states.

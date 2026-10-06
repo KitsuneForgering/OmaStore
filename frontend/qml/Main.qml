@@ -64,6 +64,7 @@ ApplicationWindow {
     Shortcut { sequences: [StandardKey.Find]; enabled: window.section !== "publish"; onActivated: catalogPage.focusSearch() }
     Shortcut { sequence: "Esc"; onActivated: window.back() }
     Shortcut { sequences: [StandardKey.Refresh, "Ctrl+R"]; onActivated: backend.refreshIndex(false) }
+    Shortcut { sequences: ["?", "Shift+?", "F1"]; onActivated: shortcutsDialog.open() }
 
     RowLayout {
         anchors.fill: parent
@@ -287,6 +288,44 @@ ApplicationWindow {
             depsDialog.repo = repo
             depsDialog.packages = packages
             depsDialog.open()
+        }
+    }
+
+    // "?" lists every shortcut, so they can be found without reading docs.
+    Dialog {
+        id: shortcutsDialog
+        objectName: "shortcutsDialog"
+        anchors.centerIn: parent
+        modal: true
+        title: qsTr("Keyboard shortcuts")
+        standardButtons: Dialog.Close
+        ColumnLayout {
+            spacing: theme.spaceS
+            TextMetrics { id: keyMetrics; font.family: theme.monoFamily; font.pixelSize: theme.fontBody; text: "h j k l / ←↓↑→" }
+            Repeater {
+                model: [
+                    ["/", qsTr("Search")],
+                    ["h j k l / ←↓↑→", qsTr("Move between apps")],
+                    ["Enter", qsTr("Open the selected app")],
+                    ["i", qsTr("Install the open app")],
+                    ["u", qsTr("Update the open app")],
+                    ["Esc", qsTr("Go back")],
+                    ["Ctrl+R", qsTr("Look for new apps")],
+                    ["?", qsTr("Show this list")]
+                ]
+                delegate: RowLayout {
+                    required property var modelData
+                    spacing: theme.spaceXl
+                    Text {
+                        Layout.preferredWidth: keyMetrics.advanceWidth
+                        text: modelData[0]
+                        color: theme.foreground
+                        font.family: theme.monoFamily
+                        font.weight: Font.DemiBold
+                    }
+                    Text { text: modelData[1]; color: theme.foreground }
+                }
+            }
         }
     }
 }

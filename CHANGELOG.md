@@ -13,6 +13,9 @@ All notable changes to OmaStore are listed here. The format follows
   version, enables and starts it when asked, restarts it on update only if it
   was running, follows rollbacks and removes only what it created on
   uninstall. The app page lists the managed services.
+- Keyboard: `h/j/k/l` move through the catalog, `i` installs and `u` updates
+  the open app (saying why when they cannot), and `?` or F1 lists every
+  shortcut.
 
 ## [0.3.2] - 2026-10-04
 

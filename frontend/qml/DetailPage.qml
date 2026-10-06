@@ -129,6 +129,33 @@ Page {
         }
     }
 
+    // Keyboard: i installs (or repairs), u updates. When the key cannot act,
+    // the toast says why instead of doing nothing.
+    function keyInstall() {
+        if (page.busy)
+            backend.notice(qsTr("%1 is busy; wait for it to finish.").arg(page.app.name))
+        else if (page.installed && !page.broken)
+            backend.notice(qsTr("%1 is already installed.").arg(page.app.name))
+        else if (!page.app.installable)
+            backend.notice(qsTr("The latest release has no Linux binary for this computer."))
+        else if (!backend.connected)
+            backend.notice(qsTr("Not connected to omastored."))
+        else
+            page.askOrRun(false)
+    }
+    function keyUpdate() {
+        if (page.busy)
+            backend.notice(qsTr("%1 is busy; wait for it to finish.").arg(page.app.name))
+        else if (!page.installed)
+            backend.notice(qsTr("%1 is not installed; press i to install it.").arg(page.app.name))
+        else if (!page.app.updateAvailable)
+            backend.notice(qsTr("%1 is up to date.").arg(page.app.name))
+        else
+            page.askOrRun(true)
+    }
+    Shortcut { sequence: "I"; enabled: page.visible; onActivated: page.keyInstall() }
+    Shortcut { sequence: "U"; enabled: page.visible; onActivated: page.keyUpdate() }
+
     // Removing was refused: the app is open.
     Dialog {
         id: removeInUse

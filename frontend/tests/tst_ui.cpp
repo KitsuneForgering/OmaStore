@@ -423,6 +423,31 @@ private slots:
         QCOMPARE(params.value("allowUnverified").toBool(), true);
     }
 
+    // i installs and u updates; a key that cannot act says why.
+    void keyboardInstallAndUpdate()
+    {
+        DetailHarness h([](const QString &method, const QJsonObject &params) -> QJsonObject {
+            if (method == "catalog.get")
+                return {{"result", appDetail(params.value("repo").toString(), 0)}};
+            if (method == "install.start")
+                return {{"result", QJsonObject{{"id", "j1"}, {"state", "running"}}}};
+            return {{"result", QJsonArray{}}};
+        });
+        QVERIFY2(h.page, qPrintable(h.error));
+        QVERIFY(h.open("demo/app"));
+        QTRY_VERIFY(h.backend->connected());
+        h.page->forceActiveFocus();
+
+        QSignalSpy notices(h.backend.get(), &Backend::notice);
+        QTest::keyClick(&h.window, Qt::Key_U);
+        QTRY_COMPARE(notices.count(), 1);
+        QVERIFY(notices.at(0).at(0).toString().contains("not installed"));
+        QCOMPARE(h.daemon.count("install.start"), 0);
+
+        QTest::keyClick(&h.window, Qt::Key_I);
+        QTRY_COMPARE(h.daemon.count("install.start"), 1);
+    }
+
     // An installed app with a previous version, files gone and a missing
     // library: Go back, Repair, the library and the in-use refusal all show.
     void installedAppStates()

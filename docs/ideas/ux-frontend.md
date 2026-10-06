@@ -2,10 +2,9 @@
 
 Open items for the frontend. Search, grid navigation, `/`, `Esc`, `Ctrl+R`,
 the checksum badge, the empty state, the rate limit message and the theme are
-done (Phase 8); release notes and the "Open" button are done (Phase 18).
+done (Phase 8); release notes and the "Open" button are done (Phase 18);
+`h/j/k/l`, `i`, `u` and the `?` list are done.
 
-- **Keyboard first:** Omarchy users live on the keyboard. Still missing: `j/k`
-  in the grid, `i` installs and `u` updates on the app page.
 - **Install from a link:** register an `x-scheme-handler/omastore` handler
   for `omastore://owner/repo` links (e.g. in a README), which opens
   `omastore-gui --open owner/repo`. The `--open` option already exists.
