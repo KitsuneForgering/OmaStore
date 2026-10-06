@@ -130,6 +130,10 @@
         <translation>Seu banco de pacotes está mais antigo que os espelhos, então o pacman não conseguiu baixar as dependências. Atualize o sistema (omarchy update) e tente de novo. Nada foi instalado.</translation>
     </message>
     <message>
+        <source>This file has no verified build provenance, and you chose to install only files that have it (Settings).</source>
+        <translation>Este arquivo não tem proveniência de build verificada, e você escolheu instalar só arquivos que a têm (Configurações).</translation>
+    </message>
+    <message>
         <source>This release publishes no checksum, so OmaStore does not install it without asking. Open the app&apos;s page to confirm.</source>
         <translation>Esta release não publica checksum, então o OmaStore não a instala sem perguntar. Abra a página do app para confirmar.</translation>
     </message>
@@ -152,6 +156,14 @@
     <message>
         <source>Automatic updates are off; updates wait for you here.</source>
         <translation>Atualizações automáticas desligadas; as atualizações esperam por você aqui.</translation>
+    </message>
+    <message>
+        <source>Only apps built by their own repository&apos;s workflow can be installed or updated now.</source>
+        <translation>Agora só apps compilados pelo workflow do próprio repositório podem ser instalados ou atualizados.</translation>
+    </message>
+    <message>
+        <source>Apps without build provenance can be installed again.</source>
+        <translation>Apps sem proveniência de build podem ser instalados de novo.</translation>
     </message>
     <message>
         <source>This omastored is older than the interface and cannot star apps. Restart OmaStore.</source>
@@ -473,6 +485,10 @@
         <translation>A release mais recente não tem binário Linux para este computador.</translation>
     </message>
     <message>
+        <source>This file has no build provenance, and Settings allow only files that have it.</source>
+        <translation>Este arquivo não tem proveniência de build, e as Configurações só permitem arquivos que a têm.</translation>
+    </message>
+    <message>
         <source>Not connected to omastored.</source>
         <translation>Sem conexão com o omastored.</translation>
     </message>
@@ -606,6 +622,18 @@ Em execução: %1</translation>
     <message>
         <source>⚠ This release publishes no checksum for this file; you will be asked first.</source>
         <translation>⚠ Esta release não publica checksum para este arquivo; você vai ser consultado antes.</translation>
+    </message>
+    <message>
+        <source>✓ Built by this repository&apos;s GitHub Actions (%1, %2)</source>
+        <translation>✓ Compilado pelo GitHub Actions deste repositório (%1, %2)</translation>
+    </message>
+    <message>
+        <source>⚠ No build provenance, and Settings allow only files that have it.</source>
+        <translation>⚠ Sem proveniência de build, e as Configurações só permitem arquivos que a têm.</translation>
+    </message>
+    <message>
+        <source>No build provenance: nothing shows which code built this file.</source>
+        <translation>Sem proveniência de build: nada mostra qual código gerou este arquivo.</translation>
     </message>
     <message>
         <source>Update to %1</source>
@@ -893,6 +921,34 @@ Eles são instalados com o pacman, que pede a senha de administrador.</translati
         <source>Show this list</source>
         <translation>Mostrar esta lista</translation>
     </message>
+    <message>
+        <source>Settings</source>
+        <translation>Configurações</translation>
+    </message>
+    <message>
+        <source>Update apps automatically</source>
+        <translation>Atualizar apps automaticamente</translation>
+    </message>
+    <message>
+        <source>Updates whose download can be verified install on their own after omarchy update and when OmaStore opens. You are told what changed, and Go back undoes any of them.</source>
+        <translation>Atualizações cujo download pode ser verificado se instalam sozinhas depois do omarchy update e quando o OmaStore abre. Você é avisado do que mudou, e Voltar desfaz qualquer uma delas.</translation>
+    </message>
+    <message>
+        <source>Install only apps with build provenance</source>
+        <translation>Instalar só apps com proveniência de build</translation>
+    </message>
+    <message>
+        <source>Only files that GitHub attests were built by a workflow of the app&apos;s own repository. Most apps do not publish this yet, so many will not install.</source>
+        <translation>Só arquivos que o GitHub atesta terem sido compilados por um workflow do próprio repositório do app. A maioria dos apps ainda não publica isso, então muitos não vão instalar.</translation>
+    </message>
+    <message>
+        <source>On</source>
+        <translation>Ligado</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Desligado</translation>
+    </message>
 </context>
 <context>
     <name>PublishPage</name>
@@ -1061,6 +1117,10 @@ Eles são instalados com o pacman, que pede a senha de administrador.</translati
     <message>
         <source>For developers: get your app into OmaStore</source>
         <translation>Para desenvolvedores: coloque seu app no OmaStore</translation>
+    </message>
+    <message>
+        <source>Settings</source>
+        <translation>Configurações</translation>
     </message>
     <message>
         <source>OmaStore %1 is installed.</source>

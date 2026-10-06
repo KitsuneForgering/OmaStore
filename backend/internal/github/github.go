@@ -514,6 +514,31 @@ func (c *Client) LatestRelease(ctx context.Context, fullName string) (*Release, 
 	return out, nil
 }
 
+// Attestations returns the Sigstore bundles GitHub stores for a file of the
+// repository, by its digest ("sha256:<hex>"); none is not an error.
+func (c *Client) Attestations(ctx context.Context, fullName, digest string) ([][]byte, error) {
+	owner, name, err := SplitFullName(fullName)
+	if err != nil {
+		return nil, err
+	}
+	r, _, err := callGitHub(ctx, c, func(api *gh.Client) (*gh.AttestationsResponse, *gh.Response, error) {
+		return api.Repositories.ListAttestations(ctx, owner, name, digest, &gh.ListOptions{PerPage: 30})
+	})
+	if IsNotFound(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("attestations of %s: %w", fullName, err)
+	}
+	var out [][]byte
+	for _, a := range r.Attestations {
+		if a != nil && len(a.Bundle) > 0 {
+			out = append(out, a.Bundle)
+		}
+	}
+	return out, nil
+}
+
 // Readme returns the README content (markdown) and path, or "" if there is none.
 func (c *Client) Readme(ctx context.Context, fullName string) (content, path string, err error) {
 	owner, name, err := SplitFullName(fullName)

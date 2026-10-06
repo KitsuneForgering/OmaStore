@@ -17,6 +17,7 @@ type autoFake struct {
 	on      bool
 	due     bool
 	marked  bool
+	strict  bool
 	indexed [][]string
 }
 
@@ -42,6 +43,19 @@ func (f *autoFake) AutoCheckDue(context.Context, time.Duration) (bool, error) {
 	f.amu.Lock()
 	defer f.amu.Unlock()
 	return f.on && f.due, nil
+}
+
+func (f *autoFake) RequireProvenance(context.Context) (bool, error) {
+	f.amu.Lock()
+	defer f.amu.Unlock()
+	return f.strict, nil
+}
+
+func (f *autoFake) SetRequireProvenance(_ context.Context, on bool) error {
+	f.amu.Lock()
+	defer f.amu.Unlock()
+	f.strict = on
+	return nil
 }
 
 func (f *autoFake) MarkAutoCheck(context.Context) error {
@@ -70,6 +84,9 @@ func TestSettingsMethods(t *testing.T) {
 	}
 	if e := cl.call("settings.set", map[string]any{"autoUpdate": false}, &st); e != nil || st.AutoUpdate {
 		t.Fatalf("settings.set off = %+v, %v", st, e)
+	}
+	if e := cl.call("settings.set", map[string]any{"requireProvenance": true}, &st); e != nil || !st.RequireProvenance || st.AutoUpdate {
+		t.Fatalf("settings.set requireProvenance = %+v, %v", st, e)
 	}
 	if e := cl.call("settings.set", map[string]any{"bogus": 1}, nil); e == nil || e.Code != CodeInvalidParams {
 		t.Fatalf("unknown setting: %v, want invalid params", e)

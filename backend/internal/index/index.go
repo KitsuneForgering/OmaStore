@@ -23,6 +23,7 @@ import (
 	"github.com/KitsuneForgering/OmaStore/backend/internal/gitrepo"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/install"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/manifest"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/provenance"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/sysdeps"
 )
@@ -32,7 +33,7 @@ import (
 // changelog...):
 // repositories stored with a lower version are reprocessed even without changes
 // on GitHub.
-const Version = 12
+const Version = 13
 
 // GitHub is the subset of the client used by the indexer.
 type GitHub interface {
@@ -43,6 +44,19 @@ type GitHub interface {
 	Readme(ctx context.Context, fullName string) (string, string, error)
 	Tree(ctx context.Context, fullName, sha string) ([]string, bool, error)
 	File(ctx context.Context, fullName, path, ref string, maxBytes int) (string, bool, error)
+}
+
+// AttestationLister is implemented by clients that read GitHub artifact
+// attestations (Sigstore bundles) by file digest.
+type AttestationLister interface {
+	Attestations(ctx context.Context, fullName, digest string) ([][]byte, error)
+}
+
+// ProvenanceVerifier checks an attestation bundle for a file of repo
+// (provenance.Verifier). Errors other than provenance.ErrNotVerified mean
+// the check could not run (no trust root) and fail the repository's run.
+type ProvenanceVerifier interface {
+	Verify(bundle []byte, repo, sha256Hex string) (provenance.Result, error)
 }
 
 // ManifestSearcher is implemented by clients that find repositories by their
@@ -90,6 +104,9 @@ type Indexer struct {
 	Now              func() time.Time
 	// GOARCH decides what counts as installable (default runtime.GOARCH).
 	GOARCH string
+	// Provenance verifies the build provenance of the files an install would
+	// pick (when GH is an AttestationLister); nil leaves it unknown.
+	Provenance ProvenanceVerifier
 }
 
 // Options controls a run.
@@ -979,7 +996,61 @@ func (ix *Indexer) extract(ctx context.Context, repo *github.Repo, sha string, r
 
 	assets := releaseAssets(rel, m)
 	_, app.Installable = install.SelectAsset(assets, ix.goarch(), m)
+	if err := ix.attest(ctx, name, assets, m); err != nil {
+		return app, nil, err
+	}
 	return app, assets, nil
+}
+
+// provenanceArchs are the machines whose chosen file gets its provenance
+// checked: one attestation request per architecture, not per asset.
+var provenanceArchs = []string{"amd64", "arm64"}
+
+// attest records the verified build provenance of the file an install would
+// pick on each architecture. A file without a verifiable attestation keeps
+// Provenance empty.
+func (ix *Indexer) attest(ctx context.Context, repo string, assets []store.Asset, m *manifest.Manifest) error {
+	lister, ok := ix.GH.(AttestationLister)
+	if !ok || ix.Provenance == nil {
+		return nil
+	}
+	done := map[string]bool{}
+	for _, arch := range provenanceArchs {
+		sel, ok := install.SelectAsset(assets, arch, m)
+		if !ok || done[sel.Name] {
+			continue
+		}
+		done[sel.Name] = true
+		hexsum, found := strings.CutPrefix(sel.Digest, "sha256:")
+		if !found {
+			continue
+		}
+		bundles, err := lister.Attestations(ctx, repo, sel.Digest)
+		if err != nil {
+			return err
+		}
+		for _, b := range bundles {
+			res, err := ix.Provenance.Verify(b, repo, hexsum)
+			if errors.Is(err, provenance.ErrNotVerified) {
+				ix.log().Debug("attestation not verified", "repo", repo, "asset", sel.Name, "err", err)
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			enc, err := json.Marshal(res)
+			if err != nil {
+				return err
+			}
+			for i := range assets {
+				if assets[i].Name == sel.Name {
+					assets[i].Provenance = string(enc)
+				}
+			}
+			break
+		}
+	}
+	return nil
 }
 
 const maxChangelogSize = 64 << 10

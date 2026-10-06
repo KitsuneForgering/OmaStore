@@ -14,6 +14,9 @@ const (
 	// SettingAutoCheckAt is when the installed apps were last refreshed for
 	// automatic updates (RFC 3339).
 	SettingAutoCheckAt = "auto_check_at"
+	// SettingRequireProvenance is "on" or "off" (missing means off): install
+	// and update only files with verified build provenance.
+	SettingRequireProvenance = "require_provenance"
 )
 
 // Setting returns the value of key, or def when it was never set.

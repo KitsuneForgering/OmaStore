@@ -17,6 +17,21 @@ func (a *App) AutoUpdate(ctx context.Context) (bool, error) {
 	return v != "off", err
 }
 
+// RequireProvenance reports whether only files with verified build
+// provenance install (off by default).
+func (a *App) RequireProvenance(ctx context.Context) (bool, error) {
+	return install.RequireProvenance(ctx, a.Store)
+}
+
+// SetRequireProvenance turns the provenance requirement on or off.
+func (a *App) SetRequireProvenance(ctx context.Context, on bool) error {
+	v := "off"
+	if on {
+		v = "on"
+	}
+	return a.Store.SetSetting(ctx, store.SettingRequireProvenance, v)
+}
+
 // SetAutoUpdate turns automatic updates on or off.
 func (a *App) SetAutoUpdate(ctx context.Context, on bool) error {
 	v := "off"
@@ -35,6 +50,10 @@ func (a *App) AutoUpdates(ctx context.Context) (ready, waiting []store.ListItem,
 	if err != nil {
 		return nil, nil, err
 	}
+	strict, err := install.RequireProvenance(ctx, a.Store)
+	if err != nil {
+		return nil, nil, err
+	}
 	for _, it := range items {
 		if it.LatestTag == "" || it.InstalledVersion == it.LatestTag {
 			continue
@@ -49,7 +68,7 @@ func (a *App) AutoUpdates(ctx context.Context) (ready, waiting []store.ListItem,
 			// No file for this machine in the new release: nothing to do.
 		case d.Install == nil || install.IsBroken(*d.Install):
 			waiting = append(waiting, it)
-		case install.Verifiable(sel):
+		case install.Verifiable(sel) && (!strict || sel.Provenance != ""):
 			ready = append(ready, it)
 		default:
 			waiting = append(waiting, it)

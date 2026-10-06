@@ -89,6 +89,7 @@ const (
 	CodeNoPrevious     = -32016
 	CodeUnverified     = -32017
 	CodeStaleDatabase  = -32018
+	CodeNoProvenance   = -32019
 )
 
 // ErrBusy means an equivalent job is already running.
@@ -133,6 +134,8 @@ func toError(err error) *Error {
 		code = CodeNoPrevious
 	case errors.Is(err, install.ErrUnverified):
 		code = CodeUnverified
+	case errors.Is(err, install.ErrNoProvenance):
+		code = CodeNoProvenance
 	case errors.Is(err, github.ErrNoToken), errors.Is(err, github.ErrStarForbidden):
 		code = CodeAuthRequired
 	case errors.Is(err, sysdeps.ErrDenied):

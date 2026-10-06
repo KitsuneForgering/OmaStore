@@ -20,6 +20,7 @@ Rectangle {
     property bool detailActive: false
     signal sectionSelected(string section)
     signal categorySelected(string category)
+    signal settingsRequested()
 
     component NavItem: ItemDelegate {
         id: item
@@ -136,6 +137,12 @@ Rectangle {
             onClicked: root.sectionSelected("publish")
             ToolTip.visible: hovered
             ToolTip.text: qsTr("For developers: get your app into OmaStore")
+        }
+        NavItem {
+            objectName: "settingsNav"
+            visible: backend.settingsAvailable
+            text: qsTr("Settings")
+            onClicked: root.settingsRequested()
         }
 
         // OmaStore's own update: offered here, finished with a restart.

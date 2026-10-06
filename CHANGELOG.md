@@ -31,6 +31,14 @@ All notable changes to OmaStore are listed here. The format follows
   command the hook and the timer run. Self-update upgrades the Omarchy hook
   install.sh wrote. Protocol 3 adds `settings.get`/`settings.set`.
 
+- Build provenance: when indexing, OmaStore verifies with Sigstore the GitHub
+  artifact attestation of the file each architecture would install, and
+  accepts only one signed by a workflow of the app's own repository. The app
+  page shows "Built by this repository's GitHub Actions" (workflow and tag)
+  or that there is no provenance, and `omastore show` and `omastore check`
+  report it. A new Settings dialog (and `omastore require-provenance on`)
+  can allow only files with provenance; automatic updates follow it.
+
 ### Changed
 
 - The catalog loads 60 apps at a time and the next ones as you scroll, so a

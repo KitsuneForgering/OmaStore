@@ -113,6 +113,9 @@ type Asset struct {
 	Format      string
 	Digest      string // "sha256:<hex>" when the API provides it
 	ChecksumURL string
+	// Provenance is the verified build provenance (JSON {workflow, ref,
+	// commit}), "" when no attestation was verified.
+	Provenance string
 }
 
 // Install is an installed app.
@@ -320,9 +323,9 @@ func (s *Store) SaveIndexed(ctx context.Context, r Repo, a App, assets []Asset) 
 	}
 	for _, as := range assets {
 		if _, err = tx.ExecContext(ctx, `
-			INSERT INTO assets (full_name, tag, name, url, size, arch, format, digest, checksum_url)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			r.FullName, as.Tag, as.Name, as.URL, as.Size, as.Arch, as.Format, as.Digest, as.ChecksumURL); err != nil {
+			INSERT INTO assets (full_name, tag, name, url, size, arch, format, digest, checksum_url, provenance)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			r.FullName, as.Tag, as.Name, as.URL, as.Size, as.Arch, as.Format, as.Digest, as.ChecksumURL, as.Provenance); err != nil {
 			return fmt.Errorf("save asset %s of %s: %w", as.Name, r.FullName, err)
 		}
 	}
@@ -462,7 +465,7 @@ func (s *Store) GetApp(ctx context.Context, fullName string) (*AppDetail, error)
 // Assets lists the assets of a release.
 func (s *Store) Assets(ctx context.Context, fullName, tag string) ([]Asset, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT tag, name, url, size, arch, format, digest, checksum_url
+		SELECT tag, name, url, size, arch, format, digest, checksum_url, provenance
 		FROM assets WHERE full_name = ? AND tag = ? ORDER BY name`, fullName, tag)
 	if err != nil {
 		return nil, fmt.Errorf("list assets of %s: %w", fullName, err)
@@ -471,7 +474,7 @@ func (s *Store) Assets(ctx context.Context, fullName, tag string) ([]Asset, erro
 	out := []Asset{}
 	for rows.Next() {
 		var a Asset
-		if err := rows.Scan(&a.Tag, &a.Name, &a.URL, &a.Size, &a.Arch, &a.Format, &a.Digest, &a.ChecksumURL); err != nil {
+		if err := rows.Scan(&a.Tag, &a.Name, &a.URL, &a.Size, &a.Arch, &a.Format, &a.Digest, &a.ChecksumURL, &a.Provenance); err != nil {
 			return nil, err
 		}
 		out = append(out, a)

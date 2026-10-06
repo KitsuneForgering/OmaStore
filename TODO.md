@@ -8,12 +8,11 @@ Open work, in the order in which the pieces depend on each other. Each item must
 
 - [ ] Require a valid `omastore.toml` to appear in **Discover**, with `asset` and `exec` declared for a supported architecture; the asset must exist in the latest stable release. Presentation fields stay optional.
 - [ ] Concentrate the app and asset eligibility decision in a rule shared by indexing and installation; the database stores the result for queries, but install/update must check the rule again with current data. Test that catalog, CLI and daemon reach the same decision.
-- [ ] Require the asset to have been built and published by a GitHub Actions workflow of the repository itself, with a verifiable provenance attestation bound to the digest, repository and commit/tag of the release.
-- [ ] On install and update, verify the digest of the downloaded bytes and the provenance of the selected asset; refuse a missing, mismatched or unattested asset. Do not accept an arbitrary URL declared in the manifest.
+- [ ] Require provenance by default (today: verified at index time with Sigstore, shown as a badge, required only with the *Install only apps with build provenance* setting).
+- [ ] On install and update, fetch and verify the attestation again with current data instead of trusting the index-time result (the downloaded bytes are already checked against the attested digest). Do not accept an arbitrary URL declared in the manifest.
 - [ ] Keep already installed apps visible in **Installed** and allow uninstalling them even if they no longer meet the new rule; block updates without valid provenance.
 - [ ] Generate, from the repository, release and file data, a diagnosis and a copyable prompt to adapt the project: manifest, build/release workflow, attestation and validation commands. Do not invent executable paths or build steps that cannot be confirmed.
 - [ ] Update `omastore lint-manifest`, the authors guide and the cached index for the new policy; test admission, rejection, installation and the case of legacy apps already installed.
-- [ ] Ordering: show provenance as a badge and a warning first; require it only once the catalog has enough apps (or as a user setting)
 
 ## Catalog growth
 

@@ -13,6 +13,7 @@ import (
 	"github.com/KitsuneForgering/OmaStore/backend/internal/imagecache"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/index"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/install"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/provenance"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/sysdeps"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/xdg"
@@ -74,6 +75,8 @@ func Open(ctx context.Context, log *slog.Logger) (*App, error) {
 			Repos:    &gitrepo.Cache{Dir: paths.ReposDir},
 			LockPath: filepath.Join(paths.DataDir, "index.lock"),
 			Log:      log,
+			// Sigstore's trust root (TUF) is cached beside the other caches.
+			Provenance: &provenance.Lazy{CacheDir: filepath.Join(paths.CacheDir, "sigstore")},
 		},
 		Installer: inst,
 		Images:    &imagecache.Cache{Dir: paths.ImagesDir},

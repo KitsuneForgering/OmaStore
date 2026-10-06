@@ -423,6 +423,49 @@ private slots:
         QCOMPARE(params.value("allowUnverified").toBool(), true);
     }
 
+    // The file's build provenance shows next to Install; when Settings
+    // require it and the file has none, Install is off and the hint says why.
+    void provenanceShowsAndCanBlock_data()
+    {
+        QTest::addColumn<bool>("attested");
+        QTest::addColumn<bool>("required");
+        QTest::newRow("attested") << true << false;
+        QTest::newRow("none") << false << false;
+        QTest::newRow("none, required") << false << true;
+    }
+    void provenanceShowsAndCanBlock()
+    {
+        QFETCH(bool, attested);
+        QFETCH(bool, required);
+        DetailHarness h([=](const QString &method, const QJsonObject &params) -> QJsonObject {
+            if (method == "catalog.get") {
+                QJsonObject d = appDetail(params.value("repo").toString(), 0);
+                QJsonObject asset{{"name", "demo-1-x86_64-linux.tar.gz"}, {"checksum", "digest"}};
+                if (attested)
+                    asset.insert("provenance", QJsonObject{{"workflow", ".github/workflows/release.yml"},
+                                                           {"ref", "refs/tags/v1.2.3"}, {"commit", "abc"}});
+                d.insert("selectedAsset", asset);
+                return {{"result", d}};
+            }
+            if (method == "settings.get")
+                return {{"result", QJsonObject{{"autoUpdate", true}, {"requireProvenance", required}}}};
+            return {{"result", QJsonArray{}}};
+        });
+        QVERIFY2(h.page, qPrintable(h.error));
+        QVERIFY(h.open("demo/app"));
+        QTRY_VERIFY(h.backend->settingsAvailable());
+        auto *hint = h.find("provenanceHint");
+        auto *install = h.find("installButton");
+        QVERIFY(hint && install);
+        QTRY_VERIFY(hint->isVisible());
+        const QString text = hint->property("text").toString();
+        if (attested)
+            QVERIFY2(text.contains("release.yml") && text.contains("v1.2.3") && !text.contains("refs/"), qPrintable(text));
+        else
+            QVERIFY2(text.contains("No build provenance"), qPrintable(text));
+        QTRY_COMPARE(install->property("enabled").toBool(), !required);
+    }
+
     // i installs and u updates; a key that cannot act says why.
     void keyboardInstallAndUpdate()
     {

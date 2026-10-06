@@ -45,6 +45,9 @@ var (
 	// ErrUnverified means the selected file has neither a GitHub digest nor a
 	// published checksum, and the caller did not allow installing it anyway.
 	ErrUnverified = errors.New("the release publishes no checksum for this file")
+	// ErrNoProvenance means the user requires verified build provenance and
+	// the selected file has none (store.SettingRequireProvenance).
+	ErrNoProvenance = errors.New("the file has no verified build provenance")
 	// ErrNoPrevious means there is no earlier version on disk to go back to.
 	ErrNoPrevious = errors.New("no previous version to go back to")
 )
@@ -78,6 +81,13 @@ type Options struct {
 	// checksum. The one rule for every entry point (GUI, CLI, updates): the
 	// user must have said yes to that file, otherwise ErrUnverified.
 	AllowUnverified bool
+}
+
+// RequireProvenance reports whether the user allows only files with verified
+// build provenance (off by default).
+func RequireProvenance(ctx context.Context, st *store.Store) (bool, error) {
+	v, err := st.Setting(ctx, store.SettingRequireProvenance, "off")
+	return v == "on", err
 }
 
 // Verifiable reports whether a's download can be checked: a digest from the
@@ -311,6 +321,13 @@ func (in *Installer) Install(ctx context.Context, fullName string, opts Options)
 	}
 	if !opts.AllowUnverified && !Verifiable(sel) {
 		return nil, fmt.Errorf("%s: %w: %s", fullName, ErrUnverified, sel.Name)
+	}
+	if sel.Provenance == "" {
+		if required, err := RequireProvenance(ctx, in.Store); err != nil {
+			return nil, err
+		} else if required {
+			return nil, fmt.Errorf("%s: %w: %s", fullName, ErrNoProvenance, sel.Name)
+		}
 	}
 	prev, err := in.Store.GetInstall(ctx, fullName)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {

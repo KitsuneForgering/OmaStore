@@ -83,6 +83,7 @@ ApplicationWindow {
             section: window.section
             onSectionSelected: (s) => { window.section = s; window.back() }
             onCategorySelected: (c) => { window.section = "discover"; backend.catalog.category = c; window.back() }
+            onSettingsRequested: settingsDialog.open()
         }
 
         ColumnLayout {
@@ -329,6 +330,66 @@ ApplicationWindow {
                         font.weight: Font.DemiBold
                     }
                     Text { text: modelData[1]; color: theme.foreground }
+                }
+            }
+        }
+    }
+
+    // Store-wide preferences, kept by the daemon (settings.*).
+    Dialog {
+        id: settingsDialog
+        objectName: "settingsDialog"
+        anchors.centerIn: parent
+        width: Math.min(560, window.width - theme.spaceXxl * 2)
+        modal: true
+        title: qsTr("Settings")
+        standardButtons: Dialog.Close
+        ColumnLayout {
+            width: parent.width
+            spacing: theme.spaceL
+            Repeater {
+                model: [
+                    { key: "autoUpdate", on: backend.autoUpdate,
+                      title: qsTr("Update apps automatically"),
+                      text: qsTr("Updates whose download can be verified install on their own after omarchy update and when OmaStore opens. You are told what changed, and Go back undoes any of them.") },
+                    { key: "requireProvenance", on: backend.requireProvenance,
+                      title: qsTr("Install only apps with build provenance"),
+                      text: qsTr("Only files that GitHub attests were built by a workflow of the app's own repository. Most apps do not publish this yet, so many will not install.") }
+                ]
+                delegate: RowLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: theme.spaceL
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: theme.spaceXs
+                        Text {
+                            Layout.fillWidth: true
+                            text: modelData.title
+                            color: theme.foreground
+                            font.weight: Font.DemiBold
+                            wrapMode: Text.Wrap
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: modelData.text
+                            color: theme.muted
+                            font.pixelSize: theme.fontCaption
+                            wrapMode: Text.Wrap
+                        }
+                    }
+                    ActionButton {
+                        objectName: "setting_" + modelData.key
+                        selected: modelData.on
+                        enabled: backend.connected && !backend.settingsBusy
+                        text: modelData.on ? qsTr("On") : qsTr("Off")
+                        Accessible.name: modelData.title
+                        Accessible.role: Accessible.CheckBox
+                        Accessible.checkable: true
+                        Accessible.checked: modelData.on
+                        onClicked: modelData.key === "autoUpdate" ? backend.setAutoUpdate(!modelData.on)
+                                                                  : backend.setRequireProvenance(!modelData.on)
+                    }
                 }
             }
         }

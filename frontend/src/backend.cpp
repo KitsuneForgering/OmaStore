@@ -177,6 +177,9 @@ QString Backend::friendlyError(int code, const QString &message)
     case -32018:
         return tr("Your package database is older than the mirrors, so pacman could not download the "
                   "dependencies. Update the system (omarchy update), then try again. Nothing was installed.");
+    case -32019:
+        return tr("This file has no verified build provenance, and you chose to install only files that "
+                  "have it (Settings).");
     case -32017:
         return tr("This release publishes no checksum, so OmaStore does not install it without asking. "
                   "Open the app's page to confirm.");
@@ -244,6 +247,7 @@ void Backend::restartDaemon()
 void Backend::applySettings(const QJsonValue &result)
 {
     m_autoUpdate = result.toObject().value(QStringLiteral("autoUpdate")).toBool(true);
+    m_requireProvenance = result.toObject().value(QStringLiteral("requireProvenance")).toBool(false);
     m_settingsAvailable = true;
     emit settingsChanged();
 }
@@ -263,14 +267,14 @@ void Backend::loadSettings()
     });
 }
 
-void Backend::setAutoUpdate(bool on)
+void Backend::saveSetting(const QString &key, bool on, const QString &done)
 {
     if (m_settingsBusy)
         return;
     m_settingsBusy = true;
     emit settingsChanged();
-    m_rpc->call(QStringLiteral("settings.set"), {{QStringLiteral("autoUpdate"), on}},
-                [this, on](const QJsonValue &result, const RpcError &err) {
+    m_rpc->call(QStringLiteral("settings.set"), {{key, on}},
+                [this, done](const QJsonValue &result, const RpcError &err) {
         m_settingsBusy = false;
         if (!err.ok()) {
             emit settingsChanged();
@@ -278,9 +282,22 @@ void Backend::setAutoUpdate(bool on)
             return;
         }
         applySettings(result);
-        emit notice(on ? tr("Apps now update on their own; you are told what changed.")
-                       : tr("Automatic updates are off; updates wait for you here."));
+        emit notice(done);
     });
+}
+
+void Backend::setAutoUpdate(bool on)
+{
+    saveSetting(QStringLiteral("autoUpdate"), on,
+                on ? tr("Apps now update on their own; you are told what changed.")
+                   : tr("Automatic updates are off; updates wait for you here."));
+}
+
+void Backend::setRequireProvenance(bool on)
+{
+    saveSetting(QStringLiteral("requireProvenance"), on,
+                on ? tr("Only apps built by their own repository's workflow can be installed or updated now.")
+                   : tr("Apps without build provenance can be installed again."));
 }
 
 void Backend::loadCategories()

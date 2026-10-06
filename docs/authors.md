@@ -96,6 +96,31 @@ OmaStore checks the sha256 that GitHub itself computes for each asset
 If the hash does not match, nothing is installed. Releases without any checksum
 ask the user for confirmation.
 
+### Build provenance (recommended)
+
+A checksum proves the download arrived intact, not which code built it. Add
+[`actions/attest-build-provenance`](https://github.com/actions/attest-build-provenance)
+to the workflow that builds the release (the `omastore-release` skill does):
+
+```yaml
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+steps:
+  # ... build the tarballs ...
+  - uses: actions/attest-build-provenance@v4
+    with:
+      subject-path: dist/*.tar.gz
+```
+
+OmaStore verifies the attestation with Sigstore when it indexes the release:
+it must be signed by a GitHub Actions workflow **of your own repository**
+(a reusable workflow elsewhere does not count) and name the exact file. The
+app page then shows "Built by this repository's GitHub Actions" with the
+workflow and tag, and users who turned on *Install only apps with build
+provenance* can install it. `omastore check you/myapp` reports it.
+
 ## 4. Icon and screenshots
 
 - Publish a stable GitHub release first. Until one exists, OmaStore does not

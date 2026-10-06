@@ -17,15 +17,19 @@ type AutoUpdater interface {
 	AutoUpdates(ctx context.Context) (ready, waiting []store.ListItem, err error)
 	AutoCheckDue(ctx context.Context, every time.Duration) (bool, error)
 	MarkAutoCheck(ctx context.Context) error
+	RequireProvenance(ctx context.Context) (bool, error)
+	SetRequireProvenance(ctx context.Context, on bool) error
 }
 
 // Settings are the user's preferences (settings.get, settings.set).
 type Settings struct {
-	AutoUpdate bool `json:"autoUpdate"`
+	AutoUpdate        bool `json:"autoUpdate"`
+	RequireProvenance bool `json:"requireProvenance"`
 }
 
 type settingsParams struct {
-	AutoUpdate *bool `json:"autoUpdate"`
+	AutoUpdate        *bool `json:"autoUpdate"`
+	RequireProvenance *bool `json:"requireProvenance"`
 }
 
 func (s *Server) settings(ctx context.Context, raw []byte) (any, error) {
@@ -47,12 +51,21 @@ func (s *Server) settings(ctx context.Context, raw []byte) (any, error) {
 				go s.startAutoUpdates()
 			}
 		}
+		if p.RequireProvenance != nil {
+			if err := au.SetRequireProvenance(ctx, *p.RequireProvenance); err != nil {
+				return nil, err
+			}
+		}
 	}
 	on, err := au.AutoUpdate(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return Settings{AutoUpdate: on}, nil
+	strict, err := au.RequireProvenance(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return Settings{AutoUpdate: on, RequireProvenance: strict}, nil
 }
 
 // startIndex runs an index job; afterwards the catalog changed and, with

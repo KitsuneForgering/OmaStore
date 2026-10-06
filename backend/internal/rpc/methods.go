@@ -12,6 +12,7 @@ import (
 	"github.com/KitsuneForgering/OmaStore/backend/internal/index"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/install"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/manifest"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/provenance"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/repoid"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/sysdeps"
@@ -70,6 +71,9 @@ type AssetInfo struct {
 	// "file" (a checksum file in the release) or "" (nothing). Availability
 	// only: the check itself happens during the install.
 	Checksum string `json:"checksum"`
+	// Verified build provenance (a GitHub artifact attestation signed by a
+	// workflow of the repository itself); nil when there is none.
+	Provenance *provenance.Result `json:"provenance"`
 }
 
 // InstallInfo is an installed app.
@@ -253,6 +257,12 @@ func toAsset(a store.Asset) AssetInfo {
 		out.Checksum = "digest"
 	case a.ChecksumURL != "":
 		out.Checksum = "file"
+	}
+	if a.Provenance != "" {
+		var p provenance.Result
+		if json.Unmarshal([]byte(a.Provenance), &p) == nil && p.Workflow != "" {
+			out.Provenance = &p
+		}
 	}
 	return out
 }

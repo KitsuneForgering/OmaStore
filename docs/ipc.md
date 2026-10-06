@@ -57,7 +57,7 @@ Missing `params` is the same as `{}`. Unknown fields in `params` are an error
 | `self.update` | — | `Job` (kind `self`): installs OmaStore's latest release over this installation |
 | `self.restart` | — | `{}`; the daemon exits right after replying (`-32002` while jobs run) |
 | `settings.get` | — | `Settings` |
-| `settings.set` | `{autoUpdate?}` | `Settings` after the change; turning `autoUpdate` on starts the waiting updates |
+| `settings.set` | `{autoUpdate?, requireProvenance?}` | `Settings` after the change; turning `autoUpdate` on starts the waiting updates |
 
 `repo` is always `"owner/repo"`. `all: true` includes apps without an installable binary.
 
@@ -169,6 +169,10 @@ AssetInfo {
   checksum: "digest" | "file" | "" // what can check the download (GitHub's digest,
                                    // a checksum file in the release, nothing);
                                    // availability only: the check runs on install
+  provenance: {workflow, ref, commit: string} | null
+                                   // verified GitHub attestation (Sigstore) from a
+                                   // workflow of the repository itself, e.g.
+                                   // .github/workflows/release.yml, refs/tags/v1.2.3
 }
 InstallInfo {
   repo, version, installedAt, execPath, desktopPath: string
@@ -199,7 +203,11 @@ SelfInfo {
   notes: string                    // release notes of latest (markdown)
   checkError?: string              // why latest is unknown (offline, rate limit)
 }
-Settings { autoUpdate: boolean }  // on by default
+Settings {
+  autoUpdate: boolean              // on by default
+  requireProvenance: boolean       // off by default: install/update only files with
+                                   // provenance, otherwise -32019
+}
 SelfUpdateResult { from, to, gui: string }   // gui: ~/.local/bin/omastore-gui
 Job {
   id, kind: "index" | "install" | "update" | "deps" | "self", repo?: string
@@ -303,6 +311,7 @@ up to the cancellation (e.g. repos already indexed).
 | -32015 | the app is running (uninstall without `force`, or reinstalling the running version) |
 | -32016 | no previous version on disk to roll back to |
 | -32017 | the file has no checksum and `allowUnverified` was not given |
+| -32019 | the user requires build provenance and the file has none (`allowUnverified` does not override it) |
 | -32018 | pacman could not download a package: the package database is older than the mirrors |
 
 ## Running

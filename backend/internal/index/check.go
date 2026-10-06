@@ -253,6 +253,21 @@ func (ix *Indexer) Check(ctx context.Context, name string, override *string) (*R
 	default:
 		r.add(CheckOK, "Checksum", "every asset has a verifiable sha256", "")
 	}
+	if len(assets) > 0 && ix.Provenance != nil {
+		var attested []string
+		for _, a := range assets {
+			if a.Provenance != "" {
+				attested = append(attested, a.Name)
+			}
+		}
+		if len(attested) > 0 {
+			r.add(CheckOK, "Build provenance", "verified for "+strings.Join(attested, ", "), "")
+		} else {
+			r.add(CheckWarn, "Build provenance", "no verifiable GitHub attestation for the files OmaStore installs",
+				"add actions/attest-build-provenance to the release workflow (id-token: write, attestations: write); "+
+					"users who require provenance cannot install it")
+		}
+	}
 	r.SuggestedManifest = suggestManifest(repo, app, rel, goarch, m, found)
 	return r, nil
 }

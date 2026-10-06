@@ -23,6 +23,7 @@ import (
 	"github.com/KitsuneForgering/OmaStore/backend/internal/logging"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/manifest"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/notify"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/provenance"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/sysdeps"
 )
@@ -54,6 +55,8 @@ commands:
                                     can be verified, if automatic updates are on; --notify
                                     tells what was updated and what waits for you
   auto-update [on|off]              show or change automatic updates (on by default)
+  require-provenance [on|off]       install only files whose build provenance is verified
+                                    (GitHub attestation from the repository's workflow; off)
   self-update [--check]             update OmaStore itself (installations made by install.sh)
   deps [--install] [--json] owner/repo
                                     system dependencies from the app's PKGBUILD; --install
@@ -94,21 +97,22 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	cmd, cmdArgs := rest[0], rest[1:]
 	commands := map[string]func(context.Context, *app.App, []string, io.Writer, io.Writer) error{
-		"index":       cmdIndex,
-		"list":        cmdList,
-		"categories":  cmdCategories,
-		"show":        cmdShow,
-		"similar":     cmdSimilar,
-		"check":       cmdCheck,
-		"install":     cmdInstall,
-		"uninstall":   cmdUninstall,
-		"rollback":    cmdRollback,
-		"update":      cmdUpdate,
-		"self-update": cmdSelfUpdate,
-		"auto-update": cmdAutoUpdate,
-		"deps":        cmdDeps,
-		"star":        cmdStar,
-		"unstar":      cmdStar,
+		"index":              cmdIndex,
+		"list":               cmdList,
+		"categories":         cmdCategories,
+		"show":               cmdShow,
+		"similar":            cmdSimilar,
+		"check":              cmdCheck,
+		"install":            cmdInstall,
+		"uninstall":          cmdUninstall,
+		"rollback":           cmdRollback,
+		"update":             cmdUpdate,
+		"self-update":        cmdSelfUpdate,
+		"auto-update":        cmdAutoUpdate,
+		"require-provenance": cmdRequireProvenance,
+		"deps":               cmdDeps,
+		"star":               cmdStar,
+		"unstar":             cmdStar,
 	}
 	// Commands that need neither the database nor the network.
 	if cmd == "lint-manifest" {
@@ -490,6 +494,10 @@ func cmdShow(ctx context.Context, a *app.App, args []string, stdout, stderr io.W
 			sum = "checksum: " + as.ChecksumURL
 		}
 		fmt.Fprintf(stdout, "asset:       %s [%s %s] %s\n", as.Name, as.Format, orDash(as.Arch), sum)
+		var p provenance.Result
+		if as.Provenance != "" && json.Unmarshal([]byte(as.Provenance), &p) == nil {
+			fmt.Fprintf(stdout, "             built by %s at %s (%s)\n", p.Workflow, p.Ref, shortSHA(p.Commit))
+		}
 	}
 	if d.Install != nil {
 		fmt.Fprintf(stdout, "installed:   %s on %s\n", d.Install.Version, d.Install.InstalledAt.Local().Format(time.DateTime))
@@ -605,6 +613,9 @@ func cmdInstall(ctx context.Context, a *app.App, args []string, stdout, stderr i
 		endLine(stderr)
 		if errors.Is(err, install.ErrUnverified) {
 			err = fmt.Errorf("%w (nothing can check the download; --allow-unverified installs it anyway)", err)
+		}
+		if errors.Is(err, install.ErrNoProvenance) {
+			err = fmt.Errorf("%w (you require it: omastore require-provenance off)", err)
 		}
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", name, err))
@@ -915,6 +926,43 @@ func cmdAutoUpdate(ctx context.Context, a *app.App, args []string, stdout, stder
 		fmt.Fprintln(stdout, "automatic updates are off")
 	}
 	return nil
+}
+
+func cmdRequireProvenance(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
+	fs := newFlags("require-provenance", stderr)
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	switch fs.Arg(0) {
+	case "":
+	case "on", "off":
+		if fs.NArg() > 1 {
+			return errUsage
+		}
+		if err := a.SetRequireProvenance(ctx, fs.Arg(0) == "on"); err != nil {
+			return err
+		}
+	default:
+		return errUsage
+	}
+	on, err := a.RequireProvenance(ctx)
+	if err != nil {
+		return err
+	}
+	if on {
+		fmt.Fprintln(stdout, "only files with verified build provenance are installed")
+	} else {
+		fmt.Fprintln(stdout, "build provenance is shown but not required")
+	}
+	return nil
+}
+
+// shortSHA shortens a commit for display.
+func shortSHA(s string) string {
+	if len(s) > 12 {
+		return s[:12]
+	}
+	return s
 }
 
 // checkUpdates lists the installed apps with a newer version in the catalog and,

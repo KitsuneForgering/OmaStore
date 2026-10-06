@@ -17,6 +17,10 @@ Page {
     readonly property bool busy: !!job.id || backend.detailRemoving
     // The file an install would download has nothing to check it with.
     readonly property bool unverified: !!app.selectedAsset && app.selectedAsset.checksum === ""
+    // Verified build provenance of that file (null when there is none).
+    readonly property var provenance: app.selectedAsset ? (app.selectedAsset.provenance || null) : null
+    // The user requires provenance and this file has none.
+    readonly property bool blockedByProvenance: backend.requireProvenance && !!app.selectedAsset && !provenance
 
     background: Rectangle { color: theme.background }
 
@@ -138,6 +142,8 @@ Page {
             backend.notice(qsTr("%1 is already installed.").arg(page.app.name))
         else if (!page.app.installable)
             backend.notice(qsTr("The latest release has no Linux binary for this computer."))
+        else if (page.blockedByProvenance)
+            backend.notice(qsTr("This file has no build provenance, and Settings allow only files that have it."))
         else if (!backend.connected)
             backend.notice(qsTr("Not connected to omastored."))
         else
@@ -150,6 +156,8 @@ Page {
             backend.notice(qsTr("%1 is not installed; press i to install it.").arg(page.app.name))
         else if (!page.app.updateAvailable)
             backend.notice(qsTr("%1 is up to date.").arg(page.app.name))
+        else if (page.blockedByProvenance)
+            backend.notice(qsTr("This file has no build provenance, and Settings allow only files that have it."))
         else
             page.askOrRun(true)
     }
@@ -535,7 +543,7 @@ Page {
                         objectName: "installButton"
                         Layout.fillWidth: true
                         visible: !page.installed && !page.busy
-                        enabled: backend.connected && !!page.app.installable
+                        enabled: backend.connected && !!page.app.installable && !page.blockedByProvenance
                         text: page.app.installable ? qsTr("Install") : qsTr("No Linux binary")
                         onClicked: page.askOrRun(false)
                     }
@@ -546,6 +554,24 @@ Page {
                         visible: page.unverified && !page.busy && !!page.app.installable && (!page.installed || !!page.app.updateAvailable)
                         text: qsTr("⚠ This release publishes no checksum for this file; you will be asked first.")
                         color: theme.warning
+                        font.pixelSize: theme.fontCaption
+                        wrapMode: Text.Wrap
+                    }
+                    // Which code built the file: a verified GitHub attestation
+                    // from a workflow of the repository itself.
+                    Text {
+                        objectName: "provenanceHint"
+                        Layout.fillWidth: true
+                        visible: !!page.app.installable && !page.unverified && !page.busy
+                                 && (!page.installed || !!page.app.updateAvailable || !!page.provenance)
+                        text: page.provenance
+                              ? qsTr("✓ Built by this repository's GitHub Actions (%1, %2)")
+                                    .arg(page.provenance.workflow.split("/").pop())
+                                    .arg(page.provenance.ref.replace(/^refs\/(tags|heads)\//, ""))
+                              : page.blockedByProvenance
+                                ? qsTr("⚠ No build provenance, and Settings allow only files that have it.")
+                                : qsTr("No build provenance: nothing shows which code built this file.")
+                        color: page.provenance ? theme.success : page.blockedByProvenance ? theme.warning : theme.muted
                         font.pixelSize: theme.fontCaption
                         wrapMode: Text.Wrap
                     }
@@ -561,6 +587,7 @@ Page {
                     PrimaryButton {
                         Layout.fillWidth: true
                         visible: page.installed && !!page.app.updateAvailable && !page.busy
+                        enabled: !page.blockedByProvenance
                         text: qsTr("Update to %1").arg(page.app.latestVersion)
                         onClicked: page.askOrRun(true)
                     }

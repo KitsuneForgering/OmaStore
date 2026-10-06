@@ -675,6 +675,34 @@ func TestUnverifiedNeedsConsent(t *testing.T) {
 	}
 }
 
+// With provenance required, a file without it is refused before any
+// download, even with the consent to skip the checksum.
+func TestRequireProvenance(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
+	if err := e.st.SetSetting(ctx, store.SettingRequireProvenance, "on"); err != nil {
+		t.Fatal(err)
+	}
+	hits := e.hits.Load()
+	if _, err := e.in.Install(ctx, "acme/omaphoto", Options{AllowUnverified: true}); !errors.Is(err, ErrNoProvenance) {
+		t.Fatalf("install without provenance: %v", err)
+	}
+	if e.hits.Load() != hits {
+		t.Error("downloaded before refusing")
+	}
+	assertClean(t, e)
+
+	d, _ := e.st.GetApp(ctx, "acme/omaphoto")
+	d.Assets[0].Provenance = `{"workflow":".github/workflows/release.yml","ref":"refs/tags/v1","commit":"c"}`
+	if err := e.st.SaveIndexed(ctx, d.Repo, d.App, d.Assets); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.in.Install(ctx, "acme/omaphoto", Options{}); err != nil {
+		t.Fatalf("install with provenance: %v", err)
+	}
+}
+
 func TestVerifiable(t *testing.T) {
 	for _, c := range []struct {
 		a    store.Asset

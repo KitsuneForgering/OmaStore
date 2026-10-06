@@ -56,6 +56,8 @@ class Backend : public QObject {
     // Automatic updates (settings.*): on by default. settingsAvailable is
     // false until loaded, or with a daemon older than settings.
     Q_PROPERTY(bool autoUpdate READ autoUpdate NOTIFY settingsChanged)
+    // Install only files with verified build provenance (off by default).
+    Q_PROPERTY(bool requireProvenance READ requireProvenance NOTIFY settingsChanged)
     Q_PROPERTY(bool settingsAvailable READ settingsAvailable NOTIFY settingsChanged)
     Q_PROPERTY(bool settingsBusy READ settingsBusy NOTIFY settingsChanged)
 
@@ -89,6 +91,7 @@ public:
     QString daemonWarning() const { return m_daemonWarning; }
     bool canRestartDaemon() const { return m_canRestartDaemon; }
     bool autoUpdate() const { return m_autoUpdate; }
+    bool requireProvenance() const { return m_requireProvenance; }
     bool settingsAvailable() const { return m_settingsAvailable; }
     bool settingsBusy() const { return m_settingsBusy; }
     // The protocol this interface was built for (docs/ipc.md) and the methods
@@ -126,6 +129,7 @@ public:
     // belongs to this interface when it reconnects.
     Q_INVOKABLE void restartDaemon();
     Q_INVOKABLE void setAutoUpdate(bool on);
+    Q_INVOKABLE void setRequireProvenance(bool on);
     // What a job is doing, for people: "Downloading", "Checking GitHub"…
     Q_INVOKABLE static QString stageText(const QString &kind, const QString &stage);
     // README markdown ready to display (without remote images).
@@ -183,6 +187,7 @@ signals:
 private:
     void loadSettings();
     void applySettings(const QJsonValue &result);
+    void saveSetting(const QString &key, bool on, const QString &notice);
     void loadCategories();
     void checkDaemon();
     void reloadDetail();
@@ -227,6 +232,7 @@ private:
     QString m_daemonWarning;
     bool m_canRestartDaemon = false;
     bool m_autoUpdate = true;
+    bool m_requireProvenance = false;
     bool m_settingsAvailable = false;
     bool m_settingsBusy = false;
 };
