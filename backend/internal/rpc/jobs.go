@@ -109,15 +109,16 @@ func (js *jobs) start(parent context.Context, kind, repo string,
 		defer js.wg.Done()
 		defer cancel()
 		var last time.Time
-		lastStage := ""
+		lastStage, lastMessage := "", ""
 		report := func(p progress) {
 			js.mu.Lock()
 			j.Stage, j.Done, j.Total, j.Message = p.Stage, p.Done, p.Total, p.Message
 			now := time.Now()
 			// Stage changes always go out; byte updates are rate limited.
-			send := p.Stage != lastStage || now.Sub(last) >= js.minInterval || (p.Total > 0 && p.Done == p.Total)
+			send := p.Stage != lastStage || (p.Stage == "service" && p.Message != lastMessage) ||
+				now.Sub(last) >= js.minInterval || (p.Total > 0 && p.Done == p.Total)
 			if send {
-				last, lastStage = now, p.Stage
+				last, lastStage, lastMessage = now, p.Stage, p.Message
 			}
 			snap := *j
 			js.mu.Unlock()

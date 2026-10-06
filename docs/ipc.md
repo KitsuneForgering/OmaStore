@@ -166,6 +166,15 @@ InstallInfo {
   history?: InstallEventInfo[]     // catalog.get: newest 20 transitions, newest first
   broken: boolean                  // the executable is gone (removed outside OmaStore):
                                    // install.start again repairs it
+  services?: ServiceInfo[]         // user units OmaStore manages for this app
+}
+ServiceInfo {
+  type: "systemd-user"
+  unit, path, exec, version: string  // path: the generated unit file
+  digest: string                   // sha256 of the unit as written
+  enable, start: boolean           // what the manifest asked for
+  enabledByStore, startedByStore: boolean   // state OmaStore created (and removes)
+  restart: string                  // "", "no" or "on-failure"
 }
 InstallEventInfo {
   action: "install" | "update" | "rollback"
@@ -184,12 +193,13 @@ SelfUpdateResult { from, to, gui: string }   // gui: ~/.local/bin/omastore-gui
 Job {
   id, kind: "index" | "install" | "update" | "deps" | "self", repo?: string
   state: "running" | "done" | "failed" | "canceled"
-  stage?: string                   // install: download, verify, extract, integrate, done
+  stage?: string                   // install: download, verify, extract, integrate,
+                                   //   service (message: the unit being configured), done
                                    // index: discover (total 0), state, index
                                    // deps: authorize (waiting for polkit and pacman)
                                    // self: same stages as install
   done, total: number              // bytes (install) or repos (index)
-  message?: string                 // index: current repo
+  message?: string                 // index: current repo; install: current service step
   error?: {code, message}
   result?: InstallInfo | IndexResult | DepsReport | SelfUpdateResult
   started, finished?: string

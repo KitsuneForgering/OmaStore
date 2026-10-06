@@ -117,17 +117,50 @@ type Asset struct {
 
 // Install is an installed app.
 type Install struct {
-	FullName    string
-	Version     string
-	InstalledAt time.Time
-	ExecPath    string
-	DesktopPath string
-	Files       []string
-	History     []InstallEvent
+	FullName             string
+	Version              string
+	InstalledAt          time.Time
+	ExecPath             string
+	DesktopPath          string
+	Files                []string
+	History              []InstallEvent
+	Integrations         []Integration
+	PreviousIntegrations []Integration
 	// The version this one replaced, still on disk (see install.Rollback);
 	// "" when there is none.
 	PreviousVersion string
 	PreviousExec    string
+}
+
+// Integration records a user-level resource and the state OmaStore changed.
+type Integration struct {
+	Type           string `json:"type"`
+	Unit           string `json:"unit"`
+	Path           string `json:"path"`
+	EnabledByStore bool   `json:"enabledByStore"`
+	StartedByStore bool   `json:"startedByStore"`
+	Version        string `json:"version"`
+	Digest         string `json:"digest"`
+	Exec           string `json:"exec"`
+	Restart        string `json:"restart"`
+	Enable         bool   `json:"enable"`
+	Start          bool   `json:"start"`
+}
+
+func encodeIntegrations(v []Integration) string {
+	if v == nil {
+		v = []Integration{}
+	}
+	b, _ := json.Marshal(v)
+	return string(b)
+}
+
+func decodeIntegrations(s string) []Integration {
+	var v []Integration
+	if json.Unmarshal([]byte(s), &v) != nil {
+		return nil
+	}
+	return v
 }
 
 // InstallEvent records a version transition for an installed app.
@@ -485,14 +518,15 @@ func (s *Store) SaveInstallTransition(ctx context.Context, in Install, action st
 
 	if _, err = tx.ExecContext(ctx, `
 		INSERT INTO installs (full_name, version, installed_at, exec_path, desktop_path, files,
-		                      previous_version, previous_exec)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		                      previous_version, previous_exec, integrations, previous_integrations)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(full_name) DO UPDATE SET
 			version = excluded.version, installed_at = excluded.installed_at,
 			exec_path = excluded.exec_path, desktop_path = excluded.desktop_path, files = excluded.files,
-			previous_version = excluded.previous_version, previous_exec = excluded.previous_exec`,
+			previous_version = excluded.previous_version, previous_exec = excluded.previous_exec,
+			integrations = excluded.integrations, previous_integrations = excluded.previous_integrations`,
 		in.FullName, in.Version, in.InstalledAt.UTC(), in.ExecPath, in.DesktopPath, encodeList(in.Files),
-		in.PreviousVersion, in.PreviousExec); err != nil {
+		in.PreviousVersion, in.PreviousExec, encodeIntegrations(in.Integrations), encodeIntegrations(in.PreviousIntegrations)); err != nil {
 		return fmt.Errorf("record installation of %s: %w", in.FullName, err)
 	}
 	if action != "" {
@@ -536,13 +570,13 @@ func (s *Store) InstallHistory(ctx context.Context, fullName string, limit int) 
 // compared ignoring case; the result carries the stored spelling.
 func (s *Store) GetInstall(ctx context.Context, fullName string) (*Install, error) {
 	var in Install
-	var files string
+	var files, integrations, previousIntegrations string
 	err := s.db.QueryRowContext(ctx, `
-		SELECT full_name, version, installed_at, exec_path, desktop_path, files, previous_version, previous_exec
+		SELECT full_name, version, installed_at, exec_path, desktop_path, files, previous_version, previous_exec, integrations, previous_integrations
 		FROM installs WHERE full_name = ? COLLATE NOCASE
 		ORDER BY full_name = ? DESC LIMIT 1`, fullName, fullName).
 		Scan(&in.FullName, &in.Version, &in.InstalledAt, &in.ExecPath, &in.DesktopPath, &files,
-			&in.PreviousVersion, &in.PreviousExec)
+			&in.PreviousVersion, &in.PreviousExec, &integrations, &previousIntegrations)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -550,6 +584,8 @@ func (s *Store) GetInstall(ctx context.Context, fullName string) (*Install, erro
 		return nil, fmt.Errorf("read installation of %s: %w", fullName, err)
 	}
 	in.Files = decodeList(files)
+	in.Integrations = decodeIntegrations(integrations)
+	in.PreviousIntegrations = decodeIntegrations(previousIntegrations)
 	in.History, err = s.InstallHistory(ctx, in.FullName, 20)
 	if err != nil {
 		return nil, err
@@ -560,7 +596,7 @@ func (s *Store) GetInstall(ctx context.Context, fullName string) (*Install, erro
 // ListInstalls lists the installed apps by name.
 func (s *Store) ListInstalls(ctx context.Context) ([]Install, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT full_name, version, installed_at, exec_path, desktop_path, files, previous_version, previous_exec
+		SELECT full_name, version, installed_at, exec_path, desktop_path, files, previous_version, previous_exec, integrations, previous_integrations
 		FROM installs ORDER BY full_name`)
 	if err != nil {
 		return nil, fmt.Errorf("list installations: %w", err)
@@ -569,12 +605,14 @@ func (s *Store) ListInstalls(ctx context.Context) ([]Install, error) {
 	out := []Install{}
 	for rows.Next() {
 		var in Install
-		var files string
+		var files, integrations, previousIntegrations string
 		if err := rows.Scan(&in.FullName, &in.Version, &in.InstalledAt, &in.ExecPath, &in.DesktopPath, &files,
-			&in.PreviousVersion, &in.PreviousExec); err != nil {
+			&in.PreviousVersion, &in.PreviousExec, &integrations, &previousIntegrations); err != nil {
 			return nil, err
 		}
 		in.Files = decodeList(files)
+		in.Integrations = decodeIntegrations(integrations)
+		in.PreviousIntegrations = decodeIntegrations(previousIntegrations)
 		out = append(out, in)
 	}
 	return out, rows.Err()

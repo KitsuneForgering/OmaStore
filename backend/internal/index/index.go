@@ -1041,6 +1041,9 @@ func (ix *Indexer) manifestFor(ctx context.Context, name, sha string, snap *gith
 	}
 	for _, p := range problems {
 		ix.log().Info("manifest problem", "repo", name, "problem", p.String())
+		if !p.Warning && strings.HasPrefix(p.Field, "services.") {
+			return nil, "invalid service declaration: " + p.String(), nil
+		}
 	}
 	if !m.IsApp() {
 		return nil, "kind = " + m.Kind + " (only apps are indexed)", nil

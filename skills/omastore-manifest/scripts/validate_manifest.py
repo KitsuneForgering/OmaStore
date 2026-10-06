@@ -29,8 +29,11 @@ FILE_NAME = "omastore.toml"
 MAX_SIZE = 64 << 10
 MAX_NAME, MAX_SUMMARY, MAX_CATEGORIES, MAX_SCREENSHOTS, MAX_PATH = 80, 300, 4, 8, 256
 
-TOP_KEYS = {"kind", "name", "summary", "categories", "icon", "screenshots", "terminal", "linux"}
+TOP_KEYS = {"kind", "name", "summary", "categories", "icon", "screenshots", "terminal", "linux", "services"}
 TARGET_KEYS = {"asset", "exec"}
+SERVICE_KEYS = {"type", "unit", "exec", "enable", "start", "restart"}
+RE_SERVICE_ID = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
+RE_SERVICE_UNIT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\.service$")
 MAIN_CATEGORIES = {
     "AudioVideo", "Audio", "Video", "Development", "Education", "Game", "Graphics",
     "Network", "Office", "Science", "Settings", "System", "Utility",
@@ -144,15 +147,26 @@ def validate(data: dict, rep: Report) -> dict:
     for arch_key, target in (data.get("linux") or {}).items() if isinstance(data.get("linux"), dict) else []:
         if isinstance(target, dict):
             unknown += [f"linux.{arch_key}.{k}" for k in sorted(set(target) - TARGET_KEYS)]
+    for service_id, service in (data.get("services") or {}).items() if isinstance(data.get("services"), dict) else []:
+        if isinstance(service, dict):
+            unknown += [f"services.{service_id}.{k}" for k in sorted(set(service) - SERVICE_KEYS)]
     if unknown:
         rep.err("(file)", "unknown fields: " + ", ".join(unknown))
         return {}
 
     types = {"kind": str, "name": str, "summary": str, "icon": str, "terminal": bool,
-             "categories": list, "screenshots": list, "linux": dict}
+             "categories": list, "screenshots": list, "linux": dict, "services": dict}
     for k, t in types.items():
         if k in data and not isinstance(data[k], t):
             rep.err("(file)", f"{k}: invalid type")
+            return {}
+    for service in data.get("services", {}).values():
+        if not isinstance(service, dict):
+            rep.err("(file)", "services: invalid type")
+            return {}
+        if any(k in service and not isinstance(service[k], str) for k in ("type", "unit", "exec", "restart")) or \
+           any(k in service and not isinstance(service[k], bool) for k in ("enable", "start")):
+            rep.err("(file)", "services: invalid field type")
             return {}
 
     m: dict = {}
@@ -249,6 +263,42 @@ def validate(data: dict, rep: Report) -> dict:
         if tgt["asset"] or tgt["exec"]:
             targets[arch] = tgt
     m["linux"] = targets
+    services: dict[str, dict] = {}
+    units: set[str] = set()
+    for key in sorted(data.get("services", {})):
+        s = data["services"][key]
+        field = f"services.{key}"
+        if not isinstance(s, dict):
+            rep.err(field, "must be a service table")
+            continue
+        valid = True
+        if not RE_SERVICE_ID.fullmatch(key):
+            rep.err(field, "invalid service ID")
+            valid = False
+        if s.get("type") != "systemd-user":
+            rep.err(field + ".type", f'unknown integration type {s.get("type")!r} (use systemd-user)')
+            valid = False
+        unit = s.get("unit", "")
+        if not isinstance(unit, str) or not RE_SERVICE_UNIT.fullmatch(unit) or ".." in unit:
+            rep.err(field + ".unit", "invalid .service unit name")
+            valid = False
+        if unit in units:
+            rep.err(field + ".unit", "unit declared more than once")
+            valid = False
+        executable = s.get("exec", "")
+        if not isinstance(executable, str):
+            executable = ""
+        p, e = rel_path(executable)
+        if e or p != executable or any(c in executable for c in "{}%") or any(ord(c) < 32 or ord(c) == 127 for c in executable):
+            rep.err(field + ".exec", "must be a plain relative executable path inside the package")
+            valid = False
+        if s.get("restart", "") not in ("", "no", "on-failure"):
+            rep.err(field + ".restart", "use no or on-failure")
+            valid = False
+        if valid:
+            services[key] = s
+            units.add(unit)
+    m["services"] = services
     return m
 
 

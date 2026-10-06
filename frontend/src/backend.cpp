@@ -439,6 +439,8 @@ void Backend::uninstall(const QString &repo, bool force)
         return;
     m_removing = repo;
     emit detailChanged();
+    if (m_detail.value(QStringLiteral("install")).toMap().value(QStringLiteral("services")).toList().size() > 0)
+        emit notice(tr("Removing managed user services of %1").arg(repo));
     QJsonObject params{{QStringLiteral("repo"), repo}};
     if (force)
         params.insert(QStringLiteral("force"), true);
@@ -542,6 +544,8 @@ QString Backend::stageText(const QString &kind, const QString &stage)
         return tr("Extracting");
     if (stage == QLatin1String("integrate"))
         return tr("Adding to the menu");
+    if (stage == QLatin1String("service"))
+        return tr("Configuring user service");
     if (stage == QLatin1String("done"))
         return tr("Done");
     if (stage == QLatin1String("authorize"))

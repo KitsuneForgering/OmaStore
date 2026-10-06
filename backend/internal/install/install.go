@@ -1,6 +1,6 @@
 // Package install downloads, verifies and installs the latest release binary
 // of an app into the user's $HOME, generating the .desktop file and the icon.
-// Nothing is run during installation, nothing is written outside $HOME and there is no sudo.
+// Declared user services may be started during installation; there is no sudo.
 package install
 
 import (
@@ -62,6 +62,8 @@ type Installer struct {
 	// it when Omarchy's launcher exists.
 	TUILauncher string
 	Log         *slog.Logger
+	// systemctl is replaced by tests; production uses the absolute systemctl path.
+	systemctl func(context.Context, ...string) (string, error)
 
 	locks sync.Map // full_name → *sync.Mutex
 
@@ -89,9 +91,10 @@ func Verifiable(a store.Asset) bool {
 
 // Progress is an installation's progress.
 type Progress struct {
-	Stage string // download, verify, extract, integrate, done
-	Done  int64
-	Total int64
+	Stage   string // download, verify, extract, integrate, done
+	Current string // the integration currently being configured
+	Done    int64
+	Total   int64
 }
 
 // Progress.Stage values.
@@ -101,6 +104,7 @@ const (
 	StageExtract   = "extract"
 	StageIntegrate = "integrate"
 	StageDone      = "done"
+	StageService   = "service"
 )
 
 // New validates that every destination is inside $HOME.
@@ -189,6 +193,24 @@ func (in *Installer) lock(fullName string) (func(), error) {
 		return nil, err
 	}
 	return func() { unlockFile(); mu.Unlock() }, nil
+}
+
+// All user-unit changes share one lock across CLI and daemon processes.
+// ponytail: global service lock; use per-unit locks if service-heavy parallel
+// installs ever make this a bottleneck.
+var serviceMu sync.Mutex
+
+func (in *Installer) lockServices() (func(), error) {
+	serviceMu.Lock()
+	unlockFile, err := flock.TryLock(filepath.Join(in.Paths.DataDir, "locks", "services.lock"))
+	if err != nil {
+		serviceMu.Unlock()
+		if errors.Is(err, flock.ErrLocked) {
+			return nil, ErrBusy
+		}
+		return nil, err
+	}
+	return func() { unlockFile(); serviceMu.Unlock() }, nil
 }
 
 // within reports whether p is inside root (or is root).
@@ -361,17 +383,31 @@ func (in *Installer) Install(ctx context.Context, fullName string, opts Options)
 			return nil, fmt.Errorf("%s: %w: %s", fullName, ErrInUse, describe(ps))
 		}
 	}
+	if (m != nil && len(m.Services) > 0) || (prev != nil && len(prev.Integrations) > 0) {
+		unlockServices, err := in.lockServices()
+		if err != nil {
+			return nil, err
+		}
+		defer unlockServices()
+	}
 
 	// 4. Integration: version directory, launcher, icon and .desktop. Everything
 	// goes through tx so it can be undone.
 	report(Progress{Stage: StageIntegrate})
 	t := &tx{}
 	inst, err := in.integrate(ctx, t, d, m, prev, owner, repo, staging, execRel)
+	var svc *serviceChange
+	if err == nil {
+		svc, err = in.applyServices(ctx, t, m, prev, inst, inst.Files[0], report)
+	}
+	if err == nil && testHookBeforeSave != nil {
+		err = testHookBeforeSave()
+	}
+	if err == nil {
+		err = in.Store.SaveInstall(ctx, *inst)
+	}
 	if err != nil {
-		if rbErr := t.rollback(); rbErr != nil {
-			in.log().Error("incomplete rollback", "repo", fullName, "err", rbErr)
-		}
-		return nil, err
+		return nil, errors.Join(err, in.rollbackIntegration(ctx, svc, t))
 	}
 	if err := t.commit(); err != nil {
 		in.log().Warn("could not remove backups", "repo", fullName, "err", err)
@@ -497,22 +533,16 @@ func (in *Installer) integrate(ctx context.Context, t *tx, d *store.AppDetail, m
 		switch {
 		case prevDir != versionDir && registered(prev.Files, prevDir) && isDir(prevDir):
 			inst.PreviousVersion, inst.PreviousExec = prev.Version, prev.ExecPath
+			inst.PreviousIntegrations = prev.Integrations
 			inst.Files = append(inst.Files, prevDir)
 		case prevDir == versionDir && prev.PreviousVersion != "":
 			older := filepath.Join(appDir, sanitizeVersion(prev.PreviousVersion))
 			if older != versionDir && registered(prev.Files, older) && isDir(older) {
 				inst.PreviousVersion, inst.PreviousExec = prev.PreviousVersion, prev.PreviousExec
+				inst.PreviousIntegrations = prev.PreviousIntegrations
 				inst.Files = append(inst.Files, older)
 			}
 		}
-	}
-	if testHookBeforeSave != nil {
-		if err := testHookBeforeSave(); err != nil {
-			return nil, err
-		}
-	}
-	if err := in.Store.SaveInstall(ctx, *inst); err != nil {
-		return nil, err
 	}
 	return inst, nil
 }
@@ -590,6 +620,13 @@ func (in *Installer) Rollback(ctx context.Context, fullName string) (*store.Inst
 		return nil, err
 	}
 	m := manifest.Decode(d.Manifest)
+	if len(inst.Integrations) > 0 || len(inst.PreviousIntegrations) > 0 {
+		unlockServices, err := in.lockServices()
+		if err != nil {
+			return nil, err
+		}
+		defer unlockServices()
+	}
 
 	icon := "application-x-executable"
 	id := appID(owner, repo)
@@ -604,6 +641,7 @@ func (in *Installer) Rollback(ctx context.Context, fullName string) (*store.Inst
 	}
 
 	t := &tx{}
+	var svc *serviceChange
 	write := func(p, content string, mode os.FileMode) error {
 		if err := t.prepare(p); err != nil {
 			return err
@@ -625,6 +663,25 @@ func (in *Installer) Rollback(ctx context.Context, fullName string) (*store.Inst
 		back := *inst
 		back.Version, back.PreviousVersion = inst.PreviousVersion, inst.Version
 		back.ExecPath, back.PreviousExec = inst.PreviousExec, inst.ExecPath
+		back.PreviousIntegrations = inst.Integrations
+		back.Integrations = nil
+		back.Files = make([]string, 0, len(inst.Files))
+		for _, f := range inst.Files {
+			if !within(in.Paths.UserUnits, f) {
+				back.Files = append(back.Files, f)
+			}
+		}
+		services := &manifest.Manifest{Services: map[string]manifest.Service{}}
+		for i, v := range inst.PreviousIntegrations {
+			services.Services[fmt.Sprint(i)] = manifest.Service{Type: v.Type, Unit: v.Unit, Exec: v.Exec,
+				Restart: v.Restart, Enable: v.Enable, Start: v.Start}
+		}
+		versionDir := filepath.Join(in.Paths.AppsDir, owner+"__"+repo, sanitizeVersion(back.Version))
+		var err error
+		svc, err = in.applyServices(ctx, t, services, inst, &back, versionDir, func(Progress) {})
+		if err != nil {
+			return err
+		}
 		back.InstalledAt = time.Now()
 		if err := in.Store.SaveInstallTransition(ctx, back, "rollback"); err != nil {
 			return err
@@ -633,10 +690,7 @@ func (in *Installer) Rollback(ctx context.Context, fullName string) (*store.Inst
 		return nil
 	}()
 	if err != nil {
-		if rbErr := t.rollback(); rbErr != nil {
-			in.log().Error("incomplete rollback", "repo", inst.FullName, "err", rbErr)
-		}
-		return nil, err
+		return nil, errors.Join(err, in.rollbackIntegration(ctx, svc, t))
 	}
 	if err := t.commit(); err != nil {
 		in.log().Warn("could not remove backups", "repo", inst.FullName, "err", err)
@@ -825,11 +879,33 @@ func (in *Installer) Uninstall(ctx context.Context, fullName string, force bool)
 	if err != nil {
 		return err
 	}
+	if len(inst.Integrations) > 0 {
+		unlockServices, err := in.lockServices()
+		if err != nil {
+			return err
+		}
+		defer unlockServices()
+	}
+	// A managed service may be the only process using the app. Stop it first,
+	// but restore it if another process still blocks removal.
+	serviceTx, serviceChange, err := in.removeServices(ctx, inst)
+	if err != nil {
+		return errors.Join(err, in.rollbackIntegration(ctx, serviceChange, serviceTx))
+	}
+	rollbackServices := func() error { return in.rollbackIntegration(ctx, serviceChange, serviceTx) }
 	if !force {
 		if owner, repo, err := splitName(inst.FullName); err == nil {
 			if ps, err := procsUsing(filepath.Join(in.Paths.AppsDir, owner+"__"+repo)); err == nil && len(ps) > 0 {
-				return fmt.Errorf("%s: %w: %s", inst.FullName, ErrInUse, describe(ps))
+				return errors.Join(fmt.Errorf("%s: %w: %s", inst.FullName, ErrInUse, describe(ps)), rollbackServices())
 			}
+		}
+	}
+	if serviceTx != nil {
+		if err := in.Store.SaveInstall(ctx, *inst); err != nil {
+			return errors.Join(err, rollbackServices())
+		}
+		if err := serviceTx.commit(); err != nil {
+			in.log().Warn("could not remove service backup", "err", err)
 		}
 	}
 	var pending []string

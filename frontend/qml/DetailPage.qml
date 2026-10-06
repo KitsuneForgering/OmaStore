@@ -693,6 +693,22 @@ Page {
                                     }
                                 }
                             }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: theme.spaceS
+                                visible: page.installed && (page.app.install.services || []).length > 0
+                                Text { text: qsTr("Managed user services"); color: theme.muted; font.pixelSize: theme.fontCaption; font.weight: Font.DemiBold }
+                                Repeater {
+                                    model: page.installed ? page.app.install.services : []
+                                    delegate: Text {
+                                        Layout.fillWidth: true
+                                        text: modelData.unit + (modelData.enabledByStore ? qsTr(" · enabled") : "") + (modelData.startedByStore ? qsTr(" · started") : "")
+                                        color: theme.foreground
+                                        font.pixelSize: theme.fontCaption
+                                        wrapMode: Text.Wrap
+                                    }
+                                }
+                            }
                             LinkText {
                                 visible: !!page.app.htmlUrl
                                 text: qsTr("View on GitHub ↗")

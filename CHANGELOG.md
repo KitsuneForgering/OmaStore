@@ -6,6 +6,14 @@ All notable changes to OmaStore are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Apps can declare user services in `omastore.toml` (`[services.<id>]`,
+  `type = "systemd-user"`). OmaStore generates the unit for the installed
+  version, enables and starts it when asked, restarts it on update only if it
+  was running, follows rollbacks and removes only what it created on
+  uninstall. The app page lists the managed services.
+
 ## [0.3.2] - 2026-10-04
 
 ### Fixed

@@ -1,0 +1,4 @@
+[services.sessiond]
+type = "systemd-user"
+unit = "omakade-sessiond.service"
+exec = "../../bin/sh"

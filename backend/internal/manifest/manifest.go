@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/pelletier/go-toml/v2"
@@ -42,6 +43,19 @@ type Manifest struct {
 	// Linux maps an architecture (x86_64, aarch64 or the synonyms amd64,
 	// arm64) to that architecture's asset and executable.
 	Linux map[string]Target `toml:"linux" json:"linux,omitempty"`
+	// Services are optional user-level integrations, keyed by an author-chosen ID.
+	Services map[string]Service `toml:"services" json:"services,omitempty"`
+}
+
+// Service describes a generated systemd user unit. Exec is inside the archive;
+// no command lines or packaged unit contents are executed by the installer.
+type Service struct {
+	Type    string `toml:"type" json:"type"`
+	Unit    string `toml:"unit" json:"unit"`
+	Exec    string `toml:"exec" json:"exec"`
+	Enable  bool   `toml:"enable" json:"enable"`
+	Start   bool   `toml:"start" json:"start"`
+	Restart string `toml:"restart" json:"restart,omitempty"`
 }
 
 // Target describes the installation on one architecture.
@@ -108,6 +122,8 @@ func init() {
 
 // reExtension accepts the specification's own extensions ("X-Omarchy").
 var reExtension = regexp.MustCompile(`^X-[A-Za-z0-9-]{1,38}$`)
+var reServiceID = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_-]{0,63}$`)
+var reServiceUnit = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\.service$`)
 
 // validCategory reports whether c is a registered freedesktop category or an
 // X- extension.
@@ -162,6 +178,27 @@ func Parse(data []byte, strict bool) (*Manifest, []Problem, error) {
 		return nil, nil, fmt.Errorf("read %s: %w", FileName, err)
 	}
 	problems := m.sanitize()
+	// Ordinary future catalog fields stay lenient, but an unknown operation
+	// inside services must never be silently accepted.
+	var raw map[string]any
+	if err := toml.Unmarshal(data, &raw); err == nil {
+		if declared, ok := raw["services"].(map[string]any); ok {
+			for id, value := range declared {
+				fields, ok := value.(map[string]any)
+				if !ok {
+					continue
+				}
+				for key := range fields {
+					switch key {
+					case "type", "unit", "exec", "enable", "start", "restart":
+					default:
+						problems = append(problems, Problem{Field: "services." + id + "." + key, Message: "unknown service field"})
+						delete(m.Services, id)
+					}
+				}
+			}
+		}
+	}
 	return &m, problems, nil
 }
 
@@ -350,6 +387,51 @@ func (m *Manifest) sanitize() []Problem {
 	if len(m.Linux) == 0 {
 		m.Linux = nil
 	}
+	services := map[string]Service{}
+	keys = keys[:0]
+	for k := range m.Services {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	units := map[string]bool{}
+	for _, k := range keys {
+		s := m.Services[k]
+		field := "services." + k
+		valid := true
+		if !reServiceID.MatchString(k) {
+			errf(field, "invalid service ID")
+			valid = false
+		}
+		if s.Type != "systemd-user" {
+			errf(field+".type", "unknown integration type %q (use systemd-user)", s.Type)
+			valid = false
+		}
+		if !reServiceUnit.MatchString(s.Unit) || strings.Contains(s.Unit, "..") || strings.HasPrefix(s.Unit, ".") {
+			errf(field+".unit", "invalid .service unit name")
+			valid = false
+		}
+		if units[s.Unit] {
+			errf(field+".unit", "unit declared more than once")
+			valid = false
+		}
+		if p, err := relPath(s.Exec); err != nil || p != s.Exec || strings.ContainsAny(s.Exec, "{}%") ||
+			strings.ContainsFunc(s.Exec, unicode.IsControl) {
+			errf(field+".exec", "must be a plain relative executable path inside the package")
+			valid = false
+		}
+		if s.Restart != "" && s.Restart != "no" && s.Restart != "on-failure" {
+			errf(field+".restart", "use no or on-failure")
+			valid = false
+		}
+		if valid {
+			services[k] = s
+			units[s.Unit] = true
+		}
+	}
+	m.Services = services
+	if len(m.Services) == 0 {
+		m.Services = nil
+	}
 	return ps
 }
 
@@ -375,7 +457,7 @@ func (m *Manifest) Target(goarch string) (Target, bool) {
 // Empty reports whether the manifest declares nothing.
 func (m *Manifest) Empty() bool {
 	return m == nil || ((m.Kind == "" || m.Kind == KindApp) && m.Name == "" && m.Summary == "" && len(m.Categories) == 0 && m.Icon == "" &&
-		len(m.Screenshots) == 0 && m.Terminal == nil && len(m.Linux) == 0)
+		len(m.Screenshots) == 0 && m.Terminal == nil && len(m.Linux) == 0 && len(m.Services) == 0)
 }
 
 var rePlaceholder = regexp.MustCompile(`\{[^}]*\}`)

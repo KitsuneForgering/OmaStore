@@ -82,8 +82,9 @@ type InstallInfo struct {
 	// The version install.rollback goes back to; "" when there is none.
 	PreviousVersion string `json:"previousVersion"`
 	// The executable is gone (removed outside OmaStore): reinstall to repair.
-	Broken  bool               `json:"broken"`
-	History []InstallEventInfo `json:"history,omitempty"`
+	Broken   bool                `json:"broken"`
+	History  []InstallEventInfo  `json:"history,omitempty"`
+	Services []store.Integration `json:"services,omitempty"`
 }
 
 // InstallEventInfo is one recorded install, update or rollback.
@@ -212,7 +213,7 @@ func toItem(it store.ListItem) AppItem {
 func toInstall(in store.Install) InstallInfo {
 	out := InstallInfo{Repo: in.FullName, Version: in.Version, InstalledAt: in.InstalledAt,
 		ExecPath: in.ExecPath, DesktopPath: in.DesktopPath, PreviousVersion: in.PreviousVersion,
-		Broken: install.IsBroken(in)}
+		Broken: install.IsBroken(in), Services: in.Integrations}
 	for _, event := range in.History {
 		out.History = append(out.History, InstallEventInfo{Action: event.Action, FromVersion: event.FromVersion,
 			ToVersion: event.ToVersion, At: event.At})
@@ -476,7 +477,7 @@ func (s *Server) call(method string, raw json.RawMessage) (any, error) {
 		}
 		return s.jobs.start(s.ctx, kind, p.Repo, func(ctx context.Context, report func(progress)) (any, error) {
 			inst, err := op(ctx, p.Repo, install.Options{AllowUnverified: p.AllowUnverified, Progress: func(ip install.Progress) {
-				report(progress{Stage: ip.Stage, Done: ip.Done, Total: ip.Total})
+				report(progress{Stage: ip.Stage, Done: ip.Done, Total: ip.Total, Message: ip.Current})
 			}})
 			if inst != nil {
 				return toInstall(*inst), err

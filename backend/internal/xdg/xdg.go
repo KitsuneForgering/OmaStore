@@ -74,6 +74,7 @@ type Paths struct {
 	BinDir       string // ~/.local/bin
 	Applications string // $XDG_DATA_HOME/applications
 	Icons        string // $XDG_DATA_HOME/icons/hicolor
+	UserUnits    string // $XDG_CONFIG_HOME/systemd/user
 	Socket       string // $XDG_RUNTIME_DIR/omastore.sock
 	OmarchyTheme string // $XDG_STATE_HOME/omarchy/current/theme
 }
@@ -96,6 +97,10 @@ func Resolve() (Paths, error) {
 	if err != nil {
 		return Paths{}, err
 	}
+	config, err := ConfigHome()
+	if err != nil {
+		return Paths{}, err
+	}
 	p := Paths{
 		Home:         home,
 		DataDir:      filepath.Join(data, appName),
@@ -104,6 +109,7 @@ func Resolve() (Paths, error) {
 		BinDir:       filepath.Join(home, ".local", "bin"),
 		Applications: filepath.Join(data, "applications"),
 		Icons:        filepath.Join(data, "icons", "hicolor"),
+		UserUnits:    filepath.Join(config, "systemd", "user"),
 		Socket:       filepath.Join(RuntimeDir(), appName+".sock"),
 		OmarchyTheme: filepath.Join(state, "omarchy", "current", "theme"),
 	}

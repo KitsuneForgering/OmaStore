@@ -1,0 +1,14 @@
+kind = "app"
+
+[services.sessiond]
+type = "systemd-user"
+unit = "omakade-sessiond.service"
+exec = "usr/bin/omakade-sessiond"
+enable = true
+start = true
+restart = "on-failure"
+
+[services.helper]
+type = "systemd-user"
+unit = "omakade-helper.service"
+exec = "usr/bin/omakade-helper"

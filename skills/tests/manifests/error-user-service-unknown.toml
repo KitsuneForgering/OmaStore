@@ -1,0 +1,4 @@
+[services.sessiond]
+type = "shell-hook"
+unit = "omakade-sessiond.service"
+exec = "usr/bin/omakade-sessiond"

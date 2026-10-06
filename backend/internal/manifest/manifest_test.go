@@ -50,6 +50,51 @@ func TestParseFull(t *testing.T) {
 	}
 }
 
+func TestServices(t *testing.T) {
+	src := `[services.sessiond]
+type = "systemd-user"
+unit = "app-sessiond.service"
+exec = "usr/bin/app-sessiond"
+enable = true
+start = true
+restart = "on-failure"
+[services.helper]
+type = "systemd-user"
+unit = "app-helper.service"
+exec = "bin/helper"
+`
+	m, ps, err := Parse([]byte(src), true)
+	if err != nil || len(ps) != 0 || len(m.Services) != 2 || !m.Services["sessiond"].Enable || !m.Services["sessiond"].Start {
+		t.Fatalf("services = %+v, problems = %v, error = %v", m, ps, err)
+	}
+	if back := Decode(m.Encode()); len(back.Services) != 2 {
+		t.Fatalf("round trip = %+v", back)
+	}
+	legacy, ps, err := Parse([]byte("kind = \"app\"\n"), true)
+	if err != nil || len(ps) != 0 || len(legacy.Services) != 0 {
+		t.Fatalf("legacy = %+v %v %v", legacy, ps, err)
+	}
+}
+
+func TestRejectUnsafeServices(t *testing.T) {
+	for _, body := range []string{
+		`type = "systemd-system"`,
+		`type = "systemd-user"` + "\n" + `unit = "../bad.service"`,
+		`type = "systemd-user"` + "\n" + `unit = "--bad.service"`,
+		`type = "systemd-user"` + "\n" + `unit = "app.service"` + "\n" + `exec = "../../bin/sh"`,
+		`type = "systemd-user"` + "\n" + `unit = "app.service"` + "\n" + `exec = "/bin/sh"`,
+		`type = "systemd-user"` + "\n" + `unit = "app.service"` + "\n" + `exec = "bin/sh"` + "\n" + `post_install = "touch /tmp/evil"`,
+	} {
+		m, ps, err := Parse([]byte("[services.bad]\n"+body+"\n"), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ps) == 0 || len(m.Services) != 0 {
+			t.Errorf("unsafe service accepted: %s: %+v %v", body, m.Services, ps)
+		}
+	}
+}
+
 func TestParseRejectsUnsafe(t *testing.T) {
 	src := `
 name = "` + strings.Repeat("x", 200) + `"

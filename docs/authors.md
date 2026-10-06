@@ -196,6 +196,34 @@ Rules:
 - **Apps only:** `kind = "plugin"` or `"theme"` (or any value other than
   `app`) keeps the repository out of the store.
 
+### User services
+
+An app with a background part (a daemon, a session helper) declares it and
+OmaStore generates a `systemd --user` unit for it in
+`~/.config/systemd/user`, pointing at the executable of the installed version:
+
+```toml
+[services.sessiond]                        # ID: letters, digits, _ or -
+type = "systemd-user"                      # the only type
+unit = "myapp-sessiond.service"            # unit name, no path
+exec = "usr/bin/myapp-sessiond"            # executable inside the package
+enable = true                              # start at login (default false)
+start = true                               # start now, after installing (default false)
+restart = "on-failure"                     # or "no" (default)
+```
+
+- The packaged `.service` file, if any, is neither copied nor run: its
+  `/usr/bin` path would be wrong for an installation in `$HOME`. There are no
+  install or uninstall commands.
+- Unlike other fields, an invalid service declaration (unknown field or type,
+  bad unit name, `exec` leaving the package) **keeps the app out of the
+  catalog** until it is fixed: a service is never half applied.
+- A unit with the same name that OmaStore did not create is a conflict, not
+  overwritten. An update restarts the service only if it was running;
+  uninstalling stops and disables only what OmaStore enabled or started.
+- The service runs with the user's privileges and needs a working user
+  manager (`systemctl --user`).
+
 Validate before publishing:
 
 ```sh

@@ -111,10 +111,20 @@ func (ix *Indexer) Check(ctx context.Context, name string, override *string) (*R
 			return r, nil
 		}
 		for _, p := range problems {
-			r.add(CheckWarn, manifest.FileName, p.String(), "the field is ignored; see the authors guide")
+			status := CheckWarn
+			if !p.Warning && strings.HasPrefix(p.Field, "services.") {
+				status = CheckFail
+			}
+			r.add(status, manifest.FileName, p.String(), "fix the service declaration; see the authors guide")
 		}
 		if parsed == nil { // unknown fields: read it the lenient way, like the indexer
-			parsed, _, _ = manifest.Parse([]byte(data), false)
+			var lenientProblems []manifest.Problem
+			parsed, lenientProblems, _ = manifest.Parse([]byte(data), false)
+			for _, p := range lenientProblems {
+				if !p.Warning && strings.HasPrefix(p.Field, "services.") {
+					r.add(CheckFail, manifest.FileName, p.String(), "fix the service declaration; see the authors guide")
+				}
+			}
 		}
 		m = parsed
 		if !m.IsApp() {

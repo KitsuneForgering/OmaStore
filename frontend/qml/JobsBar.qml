@@ -59,7 +59,7 @@ Rectangle {
                 objectName: "jobStage"
                 color: theme.muted
                 font.pixelSize: theme.fontCaption
-                text: backend.stageText(kind, stage)
+                text: message && stage === "service" ? message : backend.stageText(kind, stage)
             }
             ActionButton {
                 kind: "quiet"
