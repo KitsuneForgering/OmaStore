@@ -122,7 +122,7 @@ sh "$project/packaging/install.sh" "$fixture/omastore-1.2.3-x86_64-linux.tar.gz"
   > "$fixture/local-log"
 [ -f "$claude_skills/omastore-check/SKILL.md" ]
 [ -x "$HOME/.local/bin/omastore-gui" ]
-grep -F "Exec=\"$HOME/.local/bin/omastore-gui\"" \
+grep -Fx "Exec=\"$HOME/.local/bin/omastore-gui\" %u" \
   "$XDG_DATA_HOME/applications/omastore.desktop" >/dev/null
 if command -v desktop-file-validate >/dev/null 2>&1; then
   desktop-file-validate "$XDG_DATA_HOME/applications/omastore.desktop"

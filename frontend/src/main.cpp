@@ -2,6 +2,7 @@
 #include "imageprovider.h"
 #include "offlinenam.h"
 #include "rpcclient.h"
+#include "singleinstance.h"
 #include "theme.h"
 
 #include <QCommandLineParser>
@@ -42,7 +43,26 @@ int main(int argc, char *argv[])
                                      QStringLiteral("Opens a page: discover, installed or publish."),
                                      QStringLiteral("page"));
     args.addOptions({openOpt, checkOpt, pageOpt, shotOpt, delayOpt});
+    args.addPositionalArgument(QStringLiteral("link"), QStringLiteral("An omastore://owner/repo link to open."),
+                               QStringLiteral("[link]"));
     args.process(app);
+
+    StartRequest start{args.value(openOpt), args.value(checkOpt), args.value(pageOpt)};
+    QString badLink;
+    if (!args.positionalArguments().isEmpty()) {
+        const QString link = args.positionalArguments().constFirst();
+        start.open = repoFromLink(link);
+        if (start.open.isEmpty())
+            badLink = link;
+    }
+    // A window is already open: it shows the request and this launch ends.
+    SingleInstance instance;
+    if (!args.isSet(shotOpt) && badLink.isEmpty()) {
+        if (instance.forward(start))
+            return 0;
+        if (!instance.listen())
+            qWarning("could not create the single-instance socket; links open new windows");
+    }
 
     RpcClient rpc;
     Backend backend(&rpc);
@@ -77,14 +97,29 @@ int main(int argc, char *argv[])
     engine.addImageProvider(QStringLiteral("omastore"), new DaemonImageProvider(&rpc));
     engine.rootContext()->setContextProperty(QStringLiteral("backend"), &backend);
     engine.rootContext()->setContextProperty(QStringLiteral("theme"), &theme);
-    engine.rootContext()->setContextProperty(QStringLiteral("startupRepo"), args.value(openOpt));
-    engine.rootContext()->setContextProperty(QStringLiteral("startupCheck"), args.value(checkOpt));
-    engine.rootContext()->setContextProperty(QStringLiteral("startupPage"), args.value(pageOpt));
+    engine.rootContext()->setContextProperty(QStringLiteral("startupRepo"), start.open);
+    engine.rootContext()->setContextProperty(QStringLiteral("startupCheck"), start.check);
+    engine.rootContext()->setContextProperty(QStringLiteral("startupPage"), start.page);
 
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.loadFromModule("OmaStore", "Main");
     rpc.start();
+    if (!badLink.isEmpty())
+        QTimer::singleShot(0, &backend, [&backend, badLink] {
+            emit backend.errorOccurred(QCoreApplication::translate("main", "Not an OmaStore link: %1").arg(badLink));
+        });
+
+    QObject::connect(&instance, &SingleInstance::requested, &app, [&engine](const StartRequest &req) {
+        const auto roots = engine.rootObjects();
+        auto *win = roots.isEmpty() ? nullptr : qobject_cast<QQuickWindow *>(roots.first());
+        if (!win)
+            return;
+        QMetaObject::invokeMethod(win, "handleRequest", Q_ARG(QVariant, req.toMap()));
+        win->show();
+        win->raise();
+        win->requestActivate();
+    });
 
     if (args.isSet(shotOpt)) {
         const QString file = args.value(shotOpt);

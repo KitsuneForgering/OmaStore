@@ -233,6 +233,19 @@ omastore lint-manifest .        # in the repository directory
 `lint` mode is strict: a misnamed field (e.g. `icone`) is an error.
 Indexing is lenient, so that fields from future versions do not break anything.
 
+## Linking to your app
+
+`omastore://owner/repo` opens your app's page in OmaStore (a window that is
+already open shows it instead of opening another). Put it in your README:
+
+```markdown
+[Get it on OmaStore](omastore://you/myapp)
+```
+
+GitHub does not render links with unknown schemes, so on github.com also
+say how to find the app by name; the link works in local viewers, chats and
+web pages that keep it.
+
 ## Testing before publishing
 
 The quickest way is the **Publish your app** page in OmaStore (or

@@ -364,8 +364,12 @@ func (in *Installer) selfMenuEntry(t *tx, tree string) error {
 	execLine := []byte("Exec=" + escapeValue(quoteExecArg(filepath.Join(in.Paths.BinDir, "omastore-gui"))))
 	lines := bytes.Split(desktop, []byte("\n"))
 	for i, l := range lines {
-		if bytes.Equal(bytes.TrimRight(l, "\r"), []byte("Exec=omastore-gui")) {
+		l = bytes.TrimRight(l, "\r")
+		// The field codes after the command (%u for omastore:// links) stay.
+		if bytes.Equal(l, []byte("Exec=omastore-gui")) {
 			lines[i] = execLine
+		} else if args, ok := bytes.CutPrefix(l, []byte("Exec=omastore-gui ")); ok {
+			lines[i] = append(append(append([]byte{}, execLine...), ' '), args...)
 		}
 	}
 	files := []struct {

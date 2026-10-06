@@ -43,6 +43,7 @@ add_library(omastore-core STATIC
     src/imageprovider.h src/imageprovider.cpp
     src/offlinenam.h src/offlinenam.cpp
     src/markdown.h src/markdown.cpp
+    src/singleinstance.h src/singleinstance.cpp
 )
 target_include_directories(omastore-core PUBLIC src)
 target_link_libraries(omastore-core PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Quick)
@@ -76,7 +77,7 @@ include(GNUInstallDirs)
 install(TARGETS omastore-gui RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 enable_testing()
-foreach(t rpcclient models theme markdown ui)
+foreach(t rpcclient models theme markdown singleinstance ui)
     qt_add_executable(tst_${t} tests/tst_${t}.cpp tests/fakedaemon.h)
     target_link_libraries(tst_${t} PRIVATE omastore-core Qt6::Test)
     if(t STREQUAL "ui")

@@ -234,6 +234,7 @@ exec_path=$(printf '%s' "$bin/omastore-gui" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\$/
 while IFS= read -r line || [ -n "$line" ]; do
   case "$line" in
     Exec=omastore-gui) printf 'Exec="%s"\n' "$exec_path" ;;
+    Exec=omastore-gui\ *) printf 'Exec="%s" %s\n' "$exec_path" "${line#Exec=omastore-gui }" ;;
     *) printf '%s\n' "$line" ;;
   esac
 done < "$tmp/usr/share/applications/omastore.desktop" > "$tmp/omastore.desktop"

@@ -51,14 +51,19 @@ ApplicationWindow {
         }
     }
 
-    Component.onCompleted: {
-        if (startupCheck !== "")
-            openPublish(startupCheck)
-        else if (startupRepo !== "")
-            openApp(startupRepo)
-        else if (["discover", "installed", "publish"].indexOf(startupPage) >= 0)
-            window.section = startupPage
+    // What the command line (or a second launch, e.g. an omastore:// link)
+    // asked to show.
+    function handleRequest(req) {
+        if (req.check)
+            openPublish(req.check)
+        else if (req.open)
+            openApp(req.open)
+        else if (["discover", "installed", "publish"].indexOf(req.page) >= 0) {
+            window.section = req.page
+            window.back()
+        }
     }
+    Component.onCompleted: handleRequest({open: startupRepo, check: startupCheck, page: startupPage})
 
     Shortcut { sequence: "/"; enabled: window.section !== "publish"; onActivated: catalogPage.focusSearch() }
     Shortcut { sequences: [StandardKey.Find]; enabled: window.section !== "publish"; onActivated: catalogPage.focusSearch() }

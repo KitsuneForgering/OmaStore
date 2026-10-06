@@ -16,6 +16,8 @@ All notable changes to OmaStore are listed here. The format follows
 - Keyboard: `h/j/k/l` move through the catalog, `i` installs and `u` updates
   the open app (saying why when they cannot), and `?` or F1 lists every
   shortcut.
+- `omastore://owner/repo` links open the app's page. A second launch (a link,
+  the menu) goes to the window already open instead of opening another one.
 
 ## [0.3.2] - 2026-10-04
 

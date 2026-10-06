@@ -52,7 +52,7 @@ func newSelfEnv(t *testing.T, cur, next string) *selfEnv {
 		{name: "usr/bin/omastore", body: "new omastore", mode: 0o755},
 		{name: "usr/bin/omastored", body: "new omastored", mode: 0o755},
 		{name: "usr/bin/omastore-gui", body: "new omastore-gui", mode: 0o755},
-		{name: selfDesktop, body: "[Desktop Entry]\nName=OmaStore\nExec=omastore-gui\nIcon=omastore\n", mode: 0o644},
+		{name: selfDesktop, body: "[Desktop Entry]\nName=OmaStore\nExec=omastore-gui %u\nIcon=omastore\n", mode: 0o644},
 		{name: selfIcon, body: "<svg/>", mode: 0o644},
 		{name: selfSkills + "/omastore-check/SKILL.md", body: "new skill", mode: 0o644},
 		{name: selfSkills + "/omastore-release/SKILL.md", body: "new release skill", mode: 0o644},
@@ -133,7 +133,7 @@ func TestSelfUpdate(t *testing.T) {
 		t.Errorf("old version kept: %v", err)
 	}
 	desktop := readFile(t, filepath.Join(s.paths.Applications, "omastore.desktop"))
-	if !strings.Contains(desktop, "Exec="+filepath.Join(s.paths.BinDir, "omastore-gui")+"\n") {
+	if !strings.Contains(desktop, "Exec="+filepath.Join(s.paths.BinDir, "omastore-gui")+" %u\n") {
 		t.Errorf("menu entry Exec not pointed at the launcher:\n%s", desktop)
 	}
 	if got := readFile(t, filepath.Join(s.paths.Icons, "scalable", "apps", "omastore.svg")); got != "<svg/>" {
