@@ -41,6 +41,12 @@ All notable changes to OmaStore are listed here. The format follows
 
 ### Changed
 
+- Installing or self-updating OmaStore always installs the current author
+  skills: a copy of the same skill that OmaStore did not install (an older
+  version, or one copied by hand) is moved to
+  `~/.local/share/omastore/skill-backups/` instead of blocking the update.
+- The author skills cover `[services]`, build provenance, automatic updates
+  and `omastore://` links.
 - The catalog loads 60 apps at a time and the next ones as you scroll, so a
   large catalog opens quickly; the count shows “60+ apps” until the end.
 

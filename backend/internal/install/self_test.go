@@ -146,8 +146,13 @@ func TestSelfUpdate(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(skills, "omastore-check", skillMarker)); err != nil {
 		t.Errorf("managed skill lost its marker: %v", err)
 	}
-	if got := readFile(t, filepath.Join(skills, "omastore-release", "SKILL.md")); got != "mine" {
-		t.Errorf("the user's skill was replaced: %q", got)
+	// A copy OmaStore did not install gives way to the new one and is kept.
+	if got := readFile(t, filepath.Join(skills, "omastore-release", "SKILL.md")); got != "new release skill" {
+		t.Errorf("conflicting skill = %q, want the new one", got)
+	}
+	backups, _ := filepath.Glob(filepath.Join(s.paths.DataDir, "skill-backups", "omastore-release.*", "omastore-release", "SKILL.md"))
+	if len(backups) != 1 || readFile(t, backups[0]) != "mine" {
+		t.Errorf("backup of the old skill = %v", backups)
 	}
 	// Every installed agent gets them (Omarchy's directories), missing ones too.
 	for _, dir := range []string{".agents/skills", ".hermes/profiles/work/skills"} {

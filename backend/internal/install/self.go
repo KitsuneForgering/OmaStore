@@ -463,10 +463,29 @@ func (in *Installer) refreshOmarchyHook() {
 	}
 }
 
+// backupSkill moves a skill directory OmaStore did not install into
+// $XDG_DATA_HOME/omastore/skill-backups, which install.sh --uninstall keeps.
+func (in *Installer) backupSkill(dest string) error {
+	root := filepath.Join(in.Paths.DataDir, "skill-backups")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return err
+	}
+	dir, err := os.MkdirTemp(root, filepath.Base(dest)+".")
+	if err != nil {
+		return err
+	}
+	if err := os.Rename(dest, filepath.Join(dir, filepath.Base(dest))); err != nil {
+		os.Remove(dir)
+		return err
+	}
+	in.log().Info("replaced a skill OmaStore did not install", "skill", dest, "backup", dir)
+	return nil
+}
+
 // refreshSkills brings the agents' skill copies to the release's set, as
 // install.sh does: copies are added or replaced, the ones a release dropped
-// are removed, and a directory not made by OmaStore (no skillMarker) is the
-// user's and never touched. Nothing happens when install.sh ran with
+// are removed, and a directory of the same name not made by OmaStore (no
+// skillMarker) is moved to skill-backups so the new one is installed. Nothing happens when install.sh ran with
 // --no-skills (selfNoSkills in the self directory).
 func (in *Installer) refreshSkills(root, src string) {
 	if _, err := os.Stat(filepath.Join(root, selfNoSkills)); err == nil {
@@ -504,7 +523,12 @@ func (in *Installer) refreshSkills(root, src string) {
 		for name := range want {
 			dest := filepath.Join(dir, name)
 			if _, err := os.Lstat(dest); err == nil && !ours(dest) {
-				continue // the user's own skill of the same name
+				// Another copy (an older OmaStore's, or one copied by hand):
+				// the new one wins, the old one is kept in skill-backups.
+				if err := in.backupSkill(dest); err != nil {
+					in.log().Warn("skill not replaced", "skill", name, "dir", dir, "err", err)
+					continue
+				}
 			}
 			tmp := dest + ".omastore-new-" + randSuffix()
 			if err := os.CopyFS(tmp, os.DirFS(filepath.Join(src, name))); err != nil {

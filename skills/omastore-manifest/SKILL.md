@@ -30,6 +30,9 @@ fields you do not know by heart.
    - icon: a PNG (≥ 256×256) or SVG committed to the repo;
    - committed screenshots or `https://` URLs;
    - whether it runs in the terminal (CLI/TUI) → `terminal = true`;
+   - whether it has a **background part** (a daemon, a session helper, a
+     packaged `.service` file under `usr/lib/systemd/user`) → a
+     `[services.<id>]` table (see step 3);
    - releases: `gh release view --json tagName,assets` shows the tag and the
      asset names. Without a release with a Linux binary the app is listed but
      cannot be installed — in that case, suggest the `omastore-release` skill.
@@ -41,6 +44,13 @@ fields you do not know by heart.
    named after the repository (e.g. a `bin/app` script that calls `lib/app/app`).
    Use `{version}` in the asset pattern, never the fixed version — the manifest
    has to keep working for future releases.
+   Declare `[services.<id>]` (`type = "systemd-user"`, `unit`, `exec`,
+   `enable`, `start`, `restart`) when the app needs a user service: OmaStore
+   generates the unit for the installed version, keeps it across updates
+   (restarting it only if it was running) and rollbacks, and removes it on
+   uninstall. `exec` points at the daemon **inside the package**
+   (`usr/bin/myapp-daemon`); never copy the packaged `.service`, whose
+   `/usr/bin` path is wrong for an install in `$HOME`.
 
 4. **Write the file** at the repository root, with short comments only where
    the choice is not obvious.
@@ -68,7 +78,9 @@ fields you do not know by heart.
 
 7. **Summarize for the user**: what was declared and why, what was left to
    automatic inference, and the next step (commit + push `omastore.toml`;
-   if the release has no Linux binary, the `omastore-release` skill).
+   if the release has no Linux binary, the `omastore-release` skill). Once it
+   is listed, an `omastore://owner/repo` link (e.g. in the README) opens the
+   app's page in OmaStore.
 
 ## Common pitfalls
 
@@ -81,6 +93,9 @@ fields you do not know by heart.
 - **Executable named like a system command** (`ls`, `top`, `code`) or
   `omastore*`: the installation is refused so it does not shadow the existing
   command. Suggest renaming the binary.
+- **An invalid `[services]` table removes the app from the catalog** (unlike
+  other fields, a service is never half applied): unknown field or `type`, a
+  unit name with a path, `exec` with `..`, placeholders or a leading `/`.
 - **Absolute paths in `exec`** or `..`: refused. `exec` is relative to the
   root of the extracted package (e.g. `usr/bin/app` for a `.pkg.tar.zst`,
   `app-1.0/bin/app` for a tarball with a top-level directory).

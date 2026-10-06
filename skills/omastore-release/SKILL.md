@@ -35,8 +35,16 @@ Why this way:
   is a useful extra for people who download by hand.
 - The templates attest the tarballs' build provenance
   (`actions/attest-build-provenance`, like OmaStore's own release). Keep that
-  step: the store plans to require provenance, and it needs the
-  `id-token: write` and `attestations: write` permissions.
+  step and its `id-token: write` and `attestations: write` permissions:
+  OmaStore verifies the attestation with Sigstore, shows "Built by this
+  repository's GitHub Actions" on the app page, and users who require
+  provenance cannot install a release without it. It must run in a workflow
+  **of the app's own repository** (a reusable workflow from another repository
+  does not count) and cover the exact tarballs uploaded.
+- A background service (daemon) ships inside the same tarball, e.g.
+  `bin/myapp-daemon`; the manifest's `[services.<id>]` points at it and
+  OmaStore writes the systemd user unit. Do not rely on a packaged `.service`
+  with `/usr/bin` paths.
 - Everything is installed into `~/.local/share/omastore/apps/…`, never into `/usr`.
   Programs that look for data at absolute paths (`/usr/share/myapp`)
   break; resolve paths relative to the executable.
@@ -67,7 +75,10 @@ Why this way:
 6. **Update `omastore.toml`** to point to the assets (or confirm that the
    heuristics are enough): `[linux.x86_64] asset = "myapp-{version}-x86_64-linux.tar.gz"`.
 7. **Explain how to publish**: `git tag v1.2.0 && git push origin v1.2.0`.
-   Afterwards, the `omastore-check` skill confirms that the store installs it.
+   Afterwards, the `omastore-check` skill confirms that the store installs it
+   and that the build provenance is verified. Users with automatic updates
+   (OmaStore's default) get the new release on their own after
+   `omarchy update` or when the store opens, as long as it has a checksum.
 
 ## What not to do
 

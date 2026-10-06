@@ -32,15 +32,20 @@ written to the user's `~/.local` and no app binary is executed.
 3. **Interpret the report** for the user. Each line is ✅, ⚠️ or ❌:
    - ❌ keeps the app out of the store or from installing: fix it before publishing.
    - ⚠️ does not block, but makes the experience worse (no icon, no screenshots, no
-     ARM build, binary with absolute paths in `/usr`).
+     ARM build, binary with absolute paths in `/usr`, no build provenance —
+     users who require provenance cannot install it, and it is not updated
+     automatically for them).
    Explain the likely cause of each ❌ in terms of their project, not just the
    script's message.
 
 4. **Route the fix** to the right skill:
    - missing or invalid manifest, wrong icon or executable →
      `omastore-manifest`;
-   - no release, no Linux asset, no ARM, no checksum →
-     `omastore-release`;
+   - no release, no Linux asset, no ARM, no checksum, no build provenance →
+     `omastore-release` (the provenance comes from
+     `actions/attest-build-provenance` in the repository's own workflow);
+   - an invalid `[services]` declaration (the app disappears from the
+     catalog) → `omastore-manifest`;
    - "Absolute paths": the app looks for data in `/usr/share/<app>`, but the
      store installs into `~/.local/share/omastore/apps/…`. The fix is in the
      app's code: resolve files relative to the executable.
@@ -54,8 +59,9 @@ written to the user's `~/.local` and no app binary is executed.
 ## Quick report
 
 `omastore check owner/repo [--manifest ./omastore.toml] [--json]` gives the same
-manifest/release/asset/checksum checks without a temporary HOME or a test
-install, plus a suggested `omastore.toml` built from the release. Use it for a
+manifest/release/asset/checksum/build-provenance checks without a temporary
+HOME or a test install, plus a suggested `omastore.toml` built from the
+release. Use it for a
 fast first pass; use the script above when installation must be tested.
 
 ## Without the `omastore` CLI

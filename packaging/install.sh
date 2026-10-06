@@ -35,8 +35,11 @@ icon="$data_home/icons/hicolor/scalable/apps/omastore.svg"
 # is the shared one (OpenCode, Copilot, Gemini, Cursor, Crush, Oh My Pi, Grok,
 # Muse, OpenClaw...), plus the agents with a directory of their own. A directory
 # is used only when its agent's home exists. Copies installed here carry
-# $skill_marker; any other directory is the user's.
+# $skill_marker. Another copy of the same skill (an older OmaStore's, or one
+# copied by hand) gives way to the new one and is moved to $skill_backups,
+# which --uninstall keeps.
 skill_marker=.omastore-managed
+skill_backups="${XDG_DATA_HOME:-$HOME/.local/share}/omastore/skill-backups"
 agent_homes="${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 ${CODEX_HOME:-$HOME/.codex}
 $HOME/.agents
@@ -337,8 +340,10 @@ if "$has_skills"; then
         name=${src##*/}
         dest="$dir/$name"
         if [ -e "$dest" ] || [ -L "$dest" ]; then
-          echo "Skill $name left as is: $dest was not installed by OmaStore." >&2
-          continue
+          mkdir -p "$skill_backups"
+          backup=$(mktemp -d "$skill_backups/$name.XXXXXX") || continue
+          mv "$dest" "$backup/" || continue
+          echo "Skill $name: replaced $dest, which OmaStore did not install (the old copy is in $backup)." >&2
         fi
         cp -R "$src" "$dest"
         : > "$dest/$skill_marker"

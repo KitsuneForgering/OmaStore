@@ -87,7 +87,8 @@ bash "$hook" > /dev/null
 
 # With coding agents, they are copied into each installed agent's skill
 # directory (the shared ~/.agents/skills, Claude Code, Codex, Pi, Hermes and
-# its profiles), except where the user already has a skill of the same name.
+# its profiles). A copy of the same name OmaStore did not install gives way to
+# the new one and is kept in skill-backups.
 claude_skills="$HOME/.claude/skills"
 agent_skills="$claude_skills
 $HOME/.codex/skills
@@ -104,10 +105,12 @@ printf '%s\n' "$agent_skills" | while IFS= read -r dir; do
   [ -f "$dir/omastore-check/.omastore-managed" ]
   grep -F "$dir" "$fixture/skills-log" >/dev/null
 done
-[ "$(cat "$claude_skills/omastore-release/SKILL.md")" = mine ]
-[ ! -e "$claude_skills/omastore-release/.omastore-managed" ]
+grep -qx 'name: omastore-release' "$claude_skills/omastore-release/SKILL.md"
+[ -f "$claude_skills/omastore-release/.omastore-managed" ]
 [ -f "$HOME/.codex/skills/omastore-release/.omastore-managed" ]
-grep -F 'omastore-release left as is' "$fixture/skills-log" >/dev/null
+grep -F 'Skill omastore-release: replaced' "$fixture/skills-log" >/dev/null
+skill_backup=$(ls -d "$XDG_DATA_HOME"/omastore/skill-backups/omastore-release.*/omastore-release)
+[ "$(cat "$skill_backup/SKILL.md")" = mine ]
 
 # --no-skills leaves ~/.claude alone; a normal run restores a deleted copy.
 rm -rf "$claude_skills/omastore-check"
@@ -218,7 +221,7 @@ done
 [ -f "$HOME/.local/bin/omastore" ]
 [ -f "$XDG_DATA_HOME/omastore/omastore.db" ]
 [ -d "$XDG_DATA_HOME/omastore/apps/acme__app" ]
-[ "$(cat "$claude_skills/omastore-release/SKILL.md")" = mine ]
+[ "$(cat "$skill_backup/SKILL.md")" = mine ] # backups survive --uninstall
 sh "$project/packaging/install.sh" --uninstall > /dev/null
 
 # A hook of the same name that the user wrote is never replaced or removed.

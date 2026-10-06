@@ -27,9 +27,10 @@ same directories Omarchy links its own skills into, for each agent installed
 | `~/.hermes/skills` and `~/.hermes/profiles/*/skills` | Hermes |
 
 OmaStore's self-update and `install.sh` runs keep them current, and
-`install.sh --uninstall` removes them. A skill of the same name that OmaStore
-did not install is never replaced; its copies carry a `.omastore-managed`
-file. `--no-skills` opts out, and the choice is remembered by the self-update.
+`install.sh --uninstall` removes them. OmaStore's copies carry a
+`.omastore-managed` file. Another copy of the same skill (from an older
+OmaStore, or copied by hand) gives way to the new version and is moved to
+`~/.local/share/omastore/skill-backups/`, which uninstalling keeps. `--no-skills` opts out, and the choice is remembered by the self-update.
 
 The pacman packages and `make install` put them in
 `/usr/share/omastore/skills/`; copy them into your agent's directory, for
