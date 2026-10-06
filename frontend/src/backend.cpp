@@ -41,6 +41,7 @@ Backend::Backend(RpcClient *rpc, QObject *parent)
         if (m_rpc->isConnected()) {
             checkDaemon();
             loadCategories();
+            loadSettings();
             reloadDetail();
             if (!m_detailRepo.isEmpty()) {
                 // Detail opened before connecting (e.g. --open).
@@ -237,6 +238,48 @@ void Backend::restartDaemon()
             emit errorOccurred(err.code == -32002
                                    ? tr("Wait for the running operations to finish, then try again.")
                                    : friendlyError(err.code, err.message));
+    });
+}
+
+void Backend::applySettings(const QJsonValue &result)
+{
+    m_autoUpdate = result.toObject().value(QStringLiteral("autoUpdate")).toBool(true);
+    m_settingsAvailable = true;
+    emit settingsChanged();
+}
+
+void Backend::loadSettings()
+{
+    m_rpc->call(QStringLiteral("settings.get"), {}, [this](const QJsonValue &result, const RpcError &err) {
+        if (!err.ok()) {
+            // An older daemon: the switch stays hidden.
+            if (m_settingsAvailable) {
+                m_settingsAvailable = false;
+                emit settingsChanged();
+            }
+            return;
+        }
+        applySettings(result);
+    });
+}
+
+void Backend::setAutoUpdate(bool on)
+{
+    if (m_settingsBusy)
+        return;
+    m_settingsBusy = true;
+    emit settingsChanged();
+    m_rpc->call(QStringLiteral("settings.set"), {{QStringLiteral("autoUpdate"), on}},
+                [this, on](const QJsonValue &result, const RpcError &err) {
+        m_settingsBusy = false;
+        if (!err.ok()) {
+            emit settingsChanged();
+            emit errorOccurred(friendlyError(err.code, err.message));
+            return;
+        }
+        applySettings(result);
+        emit notice(on ? tr("Apps now update on their own; you are told what changed.")
+                       : tr("Automatic updates are off; updates wait for you here."));
     });
 }
 

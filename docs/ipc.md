@@ -2,7 +2,7 @@
 
 The frontend talks to `omastored` over **JSON-RPC 2.0** on a Unix socket at
 `$XDG_RUNTIME_DIR/omastore.sock` (mode `0600`). Implementation:
-`backend/internal/rpc/`. Protocol version: **2** (`daemon.hello`).
+`backend/internal/rpc/`. Protocol version: **3** (`daemon.hello`; 3 added `settings.*` and automatic updates).
 
 The version goes up whenever a method or a DTO changes. On connect the frontend
 calls `daemon.hello` and compares `protocol` (and the `methods` it needs) with
@@ -56,8 +56,18 @@ Missing `params` is the same as `{}`. Unknown fields in `params` are an error
 | `self.status` | — | `SelfInfo` (synchronous; the latest release is cached for 30 min) |
 | `self.update` | — | `Job` (kind `self`): installs OmaStore's latest release over this installation |
 | `self.restart` | — | `{}`; the daemon exits right after replying (`-32002` while jobs run) |
+| `settings.get` | — | `Settings` |
+| `settings.set` | `{autoUpdate?}` | `Settings` after the change; turning `autoUpdate` on starts the waiting updates |
 
 `repo` is always `"owner/repo"`. `all: true` includes apps without an installable binary.
+
+**Automatic updates.** With `autoUpdate` on (the default), the daemon starts
+an `update` job for every installed app whose new release can be verified
+(GitHub digest or checksum file) after each index job that succeeds, and on
+start it refreshes the installed apps first (`index` job limited to them) when
+the last refresh is older than 12 hours. They are ordinary jobs: the interface
+sees `job.started`/`job.done` as for an update the user asked for. Updates
+without a checksum and broken installations are never started on their own.
 
 **Files without a checksum.** `install.start` and `update.start` refuse, before
 downloading, a file that has neither a GitHub digest nor a published checksum
@@ -189,6 +199,7 @@ SelfInfo {
   notes: string                    // release notes of latest (markdown)
   checkError?: string              // why latest is unknown (offline, rate limit)
 }
+Settings { autoUpdate: boolean }  // on by default
 SelfUpdateResult { from, to, gui: string }   // gui: ~/.local/bin/omastore-gui
 Job {
   id, kind: "index" | "install" | "update" | "deps" | "self", repo?: string

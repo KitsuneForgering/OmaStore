@@ -146,6 +146,14 @@
         <translation>Espere as operações em andamento terminarem e tente de novo.</translation>
     </message>
     <message>
+        <source>Apps now update on their own; you are told what changed.</source>
+        <translation>Os apps agora se atualizam sozinhos; você é avisado do que mudou.</translation>
+    </message>
+    <message>
+        <source>Automatic updates are off; updates wait for you here.</source>
+        <translation>Atualizações automáticas desligadas; as atualizações esperam por você aqui.</translation>
+    </message>
+    <message>
         <source>This omastored is older than the interface and cannot star apps. Restart OmaStore.</source>
         <translation>Este omastored é mais antigo que a interface e não consegue dar estrela em apps. Reinicie o OmaStore.</translation>
     </message>
@@ -279,6 +287,22 @@
             <numerusform>%n app</numerusform>
             <numerusform>%n apps</numerusform>
         </translation>
+    </message>
+    <message>
+        <source>Updates that can be verified install on their own; the others wait here.</source>
+        <translation>Atualizações que podem ser verificadas se instalam sozinhas; as outras esperam aqui.</translation>
+    </message>
+    <message>
+        <source>Updates wait for you here.</source>
+        <translation>As atualizações esperam por você aqui.</translation>
+    </message>
+    <message>
+        <source>Automatic updates: on</source>
+        <translation>Atualizações automáticas: ligadas</translation>
+    </message>
+    <message>
+        <source>Automatic updates: off</source>
+        <translation>Atualizações automáticas: desligadas</translation>
     </message>
     <message>
         <source>Update all (%1)</source>

@@ -1,5 +1,5 @@
 [Unit]
-Description=Refresh the OmaStore catalog and notify about updates
+Description=Refresh the OmaStore catalog and update the installed apps
 Documentation=https://github.com/KitsuneForgering/OmaStore
 After=network-online.target
 Wants=network-online.target
@@ -7,8 +7,9 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/omastore index
-# Only notifies when the set of updates changes; nothing is installed.
-ExecStartPost=/usr/bin/omastore update --check --notify
+# With automatic updates on (the default; omastore auto-update off), installs
+# the updates that can be verified; the rest is notified once per set.
+ExecStartPost=/usr/bin/omastore update --auto --notify
 NoNewPrivileges=yes
 Nice=10
 IOSchedulingClass=idle

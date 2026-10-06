@@ -331,6 +331,7 @@ func (in *Installer) SelfUpdate(ctx context.Context, cur SelfInstall, rel SelfRe
 	if hasSkills {
 		in.refreshSkills(cur.Root, filepath.Join(dest, "share", "skills"))
 	}
+	in.refreshOmarchyHook()
 	in.runHooks(ctx)
 	in.pruneSelf(cur.Root, version, cur.Version)
 	progress(Progress{Stage: StageDone})
@@ -418,6 +419,48 @@ func (in *Installer) skillDirs() []string {
 		dirs = append(dirs, filepath.Join(h, "skills"))
 	}
 	return dirs
+}
+
+// Omarchy post-update hook written by install.sh (always under ~/.config).
+const (
+	omarchyHookRel    = ".config/omarchy/hooks/post-update.d/omastore.hook"
+	omarchyHookMarker = "# omastore-managed"
+	// What hooks from before automatic updates ran, and what they run now
+	// (the same lines install.sh writes).
+	omarchyHookOld = `[[ -x $cli ]] && timeout 20 "$cli" update --check --notify >/dev/null 2>&1`
+	omarchyHookNew = "if [[ -x $cli ]]; then\n" +
+		"  echo \"Updating OmaStore apps…\"\n" +
+		"  timeout 600 \"$cli\" update --auto --notify 2>&1 | sed 's/^/  /'\n" +
+		"fi"
+)
+
+// refreshOmarchyHook brings a hook install.sh wrote before automatic updates
+// to the current command, so omarchy-update updates the apps. A hook without
+// the marker is the user's and stays as it is.
+func (in *Installer) refreshOmarchyHook() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	p := filepath.Join(home, filepath.FromSlash(omarchyHookRel))
+	st, err := os.Lstat(p)
+	if err != nil || !st.Mode().IsRegular() {
+		return
+	}
+	b, err := readSmall(p)
+	if err != nil || !bytes.Contains(b, []byte("\n"+omarchyHookMarker+"\n")) || !bytes.Contains(b, []byte(omarchyHookOld)) {
+		return
+	}
+	b = bytes.Replace(b, []byte(omarchyHookOld), []byte(omarchyHookNew), 1)
+	tmp := p + ".omastore-new-" + randSuffix()
+	if err := os.WriteFile(tmp, b, st.Mode().Perm()); err != nil {
+		in.log().Warn("Omarchy hook not updated", "err", err)
+		return
+	}
+	if err := os.Rename(tmp, p); err != nil {
+		os.Remove(tmp)
+		in.log().Warn("Omarchy hook not updated", "err", err)
+	}
 }
 
 // refreshSkills brings the agents' skill copies to the release's set, as

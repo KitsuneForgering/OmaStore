@@ -309,3 +309,28 @@ func TestSelfUpdateKeepsNoSkills(t *testing.T) {
 		t.Errorf("skill installed despite --no-skills: %v", err)
 	}
 }
+
+// A hook install.sh wrote before automatic updates now runs them; the
+// user's own hook is left alone.
+func TestRefreshOmarchyHook(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	p := filepath.Join(home, filepath.FromSlash(omarchyHookRel))
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := "#!/bin/bash\n" + omarchyHookMarker + "\ncli='/h/.local/bin/omastore'\n" + omarchyHookOld + "\nexit 0\n"
+	os.WriteFile(p, []byte(old), 0o644)
+	(&Installer{}).refreshOmarchyHook()
+	b, _ := os.ReadFile(p)
+	if want := strings.Replace(old, omarchyHookOld, omarchyHookNew, 1); string(b) != want {
+		t.Errorf("hook =\n%s\nwant\n%s", b, want)
+	}
+
+	user := "#!/bin/bash\n" + omarchyHookOld + "\n"
+	os.WriteFile(p, []byte(user), 0o644)
+	(&Installer{}).refreshOmarchyHook()
+	if b, _ := os.ReadFile(p); string(b) != user {
+		t.Errorf("the user's hook changed:\n%s", b)
+	}
+}

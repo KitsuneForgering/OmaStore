@@ -22,6 +22,15 @@ All notable changes to OmaStore are listed here. The format follows
   names, and follows the system language. Building the translations needs
   `qt6-tools`; `make translations` refreshes `frontend/i18n/*.ts`.
 
+- Automatic updates, on by default: installed apps whose new release can be
+  verified update on their own after `omarchy update`, when the store opens
+  (refreshing the installed apps at most every 12 hours) and from the daily
+  timer, with a notification of what changed. Updates without a checksum and
+  broken installs wait for you. A switch on the Installed page and
+  `omastore auto-update on|off` turn it off; `omastore update --auto` is the
+  command the hook and the timer run. Self-update upgrades the Omarchy hook
+  install.sh wrote. Protocol 3 adds `settings.get`/`settings.set`.
+
 ### Changed
 
 - The catalog loads 60 apps at a time and the next ones as you scroll, so a

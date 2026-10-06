@@ -19,7 +19,7 @@ import (
 // ProtocolVersion is returned by daemon.hello. Bump it whenever a method or
 // a DTO changes: the interface compares it with the one it was built for and
 // tells the user when the running daemon is older (docs/ipc.md).
-const ProtocolVersion = 2
+const ProtocolVersion = 3
 
 // Methods are the methods this daemon answers, also returned by
 // daemon.hello so an interface can check for the ones it needs.
@@ -28,7 +28,7 @@ var Methods = []string{
 	"catalog.list", "catalog.get", "catalog.similar", "catalog.categories",
 	"installs.list", "index.start", "install.start", "update.start", "install.uninstall", "install.rollback",
 	"jobs.list", "jobs.cancel", "author.check", "star.get", "star.set", "deps.check", "deps.install",
-	"self.status", "self.update", "self.restart", "image.get",
+	"self.status", "self.update", "self.restart", "image.get", "settings.get", "settings.set",
 }
 
 // request is a JSON-RPC request or notification.

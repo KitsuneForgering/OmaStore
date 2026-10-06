@@ -121,6 +121,9 @@ Rules:
   (`installs.previous_version`, the target of `install.rollback`).
 - A file with neither a GitHub digest nor a published checksum is installed only with `AllowUnverified` (the user
   confirmed it): one rule in the installer for GUI, CLI and updates.
+- Automatic updates (on by default, `settings` table) only install what can be verified and never repair a broken
+  install; they run after `omarchy update` (hook), after each daemon index and on daemon start when the installed
+  apps were last refreshed over 12 h ago (`app.AutoUpdates` decides for the CLI and the daemon alike).
 
 ## Database schema (summary)
 
@@ -130,6 +133,7 @@ Rules:
 - `assets` — release assets per repo/tag (name, url, arch, format, checksum).
 - `installs` — installed app, version, date, list of created files, and the previous version kept on disk.
 - `not_apps` — repositories recently found without an app `omastore.toml`; skipped without requests for 7 days unless a direct seed, manifest search result or GraphQL snapshot warrants rechecking.
+- `settings` — user preferences as key/value text (`auto_update`, `auto_check_at`); a missing key is the default.
 - `apps.sysdeps` — `depends`/`optdepends` read from the repository's PKGBUILD/.SRCINFO at index time (JSON).
 - `repos.release_notes` — body of the latest release (markdown, capped at 16 KiB), shown as "What's new".
 
@@ -143,7 +147,7 @@ Schema changes go through numbered migrations in `backend/internal/store/migrati
 ```
 backend/
   cmd/omastored/        # daemon (IPC server)
-  cmd/omastore/         # debug CLI: index, list, show, install, uninstall, rollback, update, self-update, check, deps, star
+  cmd/omastore/         # debug CLI: index, list, show, install, uninstall, rollback, update, auto-update, self-update, check, deps, star
   internal/app/         # wires the services; the single entry point for the CLI and the daemon
   internal/github/      # go-github wrapper
   internal/gitrepo/     # shallow clones via go-git + icon/screenshot lookup

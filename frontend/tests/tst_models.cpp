@@ -69,6 +69,10 @@ void serveCatalog(FakeDaemon &d, QJsonArray *all)
                                            {"updateAvailable", true}, {"notes", "Faster"}}}};
         if (m == "self.restart")
             return {{"result", QJsonObject{}}};
+        if (m == "settings.get")
+            return {{"result", QJsonObject{{"autoUpdate", true}}}};
+        if (m == "settings.set")
+            return {{"result", QJsonObject{{"autoUpdate", p.value("autoUpdate")}}}};
         if (m == "index.start" || m == "install.start" || m == "deps.install" || m == "self.update")
             return {{"result", QJsonObject{{"id", "job-1"}, {"state", "running"}}}};
         return {{"error", QJsonObject{{"code", -32601}, {"message", "?"}}}};
@@ -164,6 +168,30 @@ private slots:
         QTRY_COMPARE(d.received.last().value("params").toObject().value("query").toString(), QStringLiteral("app"));
         QTRY_COMPARE(m.rowCount(), 2);
         QVERIFY(m.hasMore());
+    }
+
+    // The automatic-updates switch loads from the daemon and saves there.
+    void autoUpdateSetting()
+    {
+        FakeDaemon d;
+        QJsonArray all;
+        serveCatalog(d, &all);
+        QVERIFY(d.listen());
+        RpcClient rpc(d.path());
+        rpc.setAutoStart(false);
+        Backend b(&rpc);
+        QVERIFY(!b.settingsAvailable());
+        rpc.start();
+        QTRY_VERIFY(b.settingsAvailable());
+        QVERIFY(b.autoUpdate());
+
+        QSignalSpy notices(&b, &Backend::notice);
+        b.setAutoUpdate(false);
+        QVERIFY(b.settingsBusy());
+        QTRY_VERIFY(!b.autoUpdate());
+        QVERIFY(!b.settingsBusy());
+        QCOMPARE(notices.count(), 1);
+        QCOMPARE(d.count("settings.set"), 1);
     }
 
     void staleResponsesAreIgnored()

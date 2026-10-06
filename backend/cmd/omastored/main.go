@@ -79,6 +79,7 @@ func run() error {
 
 	srv := rpc.NewServer(a, log)
 	go srv.WatchChanges(changePollInterval)
+	go srv.AutoUpdateOnStart(autoCheckEvery)
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(l) }()
 	log.Info("omastored ready", "socket", addr(l), "idle-timeout", idle)
@@ -110,6 +111,10 @@ loop:
 	srv.Shutdown()
 	return err
 }
+
+// autoCheckEvery is how stale the installed apps may be before the daemon,
+// on start, refreshes them and installs their updates (automatic updates on).
+const autoCheckEvery = 12 * time.Hour
 
 // changePollInterval is how often the daemon checks for changes made by
 // other processes (the CLI or the index timer) to tell the frontend.

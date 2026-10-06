@@ -286,9 +286,9 @@ if command -v systemctl >/dev/null 2>&1 && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -d
   fi
 fi
 
-# On Omarchy (its config directory exists), omarchy-update also reports the
-# updates of the apps installed through OmaStore. The hook only reads the
-# catalog and sends a notification, and never fails the system update.
+# On Omarchy (its config directory exists), omarchy-update also updates the
+# apps installed through OmaStore (automatic updates, on by default) and
+# notifies about the ones that wait for the user. It never fails the system update.
 if [ "$hooks" = yes ] && [ -d "$omarchy_config" ]; then
   # A link to a system install's hook (make install links it) is OmaStore's too.
   case "$(readlink "$hook" 2>/dev/null || :)" in
@@ -303,14 +303,18 @@ if [ "$hooks" = yes ] && [ -d "$omarchy_config" ]; then
 #!/bin/bash
 $hook_marker
 # Installed by OmaStore's install.sh and removed by install.sh --uninstall.
-# After omarchy-update, notifies about updates to the apps installed through
-# OmaStore. It only reads OmaStore's catalog and never fails the update.
+# After omarchy-update, updates the apps installed through OmaStore (when
+# automatic updates are on: omastore auto-update) and notifies about the rest.
+# It never fails the system update.
 cli='$quoted_cli'
-[[ -x \$cli ]] && timeout 20 "\$cli" update --check --notify >/dev/null 2>&1
+if [[ -x \$cli ]]; then
+  echo "Updating OmaStore apps…"
+  timeout 600 "\$cli" update --auto --notify 2>&1 | sed 's/^/  /'
+fi
 exit 0
 HOOK
     install -m644 "$tmp/omastore.hook" "$hook"
-    echo "omarchy-update now reports OmaStore app updates ($hook; --no-hooks skips it)"
+    echo "omarchy-update now updates OmaStore apps too ($hook; --no-hooks skips it)"
   fi
 fi
 

@@ -53,6 +53,11 @@ class Backend : public QObject {
     Q_PROPERTY(QString daemonWarning READ daemonWarning NOTIFY daemonChanged)
     // The running daemon can be restarted from here (it has self.restart).
     Q_PROPERTY(bool canRestartDaemon READ canRestartDaemon NOTIFY daemonChanged)
+    // Automatic updates (settings.*): on by default. settingsAvailable is
+    // false until loaded, or with a daemon older than settings.
+    Q_PROPERTY(bool autoUpdate READ autoUpdate NOTIFY settingsChanged)
+    Q_PROPERTY(bool settingsAvailable READ settingsAvailable NOTIFY settingsChanged)
+    Q_PROPERTY(bool settingsBusy READ settingsBusy NOTIFY settingsChanged)
 
 public:
     enum StarState { StarUnknown = -1, StarNo = 0, StarYes = 1 };
@@ -83,9 +88,12 @@ public:
     QString selfInstalled() const { return m_selfInstalled; }
     QString daemonWarning() const { return m_daemonWarning; }
     bool canRestartDaemon() const { return m_canRestartDaemon; }
+    bool autoUpdate() const { return m_autoUpdate; }
+    bool settingsAvailable() const { return m_settingsAvailable; }
+    bool settingsBusy() const { return m_settingsBusy; }
     // The protocol this interface was built for (docs/ipc.md) and the methods
     // it needs from the daemon.
-    static constexpr int Protocol = 2;
+    static constexpr int Protocol = 3;
     static const QStringList &requiredMethods();
     // daemonWarning for a daemon.hello result ("" when it fits).
     static QString helloWarning(const QJsonObject &hello);
@@ -117,6 +125,7 @@ public:
     // Stops the running (older) daemon; the client starts the one that
     // belongs to this interface when it reconnects.
     Q_INVOKABLE void restartDaemon();
+    Q_INVOKABLE void setAutoUpdate(bool on);
     // What a job is doing, for people: "Downloading", "Checking GitHub"…
     Q_INVOKABLE static QString stageText(const QString &kind, const QString &stage);
     // README markdown ready to display (without remote images).
@@ -158,6 +167,7 @@ signals:
     void depsChanged();
     void selfChanged();
     void daemonChanged();
+    void settingsChanged();
     // The daemon stopped for the restart: start gui (the updated interface) and quit.
     void restartReady(const QString &gui);
     // An app was installed and has missing system dependencies that pacman
@@ -171,6 +181,8 @@ signals:
     void notice(const QString &message);
 
 private:
+    void loadSettings();
+    void applySettings(const QJsonValue &result);
     void loadCategories();
     void checkDaemon();
     void reloadDetail();
@@ -214,4 +226,7 @@ private:
     QString m_selfGui; // launcher of the updated interface
     QString m_daemonWarning;
     bool m_canRestartDaemon = false;
+    bool m_autoUpdate = true;
+    bool m_settingsAvailable = false;
+    bool m_settingsBusy = false;
 };

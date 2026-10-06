@@ -192,3 +192,33 @@ func TestUpdateCheck(t *testing.T) {
 		t.Errorf("--notify without --check: %d", code)
 	}
 }
+
+// auto-update shows and changes the setting; update --auto with it off only
+// reports, like --check (with it on it refreshes from GitHub: covered by the
+// app and rpc tests, which need no network).
+func TestAutoUpdateCommand(t *testing.T) {
+	p := isolate(t)
+	t.Setenv("XDG_STATE_HOME", "")
+	seedStore(t, p)
+	if code, out, _ := runCLI("auto-update"); code != 0 || out != "automatic updates are on\n" {
+		t.Errorf("default: %d %q", code, out)
+	}
+	if code, out, _ := runCLI("auto-update", "off"); code != 0 || out != "automatic updates are off\n" {
+		t.Errorf("off: %d %q", code, out)
+	}
+	if code, _, _ := runCLI("auto-update", "maybe"); code != 2 {
+		t.Errorf("bad value: %d", code)
+	}
+	st, _ := store.Open(context.Background(), p.DB)
+	st.SaveInstall(context.Background(), store.Install{FullName: "acme/omaphoto", Version: "v0", InstalledAt: time.Now()})
+	st.Close()
+	code, out, _ := runCLI("update", "--auto")
+	if code != 0 || !strings.Contains(out, "automatic updates are off") || !strings.Contains(out, "acme/omaphoto: v0 → v1") {
+		t.Errorf("auto off: %d %q", code, out)
+	}
+	for _, args := range [][]string{{"update", "--auto", "--check"}, {"update", "--auto", "acme/omaphoto"}} {
+		if code, _, _ := runCLI(args...); code != 2 {
+			t.Errorf("%v: %d, want a usage error", args, code)
+		}
+	}
+}

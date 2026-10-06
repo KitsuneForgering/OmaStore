@@ -79,11 +79,11 @@ sh "$project/packaging/install.sh" > /dev/null
 grep -qxF '# omastore-managed' "$hook"
 grep -F "cli='$HOME/.local/bin/omastore'" "$hook" >/dev/null
 printf '#!/bin/sh\nprintf "%%s\\n" "$*" > "$FIXTURE/hook-args"\n' > "$root/1.2.3/bin/omastore"
-bash "$hook"
-[ "$(cat "$fixture/hook-args")" = 'update --check --notify' ]
+bash "$hook" > /dev/null
+[ "$(cat "$fixture/hook-args")" = 'update --auto --notify' ]
 # A failing CLI never fails omarchy-update.
 printf '#!/bin/sh\nexit 3\n' > "$root/1.2.3/bin/omastore"
-bash "$hook"
+bash "$hook" > /dev/null
 
 # With coding agents, they are copied into each installed agent's skill
 # directory (the shared ~/.agents/skills, Claude Code, Codex, Pi, Hermes and

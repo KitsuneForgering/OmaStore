@@ -41,6 +41,11 @@ packages in a `PKGBUILD`, the store can install them with pacman for you
   confirm it (in the interface, or with `--allow-unverified` in the CLI), and
   that holds for updates too. A checksum from the release itself proves the
   download arrived intact, not who built it.
+- **Apps that stay current:** updates install on their own when the download
+  can be verified: after `omarchy update`, when you open the store (at most
+  every 12 hours) and from the daily timer of a package install. You get a
+  notification of what changed; updates without a checksum wait for you. Turn
+  it off on the Installed page or with `omastore auto-update off`.
 - **Updates you can undo:** an update keeps the version it replaced, so an app
   that is open keeps working and **Go back** returns to the previous version
   without downloading anything. The app detail shows its install, update and
@@ -218,6 +223,8 @@ omastore show pch/rawmakase
 omastore install pch/rawmakase
 omastore update                 # updates all installed apps
 omastore update --check         # only lists what has a new version (OmaStore's own too)
+omastore update --auto          # what omarchy update runs: installs the verifiable updates
+omastore auto-update off        # turn automatic updates off (on by default)
 omastore self-update            # updates OmaStore itself (installations made by install.sh)
 omastore rollback pch/rawmakase # back to the version the last update replaced
 omastore uninstall pch/rawmakase # refuses while it runs; --force removes it anyway

@@ -104,3 +104,14 @@ func TestHints(t *testing.T) {
 		}
 	}
 }
+
+func TestUpdatedMessage(t *testing.T) {
+	one := UpdatedMessage([]Update{{Repo: "a/x", Name: "X", From: "v1", To: "v2"}}, "/gui")
+	if one.Summary != "OmaStore updated X" || one.Body != "X: v1 → v2" || strings.Join(one.Exec, " ") != "/gui --open a/x" {
+		t.Errorf("one = %+v", one)
+	}
+	two := UpdatedMessage([]Update{{Repo: "b/y", Name: "Y", From: "1", To: "2"}, {Repo: "a/x", Name: "X", From: "v1", To: "v2"}}, "")
+	if two.Summary != "OmaStore updated 2 apps" || two.Body != "X: v1 → v2\nY: 1 → 2" || two.Exec != nil {
+		t.Errorf("two = %+v", two)
+	}
+}

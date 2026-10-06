@@ -50,6 +50,10 @@ commands:
                                     update the given apps (or every installed one)
   update --check [--notify]         list updates (OmaStore's own too); --notify shows a
                                     desktop notification
+  update --auto [--notify]          refresh the installed apps and install the updates that
+                                    can be verified, if automatic updates are on; --notify
+                                    tells what was updated and what waits for you
+  auto-update [on|off]              show or change automatic updates (on by default)
   self-update [--check]             update OmaStore itself (installations made by install.sh)
   deps [--install] [--json] owner/repo
                                     system dependencies from the app's PKGBUILD; --install
@@ -101,6 +105,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		"rollback":    cmdRollback,
 		"update":      cmdUpdate,
 		"self-update": cmdSelfUpdate,
+		"auto-update": cmdAutoUpdate,
 		"deps":        cmdDeps,
 		"star":        cmdStar,
 		"unstar":      cmdStar,
@@ -773,17 +778,25 @@ var guiPath = func() string {
 func cmdUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
 	fs := newFlags("update", stderr)
 	check := fs.Bool("check", false, "only list the available updates, without installing")
-	notifyFlag := fs.Bool("notify", false, "with --check: desktop notification if there are new updates")
+	auto := fs.Bool("auto", false, "install the verifiable updates if automatic updates are on")
+	notifyFlag := fs.Bool("notify", false, "with --check or --auto: desktop notification about updates")
 	allow := fs.Bool("allow-unverified", false, "update even when the new release publishes no checksum for the file")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
-	if *notifyFlag && !*check {
-		fmt.Fprintln(stderr, "--notify only works with --check")
+	if *notifyFlag && !*check && !*auto {
+		fmt.Fprintln(stderr, "--notify only works with --check or --auto")
+		return errUsage
+	}
+	if *auto && (*check || *allow || fs.NArg() > 0) {
+		fmt.Fprintln(stderr, "--auto takes no other option and no app names")
 		return errUsage
 	}
 	if *check {
 		return checkUpdates(ctx, a, *notifyFlag, stdout)
+	}
+	if *auto {
+		return autoUpdate(ctx, a, *notifyFlag, stdout, stderr)
 	}
 	names := fs.Args()
 	if len(names) == 0 {
@@ -817,6 +830,91 @@ func cmdUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// autoUpdate refreshes the installed apps' repositories and installs the
+// updates that can be verified, when automatic updates are on. The rest (no
+// checksum, broken installs, failures, OmaStore itself) is reported as by
+// --check. A failed update does not stop the others.
+func autoUpdate(ctx context.Context, a *app.App, notifyUser bool, stdout, stderr io.Writer) error {
+	on, err := a.AutoUpdate(ctx)
+	if err != nil {
+		return err
+	}
+	if !on {
+		fmt.Fprintln(stdout, "automatic updates are off (omastore auto-update on)")
+		return checkUpdates(ctx, a, notifyUser, stdout)
+	}
+	insts, err := a.ListInstalls(ctx)
+	if err != nil {
+		return err
+	}
+	if len(insts) == 0 {
+		fmt.Fprintln(stdout, "no apps installed")
+		return nil
+	}
+	names := make([]string, 0, len(insts))
+	for _, in := range insts {
+		names = append(names, in.FullName)
+	}
+	// Offline or rate limited: update from what the catalog already knows.
+	if _, err := a.Index(ctx, index.Options{Only: names}); err != nil {
+		fmt.Fprintln(stderr, "warning: could not refresh the installed apps:", err)
+	} else if err := a.MarkAutoCheck(ctx); err != nil {
+		return err
+	}
+	ready, _, err := a.AutoUpdates(ctx)
+	if err != nil {
+		return err
+	}
+	var done []notify.Update
+	for _, it := range ready {
+		inst, err := a.Update(ctx, it.FullName, install.Options{})
+		switch {
+		case errors.Is(err, install.ErrUpToDate):
+		case err != nil:
+			fmt.Fprintf(stderr, "%s: %v\n", it.FullName, err)
+		default:
+			fmt.Fprintf(stdout, "%s updated to %s\n", it.FullName, inst.Version)
+			done = append(done, notify.Update{Repo: it.FullName, Name: it.Name, From: it.InstalledVersion, To: inst.Version})
+		}
+	}
+	if notifyUser && len(done) > 0 {
+		if err := newNotifier().Notify(ctx, notify.UpdatedMessage(done, guiPath())); err != nil {
+			fmt.Fprintln(stderr, "warning: could not show the notification:", err)
+		}
+	}
+	// What is left waits for the user.
+	return checkUpdates(ctx, a, notifyUser, stdout)
+}
+
+func cmdAutoUpdate(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
+	fs := newFlags("auto-update", stderr)
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	switch fs.Arg(0) {
+	case "":
+	case "on", "off":
+		if fs.NArg() > 1 {
+			return errUsage
+		}
+		if err := a.SetAutoUpdate(ctx, fs.Arg(0) == "on"); err != nil {
+			return err
+		}
+	default:
+		return errUsage
+	}
+	on, err := a.AutoUpdate(ctx)
+	if err != nil {
+		return err
+	}
+	if on {
+		fmt.Fprintln(stdout, "automatic updates are on")
+	} else {
+		fmt.Fprintln(stdout, "automatic updates are off")
+	}
+	return nil
 }
 
 // checkUpdates lists the installed apps with a newer version in the catalog and,

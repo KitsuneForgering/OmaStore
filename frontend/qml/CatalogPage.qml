@@ -54,8 +54,30 @@ Page {
                     color: theme.muted
                     font.pixelSize: theme.fontCaption
                 }
+                Text {
+                    objectName: "autoUpdateHint"
+                    visible: page.installedView && backend.settingsAvailable
+                    text: backend.autoUpdate
+                          ? qsTr("Updates that can be verified install on their own; the others wait here.")
+                          : qsTr("Updates wait for you here.")
+                    color: theme.muted
+                    font.pixelSize: theme.fontCaption
+                    wrapMode: Text.Wrap
+                    Layout.maximumWidth: page.width * 0.4
+                }
             }
             Item { Layout.fillWidth: true }
+            ActionButton {
+                objectName: "autoUpdateButton"
+                visible: page.installedView && backend.settingsAvailable
+                selected: backend.autoUpdate
+                enabled: backend.connected && !backend.settingsBusy
+                text: backend.autoUpdate ? qsTr("Automatic updates: on") : qsTr("Automatic updates: off")
+                Accessible.role: Accessible.CheckBox
+                Accessible.checkable: true
+                Accessible.checked: backend.autoUpdate
+                onClicked: backend.setAutoUpdate(!backend.autoUpdate)
+            }
             PrimaryButton {
                 visible: page.installedView && backend.updatesAvailable > 0
                 text: qsTr("Update all (%1)").arg(backend.updatesAvailable)

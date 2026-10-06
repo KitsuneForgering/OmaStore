@@ -135,3 +135,32 @@ func UpdatesMessage(updates []Update, gui string) (key string, msg Message) {
 	msg.Body = strings.Join(lines, "\n")
 	return strings.Join(keys, "\n"), msg
 }
+
+// UpdatedMessage builds the notification for updates OmaStore installed on its
+// own. A click opens the app, or the Installed page for several.
+func UpdatedMessage(updates []Update, gui string) Message {
+	sorted := append([]Update(nil), updates...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Repo < sorted[j].Repo })
+	var lines []string
+	for _, u := range sorted {
+		lines = append(lines, fmt.Sprintf("%s: %s → %s", u.Name, u.From, u.To))
+	}
+	msg := Message{Glyph: updatesGlyph}
+	if len(sorted) == 1 {
+		msg.Summary = "OmaStore updated " + sorted[0].Name
+		if gui != "" {
+			msg.Exec = []string{gui, "--open", sorted[0].Repo}
+		}
+	} else {
+		msg.Summary = fmt.Sprintf("OmaStore updated %d apps", len(sorted))
+		if gui != "" {
+			msg.Exec = []string{gui, "--page", "installed"}
+		}
+	}
+	const maxLines = 5
+	if len(lines) > maxLines {
+		lines = append(lines[:maxLines], fmt.Sprintf("… and %d more", len(sorted)-maxLines))
+	}
+	msg.Body = strings.Join(lines, "\n")
+	return msg
+}
