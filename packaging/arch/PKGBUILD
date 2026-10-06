@@ -13,8 +13,9 @@ optdepends=(
   'desktop-file-utils: refresh the .desktop cache after installing apps'
   'gtk-update-icon-cache: refresh the icon cache after installing apps'
   'polkit: install the system dependencies declared by apps (pkexec)'
+  'qt6-translations: translated Qt dialog buttons'
 )
-makedepends=('git' 'go' 'cmake' 'ninja')
+makedepends=('git' 'go' 'cmake' 'ninja' 'qt6-tools')
 provides=("$_pkgname")
 conflicts=("$_pkgname")
 source=("$_pkgname::git+$url.git")

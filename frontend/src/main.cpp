@@ -8,10 +8,13 @@
 #include <QCommandLineParser>
 #include <QFont>
 #include <QGuiApplication>
+#include <QLibraryInfo>
+#include <QLocale>
 #include <QPalette>
 #include <QProcess>
 #include <QQuickWindow>
 #include <QTimer>
+#include <QTranslator>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -24,6 +27,15 @@ int main(int argc, char *argv[])
     app.setApplicationVersion(QStringLiteral(OMASTORE_VERSION));
     app.setDesktopFileName(QStringLiteral("omastore"));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
+
+    // The interface in the user's language (pt_BR, ...), falling back to
+    // English. Qt's own strings (the Yes/No of dialogs) come from qt6-translations.
+    QTranslator qtStrings, ourStrings;
+    if (qtStrings.load(QLocale(), QStringLiteral("qt"), QStringLiteral("_"),
+                       QLibraryInfo::path(QLibraryInfo::TranslationsPath)))
+        app.installTranslator(&qtStrings);
+    if (ourStrings.load(QLocale(), QStringLiteral("omastore"), QStringLiteral("_"), QStringLiteral(":/i18n")))
+        app.installTranslator(&ourStrings);
 
     QCommandLineParser args;
     args.setApplicationDescription(QStringLiteral("App store for Omarchy"));

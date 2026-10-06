@@ -18,6 +18,9 @@ All notable changes to OmaStore are listed here. The format follows
   shortcut.
 - `omastore://owner/repo` links open the app's page. A second launch (a link,
   the menu) goes to the window already open instead of opening another one.
+- The interface is translated into Brazilian Portuguese, including category
+  names, and follows the system language. Building the translations needs
+  `qt6-tools`; `make translations` refreshes `frontend/i18n/*.ts`.
 
 ### Changed
 

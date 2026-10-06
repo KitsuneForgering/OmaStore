@@ -25,7 +25,7 @@ jobs:
           fi
 
       - name: Dependencies
-        run: pacman -Syu --noconfirm --needed base-devel git go cmake ninja qt6-base qt6-declarative qt6-svg
+        run: pacman -Syu --noconfirm --needed base-devel git go cmake ninja qt6-base qt6-declarative qt6-svg qt6-tools
 
       - uses: actions/checkout@v7
         with:

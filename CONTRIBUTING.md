@@ -11,17 +11,21 @@ listed in the store**, you do not need to change this repository: follow
 - **Suggest an idea**: small ones as an issue; larger ones as a file in
   [`docs/ideas/`](docs/ideas/README.md), with the evidence and the cost.
 - **Send a pull request**: fixes, tests, documentation, translations of the
-  Portuguese search synonyms.
+  Portuguese search synonyms, or the interface in your language: run
+  `make translations`, copy `frontend/i18n/omastore_pt_BR.ts` to
+  `omastore_<locale>.ts`, translate it in Qt Linguist (`linguist6`) and run
+  `make translations` again.
 
 For security problems, do not open a public issue: see [SECURITY.md](SECURITY.md).
 
 ## Development setup
 
 Requirements: Go 1.26+, a C compiler (CGO, for SQLite), Qt 6.5+
-(`qt6-base`, `qt6-declarative`, `qt6-svg`), CMake and Ninja. On Arch/Omarchy:
+(`qt6-base`, `qt6-declarative`, `qt6-svg`; `qt6-tools` for the translations),
+CMake and Ninja. On Arch/Omarchy:
 
 ```sh
-sudo pacman -S --needed go base-devel cmake ninja qt6-base qt6-declarative qt6-svg
+sudo pacman -S --needed go base-devel cmake ninja qt6-base qt6-declarative qt6-svg qt6-tools
 ```
 
 Everything goes through the `Makefile`:

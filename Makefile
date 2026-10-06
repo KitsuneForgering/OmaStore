@@ -21,6 +21,9 @@ ARGS ?=
 
 GO_CMDS := omastore omastored
 
+# Qt Linguist (qt6-tools) for `make translations`.
+LUPDATE ?= /usr/lib/qt6/bin/lupdate
+
 # The version the interface reports. A release build gets the tag
 # (`make dist VERSION=v1.2.3`); a development build, the last tag of the
 # checkout. GUI_VERSION=1.2.3 builds a tree that says so.
@@ -35,7 +38,7 @@ GOLDFLAGS ?=
 .DEFAULT_GOAL := all
 .PHONY: all help build backend frontend test test-backend test-frontend check \
         vet fmt fmt-check tidy run run-daemon run-gui clean check-cmake install uninstall release dist \
-        pkgbuild-bin test-skills test-installer
+        pkgbuild-bin test-skills test-installer translations
 
 all: build ## Build backend and frontend
 
@@ -193,6 +196,11 @@ pkgbuild-bin: ## Generate packaging/arch-bin/PKGBUILD from the tarball in dist/
 
 test-skills: $(BIN)/omastore ## The skills' Python validator == omastore lint-manifest
 	python3 skills/tests/compare_validators.py $(BIN)/omastore
+
+translations: ## Refresh frontend/i18n/*.ts with the interface's current strings
+	@test -x $(LUPDATE) || { echo "lupdate not found (sudo pacman -S qt6-tools)"; exit 1; }
+	cd $(FRONTEND) && for ts in i18n/*.ts; do \
+		$(LUPDATE) src qml -extensions cpp,h,qml,js -ts $$ts -locations none -no-obsolete || exit 1; done
 
 test-installer: ## Simulated local installation, no network
 	sh tests/install-shell.sh

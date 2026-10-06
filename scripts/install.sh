@@ -114,7 +114,7 @@ for name in Qt6Quick Qt6QuickControls2 Qt6Svg; do
 done
 if [ -n "$qt" ]; then
   echo "Qt 6 modules not found:$qt" >&2
-  echo 'On Arch/Omarchy: sudo pacman -S --needed git go cmake ninja gcc qt6-base qt6-declarative qt6-svg' >&2
+  echo 'On Arch/Omarchy: sudo pacman -S --needed git go cmake ninja gcc qt6-base qt6-declarative qt6-svg qt6-tools' >&2
   exit 1
 fi
 

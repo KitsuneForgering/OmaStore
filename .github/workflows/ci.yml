@@ -23,6 +23,6 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - run: pacman -Syu --noconfirm --needed base-devel cmake ninja qt6-base qt6-declarative qt6-svg
+      - run: pacman -Syu --noconfirm --needed base-devel cmake ninja qt6-base qt6-declarative qt6-svg qt6-tools
       - uses: actions/checkout@v7
       - run: make test-frontend

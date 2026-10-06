@@ -256,7 +256,8 @@ The full rules (asset names, icon, screenshots, checksums) are in
 ## Development
 
 Requirements: Go 1.26+, a C compiler (CGO, for SQLite), Qt 6.5+
-(`qt6-base`, `qt6-declarative`, `qt6-svg`), CMake and Ninja.
+(`qt6-base`, `qt6-declarative`, `qt6-svg`; `qt6-tools` for the translations),
+CMake and Ninja.
 
 ```sh
 make            # builds everything (bin/ and frontend/build/)
