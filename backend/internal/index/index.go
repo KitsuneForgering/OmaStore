@@ -111,6 +111,9 @@ type Indexer struct {
 	// Blocklist is "owner/repo:path" of the curated list of blocked apps,
 	// read at the start of every run; "" turns it off.
 	Blocklist string
+	// Snapshot, if set, fetches a verified catalog snapshot. A full run on an
+	// empty catalog imports it instead of discovering everything from GitHub.
+	Snapshot func(ctx context.Context) (*Snapshot, error)
 }
 
 // DefaultBlocklist is the list OmaStore's maintainers keep.
@@ -442,6 +445,11 @@ func (ix *Indexer) run(ctx context.Context, opts Options) (Stats, error) {
 	report := func(p Progress) {
 		if opts.Progress != nil {
 			opts.Progress(p)
+		}
+	}
+	if len(names) == 0 && ix.Snapshot != nil {
+		if n, ok := ix.importSnapshot(ctx); ok {
+			return Stats{Updated: n}, nil
 		}
 	}
 	if len(names) == 0 {
@@ -1267,4 +1275,26 @@ func ParseBlocklist(content string) map[string]string {
 		out[name] = strings.TrimSpace(reason)
 	}
 	return out
+}
+
+// importSnapshot fills an empty catalog from the published snapshot. ok is
+// false when the catalog already has repositories or the snapshot could not
+// be fetched, verified or imported; the run then discovers as usual.
+func (ix *Indexer) importSnapshot(ctx context.Context) (n int, ok bool) {
+	stored, err := ix.Store.RepoNames(ctx)
+	if err != nil || len(stored) > 0 {
+		return 0, false
+	}
+	snap, err := ix.Snapshot(ctx)
+	if err != nil {
+		ix.log().Warn("catalog snapshot not used", "err", err)
+		return 0, false
+	}
+	n, err = ix.Import(ctx, snap)
+	if err != nil || n == 0 {
+		ix.log().Warn("catalog snapshot not imported", "err", err, "repos", n)
+		return n, n > 0
+	}
+	ix.log().Info("catalog snapshot imported", "repos", n, "created", snap.Created)
+	return n, true
 }

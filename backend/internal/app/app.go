@@ -65,7 +65,8 @@ func Open(ctx context.Context, log *slog.Logger) (*App, error) {
 		return nil, fmt.Errorf("installer: %w", err)
 	}
 	inst.Log = log
-	return &App{
+	prov := &provenance.Lazy{CacheDir: filepath.Join(paths.CacheDir, "sigstore")}
+	a := &App{
 		Paths:  paths,
 		Store:  st,
 		GitHub: gh,
@@ -76,14 +77,16 @@ func Open(ctx context.Context, log *slog.Logger) (*App, error) {
 			LockPath: filepath.Join(paths.DataDir, "index.lock"),
 			Log:      log,
 			// Sigstore's trust root (TUF) is cached beside the other caches.
-			Provenance: &provenance.Lazy{CacheDir: filepath.Join(paths.CacheDir, "sigstore")},
+			Provenance: prov,
 			Blocklist:  index.DefaultBlocklist,
 		},
 		Installer: inst,
 		Images:    &imagecache.Cache{Dir: paths.ImagesDir},
 		Pacman:    &sysdeps.Pacman{},
 		Log:       log,
-	}, nil
+	}
+	a.Indexer.Snapshot = snapshotFetcher{URL: snapshotURL, HTTP: snapshotClient, Lister: gh, Verifier: prov}.Fetch
+	return a, nil
 }
 
 // Close releases the resources.

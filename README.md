@@ -72,8 +72,9 @@ curl -fsSLO https://github.com/KitsuneForgering/OmaStore/releases/latest/downloa
 sh install.sh
 ```
 
-Then open **OmaStore** from the menu. The first run builds the catalog from
-GitHub, which takes a minute.
+Then open **OmaStore** from the menu. The first run downloads the daily
+catalog snapshot (checked against its build attestation), so the apps show up
+right away; later refreshes ask GitHub only for what changed.
 
 **Recommended:** `gh auth login` (or `export GITHUB_TOKEN=...`). Without a
 token, GitHub allows 60 requests per hour, which is not enough to index the

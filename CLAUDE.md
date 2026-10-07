@@ -203,6 +203,11 @@ make pkgbuild-bin VERSION=v1.2.3   # omastore-bin PKGBUILD with the tarball's sh
 Useful variables: `BUILD_TYPE` (default `Debug`), `GENERATOR` (default `Ninja`), `TESTFLAGS`, `ARGS`.
 The Makefile exports `CGO_ENABLED=1` (required by go-sqlite3). CI calls the same targets.
 
+The `Catalog snapshot` workflow (daily) publishes `catalog.json` on the `catalog` pre-release, the one
+`gh release create` allowed: a pre-release never becomes "latest". A first run with an empty catalog imports
+it only with an attestation from `.github/workflows/catalog.yml` and only with download URLs inside each app's
+own releases (`index.Import`).
+
 Publishing is `git tag v1.2.3 && git push origin v1.2.3`: the `Release` workflow
 builds the tarball, its `.sha256`, the PKGBUILD and the attestation. Never
 `gh release create` — a release published before the workflow is the latest one

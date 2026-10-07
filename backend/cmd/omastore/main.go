@@ -55,6 +55,8 @@ commands:
                                     can be verified, if automatic updates are on; --notify
                                     tells what was updated and what waits for you
   auto-update [on|off]              show or change automatic updates (on by default)
+  export-catalog <file.json>        write the catalog as the snapshot a first run imports
+                                    (what the catalog workflow publishes)
   require-provenance [on|off]       install only files whose build provenance is verified
                                     (GitHub attestation from the repository's workflow; off)
   self-update [--check]             update OmaStore itself (installations made by install.sh)
@@ -110,6 +112,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		"self-update":        cmdSelfUpdate,
 		"auto-update":        cmdAutoUpdate,
 		"require-provenance": cmdRequireProvenance,
+		"export-catalog":     cmdExportCatalog,
 		"deps":               cmdDeps,
 		"star":               cmdStar,
 		"unstar":             cmdStar,
@@ -928,6 +931,29 @@ func cmdAutoUpdate(ctx context.Context, a *app.App, args []string, stdout, stder
 	} else {
 		fmt.Fprintln(stdout, "automatic updates are off")
 	}
+	return nil
+}
+
+func cmdExportCatalog(ctx context.Context, a *app.App, args []string, stdout, stderr io.Writer) error {
+	fs := newFlags("export-catalog", stderr)
+	if err := parse(fs, args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errUsage
+	}
+	snap, err := a.Indexer.Export(ctx)
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(snap, "", " ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(fs.Arg(0), append(data, '\n'), 0o644); err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "%d repositories written to %s\n", len(snap.Repos), fs.Arg(0))
 	return nil
 }
 

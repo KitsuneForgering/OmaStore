@@ -1,0 +1,57 @@
+name: Catalog snapshot
+
+# Indexes the catalog once a day and publishes catalog.json, with a build
+# attestation, on the "catalog" pre-release. A first run of OmaStore with an
+# empty catalog imports it after checking that this workflow attested it, so
+# the catalog shows up at once even without a GitHub token. A pre-release
+# never becomes the "latest" release that install.sh and self-update read.
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: catalog
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # upload to the catalog pre-release
+      id-token: write      # provenance attestation
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Build the CLI
+        run: make backend
+
+      - name: Index
+        env:
+          # A personal token (CATALOG_TOKEN) also enables code search for
+          # omastore.toml; the workflow token covers topics and seeds.
+          GITHUB_TOKEN: ${{ secrets.CATALOG_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          ./bin/omastore index
+          ./bin/omastore export-catalog catalog.json
+
+      - name: Provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: catalog.json
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view catalog >/dev/null 2>&1 ||
+            gh release create catalog --prerelease --target "$GITHUB_SHA" \
+              --title "Catalog snapshot" \
+              --notes "Daily catalog snapshot for first runs (catalog.json). Not an OmaStore release."
+          gh release upload catalog catalog.json --clobber

@@ -18,7 +18,7 @@ Open work, in the order in which the pieces depend on each other. Each item must
 
 The catalog starts nearly empty until authors adopt `omastore.toml`, so first runs and authors come first.
 
-- [ ] Published catalog snapshot (built by a scheduled workflow, attested) so a first run without a GitHub token shows the catalog with ~1 request
+- [ ] Run the `Catalog snapshot` workflow once (Actions → Run workflow) so the `catalog` pre-release exists before the next OmaStore release; optionally add a `CATALOG_TOKEN` secret (a personal token) so it can use code search
 - [ ] Open PRs with the suggested manifest in the apps that were installable before the manifest became mandatory; target: 5 apps from 3 authors (2026-09-30: ZacharyZhang-NY/OmaPhoto#12, pch/rawmakase#27, michaelmonetized/omadesign#188)
 
 ## Checks on a real Omarchy session

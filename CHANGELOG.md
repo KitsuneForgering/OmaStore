@@ -12,6 +12,12 @@ All notable changes to OmaStore are listed here. The format follows
   form, and apps listed in `catalog/blocklist.txt` (read at every refresh)
   leave the catalog, are never installed or updated, and show the reason to
   people who have them installed (`omastore show` too).
+- Catalog snapshot: a daily workflow publishes `catalog.json` with a build
+  attestation, and a first run with an empty catalog imports it instead of
+  discovering everything from GitHub, so the catalog appears at once even
+  without a token. It is used only when the attestation comes from OmaStore's
+  catalog workflow, and entries whose downloads point outside the app's own
+  releases are dropped. `omastore export-catalog` writes it.
 
 ### Fixed
 
