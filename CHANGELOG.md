@@ -6,6 +6,12 @@ All notable changes to OmaStore are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Installing an app's system dependencies works with the socket-activated
+  daemon: `omastored.service` no longer sets `NoNewPrivileges`, which made the
+  setuid `pkexec` refuse to run.
+
 ## [0.4.0] - 2026-10-06
 
 ### Added

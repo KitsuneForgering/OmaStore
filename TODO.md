@@ -29,7 +29,6 @@ The catalog starts nearly empty until authors adopt `omastore.toml`, so first ru
 ## Smaller features
 
 - [ ] Graphical-session user services: let `[services]` order a unit after `graphical-session.target` (`PartOf`/`WantedBy`) and set `RestartSec`/`RestartPreventExitStatus`, so units like Omakade's `omakade-guide-button` can be managed (btsouth/omakade#86)
-- [ ] `packaging/systemd/omastored.service` sets `NoNewPrivileges=yes`, which stops the setuid `pkexec` the daemon runs for `deps.install`: drop it or run pkexec outside the unit, and test it with the socket-activated daemon
 
 - [ ] Read `.PKGINFO` `depend` lines from `.pkg.tar.zst` assets when the repository has no PKGBUILD
 

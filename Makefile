@@ -205,6 +205,7 @@ translations: ## Refresh frontend/i18n/*.ts with the interface's current strings
 test-installer: ## Simulated local installation, no network
 	sh tests/install-shell.sh
 	sh tests/post-install.sh
+	sh tests/units.sh
 
 test: test-backend test-frontend test-skills test-installer ## All tests
 
