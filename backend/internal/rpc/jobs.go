@@ -67,6 +67,9 @@ type jobs struct {
 	keep        int // finished jobs kept in the history
 	// lastFinished is when the last job finished (counts as activity).
 	lastFinished time.Time
+	// closed is set by shutdown: no job starts after it (a job started from a
+	// background goroutine would otherwise race with the final Wait).
+	closed bool
 }
 
 func newJobs(notify func(string, any)) *jobs {
@@ -87,6 +90,10 @@ func jobKey(kind, repo string) string {
 func (js *jobs) start(parent context.Context, kind, repo string,
 	fn func(ctx context.Context, report func(progress)) (any, error), onFinish func(Job, error)) (*Job, error) {
 	js.mu.Lock()
+	if js.closed {
+		js.mu.Unlock()
+		return nil, fmt.Errorf("%w: the daemon is shutting down", ErrBusy)
+	}
 	k := jobKey(kind, repo)
 	for _, j := range js.byID {
 		if j.State == StateRunning && jobKey(j.Kind, j.Repo) == k {
@@ -101,10 +108,10 @@ func (js *jobs) start(parent context.Context, kind, repo string,
 	js.byID[j.ID] = j
 	js.order = append(js.order, j.ID)
 	snap := *j
+	js.wg.Add(1) // under the lock: shutdown cannot be waiting yet
 	js.mu.Unlock()
 
 	js.notify("job.started", snap)
-	js.wg.Add(1)
 	go func() {
 		defer js.wg.Done()
 		defer cancel()
@@ -224,6 +231,7 @@ func (js *jobs) cancel(id string) error {
 // shutdown cancels everything and waits for the jobs to finish.
 func (js *jobs) shutdown() {
 	js.mu.Lock()
+	js.closed = true
 	for _, j := range js.byID {
 		if j.State == StateRunning {
 			j.cancel()

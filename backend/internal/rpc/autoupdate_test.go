@@ -163,3 +163,13 @@ func TestAutoUpdateOnStart(t *testing.T) {
 		t.Errorf("jobs %+v, want none when the check is recent", js)
 	}
 }
+
+// After Shutdown no job starts, even from a background goroutine (automatic
+// updates), so nothing races with the final wait.
+func TestNoJobAfterShutdown(t *testing.T) {
+	s, _ := startServer(t, newFake())
+	s.Shutdown()
+	if _, err := s.startInstallJob(KindUpdate, "acme/photo", false); err == nil {
+		t.Error("a job started after Shutdown")
+	}
+}
