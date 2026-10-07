@@ -456,12 +456,17 @@ Page {
                         spacing: theme.spaceS
                         ActionButton {
                             objectName: "previewPrevious"
+                            // Its full label when there is room, shrinking (elided) only
+                            // when the row is too narrow.
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: implicitWidth
+                            Layout.maximumWidth: implicitWidth
                             Layout.minimumWidth: leftPadding + rightPadding + theme.fontBody * 2
                             text: qsTr("‹ Previous")
                             enabled: previewCarousel.currentIndex > 0
                             onClicked: previewCarousel.decrementCurrentIndex()
                         }
-                        Item { Layout.fillWidth: true }
+                        Item { Layout.fillWidth: true; Layout.preferredWidth: 0 }
                         Text {
                             objectName: "previewPosition"
                             text: qsTr("%1 / %2").arg(previewCarousel.currentIndex + 1).arg(previewCarousel.count)
@@ -470,6 +475,11 @@ Page {
                         }
                         ActionButton {
                             objectName: "previewPlayPause"
+                            // Its full label when there is room, shrinking (elided) only
+                            // when the row is too narrow.
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: implicitWidth
+                            Layout.maximumWidth: implicitWidth
                             Layout.minimumWidth: leftPadding + rightPadding + theme.fontBody * 2
                             kind: "quiet"
                             visible: previewCarousel.count > 1
@@ -477,9 +487,14 @@ Page {
                             Accessible.name: previewCarousel.userPaused ? qsTr("Play slideshow") : qsTr("Pause slideshow")
                             onClicked: previewCarousel.userPaused = !previewCarousel.userPaused
                         }
-                        Item { Layout.fillWidth: true }
+                        Item { Layout.fillWidth: true; Layout.preferredWidth: 0 }
                         ActionButton {
                             objectName: "previewNext"
+                            // Its full label when there is room, shrinking (elided) only
+                            // when the row is too narrow.
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: implicitWidth
+                            Layout.maximumWidth: implicitWidth
                             Layout.minimumWidth: leftPadding + rightPadding + theme.fontBody * 2
                             text: qsTr("Next ›")
                             enabled: previewCarousel.currentIndex < previewCarousel.count - 1
