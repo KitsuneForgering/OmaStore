@@ -11,6 +11,12 @@ All notable changes to OmaStore are listed here. The format follows
 - Installing an app's system dependencies works with the socket-activated
   daemon: `omastored.service` no longer sets `NoNewPrivileges`, which made the
   setuid `pkexec` refuse to run.
+- Per-architecture checksum files (`SHA256SUMS-x86_64`) are read as checksums,
+  not listed as binaries for that architecture.
+- The Installed page header keeps the search field on screen next to the
+  automatic-updates switch, and the gallery buttons are no longer cut off.
+- English counts read “1 app” and “5 apps” instead of “app(s)”.
+- New screenshots of the catalog and an app page.
 
 ## [0.4.0] - 2026-10-06
 

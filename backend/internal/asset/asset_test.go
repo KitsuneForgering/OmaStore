@@ -12,6 +12,10 @@ func TestClassifyAsset(t *testing.T) {
 		{"omadesign-0.6.0-x86_64-unknown-linux-gnu.tar.gz.sha256", Info{Checksum: true}},
 		{"checksums.txt", Info{Checksum: true}},
 		{"SHA256SUMS", Info{Checksum: true}},
+		// Per-architecture sums (Omakade): not a binary for that architecture.
+		{"SHA256SUMS-x86_64", Info{Checksum: true}},
+		{"SHA256SUMS-aarch64", Info{Checksum: true}},
+		{"checksums-linux.txt", Info{Checksum: true}},
 		{"checksums.txt.sig", Info{}},
 		{"rawmakase-0.1.5-1-x86_64.pkg.tar.zst", Info{Format: FormatPkg, Arch: ArchAMD64}},
 		{"rawmakase-0.1.5-1.x86_64.rpm", Info{}},

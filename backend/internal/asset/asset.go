@@ -46,7 +46,9 @@ var (
 	// Source tarballs and the like.
 	reSource = regexp.MustCompile(`(?i)(^|[^a-z0-9])(source|sources|src|recipe|vendor|debug|dbgsym|headers|devel)([^a-z0-9]|$)`)
 	// Checksums published with the release.
-	reChecksum = regexp.MustCompile(`(?i)(\.(sha256|sha512|sha256sum|sha512sum|md5)$|^(sha256sums|sha512sums|checksums?)(\.txt)?$|checksums?\.txt$)`)
+	// Signatures of a checksum file (checksums.txt.sig) are not sums.
+	reSignature = regexp.MustCompile(`\.(sig|asc|minisig|pem|crt|cert|bundle|sigstore(\.json)?)$`)
+	reChecksum  = regexp.MustCompile(`(?i)(\.(sha256|sha512|sha256sum|sha512sum|md5)$|^(sha256sums|sha512sums|checksums?)([-_.][a-z0-9_]+)*?(\.txt)?$|checksums?\.txt$)`)
 )
 
 // File extensions that are never installable.
@@ -67,7 +69,7 @@ var scriptExt = []string{".sh", ".bash", ".ps1", ".bat", ".cmd", ".py"}
 // Classify identifies an asset's format and architecture from its name.
 func Classify(name string) Info {
 	lower := strings.ToLower(name)
-	if reChecksum.MatchString(lower) {
+	if reChecksum.MatchString(lower) && !reSignature.MatchString(lower) {
 		return Info{Checksum: true}
 	}
 	var info Info

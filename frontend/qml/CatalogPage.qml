@@ -34,10 +34,15 @@ Page {
             anchors.fill: parent
             spacing: theme.spaceM
 
+            // Takes the room the actions leave; the hint wraps inside it.
             ColumnLayout {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 0
                 spacing: 2
                 Text {
                     objectName: "catalogTitle"
+                    Layout.fillWidth: true // lets the column take the free room
+                    elide: Text.ElideRight
                     text: page.installedView ? qsTr("Installed")
                                              : (page.model.category !== "" ? Categories.display(page.model.category) : qsTr("Discover"))
                     color: theme.foreground
@@ -63,10 +68,9 @@ Page {
                     color: theme.muted
                     font.pixelSize: theme.fontCaption
                     wrapMode: Text.Wrap
-                    Layout.maximumWidth: page.width * 0.4
+                    Layout.fillWidth: true
                 }
             }
-            Item { Layout.fillWidth: true }
             ActionButton {
                 objectName: "autoUpdateButton"
                 visible: page.installedView && backend.settingsAvailable

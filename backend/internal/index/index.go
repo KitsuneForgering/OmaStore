@@ -33,7 +33,7 @@ import (
 // changelog...):
 // repositories stored with a lower version are reprocessed even without changes
 // on GitHub.
-const Version = 13
+const Version = 14
 
 // GitHub is the subset of the client used by the indexer.
 type GitHub interface {

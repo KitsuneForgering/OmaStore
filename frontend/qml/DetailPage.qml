@@ -450,8 +450,6 @@ Page {
                         spacing: theme.spaceS
                         ActionButton {
                             objectName: "previewPrevious"
-                            Layout.fillWidth: true
-                            Layout.maximumWidth: implicitWidth
                             Layout.minimumWidth: leftPadding + rightPadding + theme.fontBody * 2
                             text: qsTr("‹ Previous")
                             enabled: previewCarousel.currentIndex > 0
@@ -466,8 +464,6 @@ Page {
                         }
                         ActionButton {
                             objectName: "previewPlayPause"
-                            Layout.fillWidth: true
-                            Layout.maximumWidth: implicitWidth
                             Layout.minimumWidth: leftPadding + rightPadding + theme.fontBody * 2
                             kind: "quiet"
                             visible: previewCarousel.count > 1
@@ -478,8 +474,6 @@ Page {
                         Item { Layout.fillWidth: true }
                         ActionButton {
                             objectName: "previewNext"
-                            Layout.fillWidth: true
-                            Layout.maximumWidth: implicitWidth
                             Layout.minimumWidth: leftPadding + rightPadding + theme.fontBody * 2
                             text: qsTr("Next ›")
                             enabled: previewCarousel.currentIndex < previewCarousel.count - 1

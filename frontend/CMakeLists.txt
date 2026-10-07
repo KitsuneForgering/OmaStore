@@ -77,7 +77,7 @@ target_link_libraries(omastore-gui PRIVATE omastore-core Qt6::QuickControls2)
 # the executable under :/i18n. Without Qt Linguist the interface is English only.
 find_package(Qt6 QUIET COMPONENTS LinguistTools)
 if(Qt6LinguistTools_FOUND)
-    file(GLOB OMASTORE_TS_FILES ${CMAKE_CURRENT_SOURCE_DIR}/i18n/*.ts)
+    file(GLOB OMASTORE_TS_FILES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/i18n/*.ts)
     qt_add_lrelease(omastore-gui TS_FILES ${OMASTORE_TS_FILES} QM_FILES_OUTPUT_VARIABLE OMASTORE_QM_FILES)
     qt_add_resources(omastore-gui "translations" PREFIX "/i18n" BASE ${CMAKE_CURRENT_BINARY_DIR}
                      FILES ${OMASTORE_QM_FILES})

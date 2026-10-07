@@ -199,8 +199,10 @@ test-skills: $(BIN)/omastore ## The skills' Python validator == omastore lint-ma
 
 translations: ## Refresh frontend/i18n/*.ts with the interface's current strings
 	@test -x $(LUPDATE) || { echo "lupdate not found (sudo pacman -S qt6-tools)"; exit 1; }
+	@# English is the source language: its file only carries the plural forms.
 	cd $(FRONTEND) && for ts in i18n/*.ts; do \
-		$(LUPDATE) src qml -extensions cpp,h,qml,js -ts $$ts -locations none -no-obsolete || exit 1; done
+		case $$ts in *_en.ts) only=-pluralonly ;; *) only= ;; esac; \
+		$(LUPDATE) src qml -extensions cpp,h,qml,js -ts $$ts -locations none -no-obsolete $$only || exit 1; done
 
 test-installer: ## Simulated local installation, no network
 	sh tests/install-shell.sh
