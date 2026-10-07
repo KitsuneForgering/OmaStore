@@ -169,6 +169,7 @@ Page {
             required property int stars
             required property string installedVersion
             required property bool updateAvailable
+            required property bool blocked
             width: grid.cellWidth
             height: grid.cellHeight
 
@@ -182,6 +183,7 @@ Page {
                 stars: parent.stars
                 installedVersion: parent.installedVersion
                 updateAvailable: parent.updateAvailable
+                blocked: parent.blocked
                 focus: grid.currentIndex === parent.index
                 onActivated: page.appActivated(repo)
             }

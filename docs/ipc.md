@@ -2,7 +2,7 @@
 
 The frontend talks to `omastored` over **JSON-RPC 2.0** on a Unix socket at
 `$XDG_RUNTIME_DIR/omastore.sock` (mode `0600`). Implementation:
-`backend/internal/rpc/`. Protocol version: **3** (`daemon.hello`; 3 added `settings.*` and automatic updates).
+`backend/internal/rpc/`. Protocol version: **4** (`daemon.hello`; 3 added `settings.*` and automatic updates, 4 the `blocked` fields).
 
 The version goes up whenever a method or a DTO changes. On connect the frontend
 calls `daemon.hello` and compares `protocol` (and the `methods` it needs) with
@@ -150,7 +150,9 @@ AppItem {
   stars: number, score: number, installable: boolean
   latestVersion: string            // tag of the latest release
   installedVersion: string         // "" if not installed
-  updateAvailable: boolean
+  updateAvailable: boolean          // false for a blocked app
+  blocked: boolean                 // on catalog/blocklist.txt: listed only when
+  blockedReason: string            // installed, never installed or updated (-32020)
 }
 AppDetail extends AppItem {
   readme: string                   // markdown with URLs already absolute
@@ -311,6 +313,7 @@ up to the cancellation (e.g. repos already indexed).
 | -32015 | the app is running (uninstall without `force`, or reinstalling the running version) |
 | -32016 | no previous version on disk to roll back to |
 | -32017 | the file has no checksum and `allowUnverified` was not given |
+| -32020 | the app is on OmaStore's blocklist (`catalog/blocklist.txt`): no install or update |
 | -32019 | the user requires build provenance and the file has none (`allowUnverified` does not override it) |
 | -32018 | pacman could not download a package: the package database is older than the mirrors |
 

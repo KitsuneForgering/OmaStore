@@ -48,6 +48,9 @@ var (
 	// ErrNoProvenance means the user requires verified build provenance and
 	// the selected file has none (store.SettingRequireProvenance).
 	ErrNoProvenance = errors.New("the file has no verified build provenance")
+	// ErrBlocked means the app is on OmaStore's blocklist: it is never
+	// installed or updated (uninstalling still works).
+	ErrBlocked = errors.New("this app was blocked by OmaStore's maintainers")
 	// ErrNoPrevious means there is no earlier version on disk to go back to.
 	ErrNoPrevious = errors.New("no previous version to go back to")
 )
@@ -313,6 +316,12 @@ func (in *Installer) Install(ctx context.Context, fullName string, opts Options)
 	owner, repo, err := splitName(fullName)
 	if err != nil {
 		return nil, err
+	}
+	if d.Blocked {
+		if d.BlockedReason != "" {
+			return nil, fmt.Errorf("%s: %w: %s", fullName, ErrBlocked, d.BlockedReason)
+		}
+		return nil, fmt.Errorf("%s: %w", fullName, ErrBlocked)
 	}
 	m := manifest.Decode(d.Manifest)
 	sel, ok := SelectAsset(d.Assets, in.goarch(), m)

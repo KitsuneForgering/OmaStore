@@ -703,6 +703,32 @@ func TestRequireProvenance(t *testing.T) {
 	}
 }
 
+// A blocked app is neither installed nor updated, before any download, but
+// it can still be uninstalled.
+func TestBlockedApp(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.publish(t, "v1", appTarGz(t, "1"), asset.FormatTarGz, true)
+	if _, err := e.in.Install(ctx, "acme/omaphoto", Options{}); err != nil {
+		t.Fatal(err)
+	}
+	e.publish(t, "v2", appTarGz(t, "2"), asset.FormatTarGz, true)
+	if err := e.st.SetBlocklist(ctx, map[string]string{"acme/omaphoto": "ships malware"}); err != nil {
+		t.Fatal(err)
+	}
+	hits := e.hits.Load()
+	if _, err := e.in.Update(ctx, "acme/omaphoto", Options{AllowUnverified: true}); !errors.Is(err, ErrBlocked) ||
+		!strings.Contains(err.Error(), "ships malware") {
+		t.Fatalf("update of a blocked app: %v", err)
+	}
+	if e.hits.Load() != hits {
+		t.Error("downloaded before refusing")
+	}
+	if err := e.in.Uninstall(ctx, "acme/omaphoto", false); err != nil {
+		t.Fatalf("uninstall of a blocked app: %v", err)
+	}
+}
+
 func TestVerifiable(t *testing.T) {
 	for _, c := range []struct {
 		a    store.Asset

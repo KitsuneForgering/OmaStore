@@ -77,6 +77,7 @@ func Open(ctx context.Context, log *slog.Logger) (*App, error) {
 			Log:      log,
 			// Sigstore's trust root (TUF) is cached beside the other caches.
 			Provenance: &provenance.Lazy{CacheDir: filepath.Join(paths.CacheDir, "sigstore")},
+			Blocklist:  index.DefaultBlocklist,
 		},
 		Installer: inst,
 		Images:    &imagecache.Cache{Dir: paths.ImagesDir},

@@ -24,6 +24,7 @@ import (
 	"github.com/KitsuneForgering/OmaStore/backend/internal/install"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/manifest"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/provenance"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/repoid"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/sysdeps"
 )
@@ -107,7 +108,13 @@ type Indexer struct {
 	// Provenance verifies the build provenance of the files an install would
 	// pick (when GH is an AttestationLister); nil leaves it unknown.
 	Provenance ProvenanceVerifier
+	// Blocklist is "owner/repo:path" of the curated list of blocked apps,
+	// read at the start of every run; "" turns it off.
+	Blocklist string
 }
+
+// DefaultBlocklist is the list OmaStore's maintainers keep.
+const DefaultBlocklist = "KitsuneForgering/OmaStore:catalog/blocklist.txt"
 
 // Options controls a run.
 type Options struct {
@@ -424,6 +431,7 @@ func (ix *Indexer) run(ctx context.Context, opts Options) (Stats, error) {
 	if err := ix.Store.PruneNotApps(ctx, ix.now().Add(-notAppKeep)); err != nil {
 		ix.log().Warn("could not prune not-app marks", "err", err)
 	}
+	ix.refreshBlocklist(ctx)
 
 	names := opts.Only
 	// discovered is what this run found; canPrune is false when discovery did
@@ -1223,4 +1231,40 @@ func normalize(s string) string {
 		}
 		return r
 	}, strings.ToLower(s))
+}
+
+// refreshBlocklist replaces the stored blocklist with the curated one. When
+// it cannot be read (offline, rate limit), the previous list stays.
+func (ix *Indexer) refreshBlocklist(ctx context.Context) {
+	repo, path, ok := strings.Cut(ix.Blocklist, ":")
+	if !ok {
+		return
+	}
+	content, found, err := ix.GH.File(ctx, repo, path, "", 64<<10)
+	if err != nil {
+		ix.log().Warn("blocklist not refreshed", "err", err)
+		return
+	}
+	blocked := ParseBlocklist(content)
+	if !found {
+		blocked = nil
+	}
+	if err := ix.Store.SetBlocklist(ctx, blocked); err != nil {
+		ix.log().Warn("blocklist not saved", "err", err)
+	}
+}
+
+// ParseBlocklist reads "owner/repo  # reason" lines; blank lines, comment
+// lines and invalid names are skipped.
+func ParseBlocklist(content string) map[string]string {
+	out := map[string]string{}
+	for _, line := range strings.Split(content, "\n") {
+		name, reason, _ := strings.Cut(line, "#")
+		name = strings.TrimSpace(name)
+		if name == "" || repoid.Validate(name) != nil {
+			continue
+		}
+		out[name] = strings.TrimSpace(reason)
+	}
+	return out
 }

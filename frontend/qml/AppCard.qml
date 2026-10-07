@@ -14,6 +14,7 @@ Rectangle {
     required property int stars
     required property string installedVersion
     required property bool updateAvailable
+    property bool blocked: false
 
     signal activated()
 
@@ -109,8 +110,8 @@ Rectangle {
             Item { Layout.fillWidth: true }
             Badge {
                 visible: card.installedVersion !== ""
-                text: card.updateAvailable ? qsTr("update available") : qsTr("installed")
-                tone: card.updateAvailable ? "warning" : "success"
+                text: card.blocked ? qsTr("blocked") : card.updateAvailable ? qsTr("update available") : qsTr("installed")
+                tone: card.blocked || card.updateAvailable ? "warning" : "success"
             }
         }
     }

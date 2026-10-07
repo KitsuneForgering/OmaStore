@@ -66,6 +66,8 @@ func (a *App) AutoUpdates(ctx context.Context) (ready, waiting []store.ListItem,
 		switch {
 		case !ok:
 			// No file for this machine in the new release: nothing to do.
+		case d.Blocked:
+			// Never updated; the Installed page says why.
 		case d.Install == nil || install.IsBroken(*d.Install):
 			waiting = append(waiting, it)
 		case install.Verifiable(sel) && (!strict || sel.Provenance != ""):

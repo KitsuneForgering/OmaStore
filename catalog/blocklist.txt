@@ -1,0 +1,8 @@
+# Apps blocked from OmaStore's catalog, read by every OmaStore at each refresh.
+# One "owner/repo  # reason" per line; the reason is shown to people who have
+# the app installed. A blocked app leaves the catalog and is never installed
+# or updated; uninstalling still works.
+#
+# Add an entry only for a reviewed report
+# (https://github.com/KitsuneForgering/OmaStore/issues?q=label%3Areport),
+# and link it in the commit message.

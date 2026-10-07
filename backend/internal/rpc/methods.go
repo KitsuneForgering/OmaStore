@@ -59,6 +59,10 @@ type AppItem struct {
 	LatestVersion    string   `json:"latestVersion"`
 	InstalledVersion string   `json:"installedVersion"`
 	UpdateAvailable  bool     `json:"updateAvailable"`
+	// Blocked: on OmaStore's blocklist (listed only when installed);
+	// blockedReason says why ("" when the list gives no reason).
+	Blocked       bool   `json:"blocked"`
+	BlockedReason string `json:"blockedReason"`
 }
 
 // AssetInfo is a release asset.
@@ -210,7 +214,9 @@ func toItem(it store.ListItem) AppItem {
 		Repo: it.FullName, Name: it.Name, Summary: it.Summary, IconURL: it.IconURL,
 		Screenshots: nonNil(it.Screenshots), Category: it.Category, Stars: it.Stars, Score: it.Score,
 		Installable: it.Installable, LatestVersion: it.LatestTag, InstalledVersion: it.InstalledVersion,
-		UpdateAvailable: it.InstalledVersion != "" && it.LatestTag != "" && it.InstalledVersion != it.LatestTag,
+		// A blocked app is never updated, so it offers no update.
+		UpdateAvailable: !it.Blocked && it.InstalledVersion != "" && it.LatestTag != "" && it.InstalledVersion != it.LatestTag,
+		Blocked:         it.Blocked, BlockedReason: it.BlockedReason,
 	}
 }
 
@@ -226,7 +232,8 @@ func toInstall(in store.Install) InstallInfo {
 }
 
 func toDetail(d *store.AppDetail) AppDetail {
-	it := store.ListItem{App: d.App, Stars: d.Repo.Stars, LatestTag: d.Repo.LatestTag}
+	it := store.ListItem{App: d.App, Stars: d.Repo.Stars, LatestTag: d.Repo.LatestTag,
+		Blocked: d.Blocked, BlockedReason: d.BlockedReason}
 	if d.Install != nil {
 		it.InstalledVersion = d.Install.Version
 	}

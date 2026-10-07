@@ -41,4 +41,3 @@ The catalog starts nearly empty until authors adopt `omastore.toml`, so first ru
 Detailed proposals, with evidence and cost, live in [`docs/ideas/`](docs/ideas/README.md)
 (signatures and the sandbox are in `trust.md`). Not written up yet:
 
-- [ ] Ratings/flagging of problematic apps

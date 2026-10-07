@@ -49,6 +49,7 @@ QVariant CatalogModel::data(const QModelIndex &index, int role) const
     case InstalledVersionRole: return o.value(QStringLiteral("installedVersion")).toString();
     case UpdateAvailableRole: return o.value(QStringLiteral("updateAvailable")).toBool();
     case ScreenshotsRole: return o.value(QStringLiteral("screenshots")).toArray().toVariantList();
+    case BlockedRole: return o.value(QStringLiteral("blocked")).toBool();
     }
     return {};
 }
@@ -67,6 +68,7 @@ QHash<int, QByteArray> CatalogModel::roleNames() const
         {InstalledVersionRole, "installedVersion"},
         {UpdateAvailableRole, "updateAvailable"},
         {ScreenshotsRole, "screenshots"},
+        {BlockedRole, "blocked"},
     };
 }
 

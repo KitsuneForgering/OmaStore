@@ -21,6 +21,8 @@ Page {
     readonly property var provenance: app.selectedAsset ? (app.selectedAsset.provenance || null) : null
     // The user requires provenance and this file has none.
     readonly property bool blockedByProvenance: backend.requireProvenance && !!app.selectedAsset && !provenance
+    // On OmaStore's blocklist: never installed or updated, only removed.
+    readonly property bool blocked: !!app.blocked
 
     background: Rectangle { color: theme.background }
 
@@ -142,6 +144,8 @@ Page {
             backend.notice(qsTr("%1 is already installed.").arg(page.app.name))
         else if (!page.app.installable)
             backend.notice(qsTr("The latest release has no Linux binary for this computer."))
+        else if (page.blocked)
+            backend.notice(qsTr("OmaStore's maintainers blocked this app."))
         else if (page.blockedByProvenance)
             backend.notice(qsTr("This file has no build provenance, and Settings allow only files that have it."))
         else if (!backend.connected)
@@ -156,6 +160,8 @@ Page {
             backend.notice(qsTr("%1 is not installed; press i to install it.").arg(page.app.name))
         else if (!page.app.updateAvailable)
             backend.notice(qsTr("%1 is up to date.").arg(page.app.name))
+        else if (page.blocked)
+            backend.notice(qsTr("OmaStore's maintainers blocked this app."))
         else if (page.blockedByProvenance)
             backend.notice(qsTr("This file has no build provenance, and Settings allow only files that have it."))
         else
@@ -532,12 +538,36 @@ Page {
                     Layout.alignment: Qt.AlignTop
                     spacing: theme.spaceM
 
+                    // Blocked by OmaStore's maintainers: said before any action.
+                    Rectangle {
+                        objectName: "blockedNotice"
+                        Layout.fillWidth: true
+                        visible: page.blocked
+                        implicitHeight: blockedText.implicitHeight + theme.spaceM * 2
+                        radius: theme.radiusM
+                        color: theme.surface
+                        border.color: theme.warning
+                        border.width: 1
+                        Text {
+                            id: blockedText
+                            anchors.fill: parent
+                            anchors.margins: theme.spaceM
+                            wrapMode: Text.Wrap
+                            color: theme.warning
+                            Accessible.role: Accessible.AlertMessage
+                            text: (page.app.blockedReason
+                                   ? qsTr("⚠ OmaStore's maintainers blocked this app: %1.").arg(page.app.blockedReason)
+                                   : qsTr("⚠ OmaStore's maintainers blocked this app."))
+                                  + " " + (page.installed ? qsTr("It is no longer updated; you can remove it.")
+                                                          : qsTr("It cannot be installed."))
+                        }
+                    }
                     // Actions first: they are why people open the page.
                     PrimaryButton {
                         objectName: "installButton"
                         Layout.fillWidth: true
                         visible: !page.installed && !page.busy
-                        enabled: backend.connected && !!page.app.installable && !page.blockedByProvenance
+                        enabled: backend.connected && !!page.app.installable && !page.blockedByProvenance && !page.blocked
                         text: page.app.installable ? qsTr("Install") : qsTr("No Linux binary")
                         onClicked: page.askOrRun(false)
                     }
@@ -581,7 +611,7 @@ Page {
                     PrimaryButton {
                         Layout.fillWidth: true
                         visible: page.installed && !!page.app.updateAvailable && !page.busy
-                        enabled: !page.blockedByProvenance
+                        enabled: !page.blockedByProvenance && !page.blocked
                         text: qsTr("Update to %1").arg(page.app.latestVersion)
                         onClicked: page.askOrRun(true)
                     }
@@ -599,7 +629,7 @@ Page {
                         objectName: "repairButton"
                         Layout.fillWidth: true
                         visible: page.broken && !page.busy
-                        enabled: backend.connected && !!page.app.installable
+                        enabled: backend.connected && !!page.app.installable && !page.blocked
                         text: qsTr("Repair")
                         onClicked: page.askOrRun(false)
                     }
@@ -769,6 +799,14 @@ Page {
                                 visible: !!page.app.htmlUrl
                                 text: qsTr("Report a problem ↗")
                                 onActivated: Qt.openUrlExternally(backend.issueUrl())
+                            }
+                            // To OmaStore's maintainers: harmful or misleading apps
+                            // leave the catalog (catalog/blocklist.txt).
+                            LinkText {
+                                objectName: "reportAppLink"
+                                visible: !!page.app.repo && !page.blocked
+                                text: qsTr("Report this app to OmaStore ↗")
+                                onActivated: Qt.openUrlExternally(backend.reportUrl())
                             }
                         }
                     }

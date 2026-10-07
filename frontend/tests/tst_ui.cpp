@@ -466,6 +466,32 @@ private slots:
         QTRY_COMPARE(install->property("enabled").toBool(), !required);
     }
 
+    // A blocked app says so before any action, and Install is off.
+    void blockedAppSaysWhy()
+    {
+        DetailHarness h([](const QString &method, const QJsonObject &params) -> QJsonObject {
+            if (method == "catalog.get") {
+                QJsonObject d = appDetail(params.value("repo").toString(), 0);
+                d.insert("blocked", true);
+                d.insert("blockedReason", "ships malware");
+                return {{"result", d}};
+            }
+            return {{"result", QJsonArray{}}};
+        });
+        QVERIFY2(h.page, qPrintable(h.error));
+        QVERIFY(h.open("demo/app"));
+        auto *notice = h.find("blockedNotice");
+        auto *install = h.find("installButton");
+        auto *report = h.find("reportAppLink");
+        QVERIFY(notice && install && report);
+        QTRY_VERIFY(notice->isVisible());
+        QVERIFY(!install->property("enabled").toBool());
+        QVERIFY(!report->isVisible());
+        QCOMPARE(Backend::buildReportUrl("https://github.com/Demo/App"),
+                 QStringLiteral("https://github.com/KitsuneForgering/OmaStore/issues/new?template=app_report.yml"
+                                "&title=Report:%20Demo/App&app=Demo/App"));
+    }
+
     // i installs and u updates; a key that cannot act says why.
     void keyboardInstallAndUpdate()
     {

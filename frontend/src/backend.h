@@ -96,7 +96,7 @@ public:
     bool settingsBusy() const { return m_settingsBusy; }
     // The protocol this interface was built for (docs/ipc.md) and the methods
     // it needs from the daemon.
-    static constexpr int Protocol = 3;
+    static constexpr int Protocol = 4;
     static const QStringList &requiredMethods();
     // daemonWarning for a daemon.hello result ("" when it fits).
     static QString helloWarning(const QJsonObject &hello);
@@ -146,6 +146,9 @@ public:
     // GitHub "new issue" link for the open app, prefilled with detailFailure
     // and the environment; the user reviews it in the browser before sending.
     Q_INVOKABLE QString issueUrl() const;
+    // Opens OmaStore's form to report the open app (catalog/blocklist.txt).
+    Q_INVOKABLE QString reportUrl() const;
+    static QString buildReportUrl(const QString &repo);
 
     // The issue link from an allow-list of fields: repo, versions, the release
     // files for arch, the store version and the error ($HOME shown as ~).

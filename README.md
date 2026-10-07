@@ -54,6 +54,11 @@ them cleanly.
   install with one click (pacman asks for your password; AUR packages are never
   installed for you). Apps with a background service get their `systemd --user`
   unit set up, kept across updates and removed with the app.
+- **Problem apps leave the catalog.** **Report this app to OmaStore** on an
+  app's page opens a form; apps the maintainers confirm as harmful or
+  misleading are blocked for everyone: they leave the catalog, are never
+  installed or updated, and people who have one see why. Stars on GitHub are
+  the ratings (the ★ button on each page).
 - **Feels like Omarchy.** Follows the active theme's colors and fonts and
   switches with it, works from the keyboard, and speaks English and Brazilian
   Portuguese (it follows the system language).

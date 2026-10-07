@@ -36,6 +36,7 @@ public:
         InstalledVersionRole,
         UpdateAvailableRole,
         ScreenshotsRole,
+        BlockedRole,
     };
     Q_ENUM(Role)
 

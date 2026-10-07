@@ -177,6 +177,8 @@ QString Backend::friendlyError(int code, const QString &message)
     case -32018:
         return tr("Your package database is older than the mirrors, so pacman could not download the "
                   "dependencies. Update the system (omarchy update), then try again. Nothing was installed.");
+    case -32020:
+        return tr("OmaStore's maintainers blocked this app, so it is not installed or updated.");
     case -32019:
         return tr("This file has no verified build provenance, and you chose to install only files that "
                   "have it (Settings).");
@@ -728,6 +730,25 @@ void Backend::launch()
     }
     if (!ok)
         emit errorOccurred(tr("Could not open %1: its menu entry or gtk-launch is missing.").arg(m_detailRepo));
+}
+
+QString Backend::reportUrl() const
+{
+    return buildReportUrl(m_detail.value(QStringLiteral("repo")).toString());
+}
+
+QString Backend::buildReportUrl(const QString &repo)
+{
+    const QString name = normalizeRepo(repo);
+    if (name.isEmpty())
+        return {};
+    QUrl url(QStringLiteral("https://github.com/KitsuneForgering/OmaStore/issues/new"));
+    QUrlQuery q;
+    q.addQueryItem(QStringLiteral("template"), QStringLiteral("app_report.yml"));
+    q.addQueryItem(QStringLiteral("title"), QStringLiteral("Report: ") + name);
+    q.addQueryItem(QStringLiteral("app"), name);
+    url.setQuery(q);
+    return url.toString(QUrl::FullyEncoded);
 }
 
 QString Backend::issueUrl() const

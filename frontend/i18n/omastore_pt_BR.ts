@@ -22,6 +22,10 @@
             <numerusform>%n estrelas</numerusform>
         </translation>
     </message>
+    <message>
+        <source>blocked</source>
+        <translation>bloqueado</translation>
+    </message>
 </context>
 <context>
     <name>Backend</name>
@@ -128,6 +132,10 @@
     <message>
         <source>Your package database is older than the mirrors, so pacman could not download the dependencies. Update the system (omarchy update), then try again. Nothing was installed.</source>
         <translation>Seu banco de pacotes está mais antigo que os espelhos, então o pacman não conseguiu baixar as dependências. Atualize o sistema (omarchy update) e tente de novo. Nada foi instalado.</translation>
+    </message>
+    <message>
+        <source>OmaStore&apos;s maintainers blocked this app, so it is not installed or updated.</source>
+        <translation>Os mantenedores do OmaStore bloquearam este app, então ele não é instalado nem atualizado.</translation>
     </message>
     <message>
         <source>This file has no verified build provenance, and you chose to install only files that have it (Settings).</source>
@@ -485,6 +493,10 @@
         <translation>A release mais recente não tem binário Linux para este computador.</translation>
     </message>
     <message>
+        <source>OmaStore&apos;s maintainers blocked this app.</source>
+        <translation>Os mantenedores do OmaStore bloquearam este app.</translation>
+    </message>
+    <message>
         <source>This file has no build provenance, and Settings allow only files that have it.</source>
         <translation>Este arquivo não tem proveniência de build, e as Configurações só permitem arquivos que a têm.</translation>
     </message>
@@ -612,6 +624,22 @@ Em execução: %1</translation>
         <translation>Próxima ›</translation>
     </message>
     <message>
+        <source>⚠ OmaStore&apos;s maintainers blocked this app: %1.</source>
+        <translation>⚠ Os mantenedores do OmaStore bloquearam este app: %1.</translation>
+    </message>
+    <message>
+        <source>⚠ OmaStore&apos;s maintainers blocked this app.</source>
+        <translation>⚠ Os mantenedores do OmaStore bloquearam este app.</translation>
+    </message>
+    <message>
+        <source>It is no longer updated; you can remove it.</source>
+        <translation>Ele não recebe mais atualizações; você pode removê-lo.</translation>
+    </message>
+    <message>
+        <source>It cannot be installed.</source>
+        <translation>Ele não pode ser instalado.</translation>
+    </message>
+    <message>
         <source>Install</source>
         <translation>Instalar</translation>
     </message>
@@ -730,6 +758,10 @@ Em execução: %1</translation>
     <message>
         <source>Report a problem ↗</source>
         <translation>Relatar um problema ↗</translation>
+    </message>
+    <message>
+        <source>Report this app to OmaStore ↗</source>
+        <translation>Denunciar este app ao OmaStore ↗</translation>
     </message>
     <message>
         <source>missing</source>

@@ -6,6 +6,13 @@ All notable changes to OmaStore are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Report and block problem apps: **Report this app to OmaStore** opens an issue
+  form, and apps listed in `catalog/blocklist.txt` (read at every refresh)
+  leave the catalog, are never installed or updated, and show the reason to
+  people who have them installed (`omastore show` too).
+
 ### Fixed
 
 - Installing an app's system dependencies works with the socket-activated

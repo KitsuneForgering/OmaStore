@@ -499,6 +499,9 @@ func cmdShow(ctx context.Context, a *app.App, args []string, stdout, stderr io.W
 			fmt.Fprintf(stdout, "             built by %s at %s (%s)\n", p.Workflow, p.Ref, shortSHA(p.Commit))
 		}
 	}
+	if d.Blocked {
+		fmt.Fprintf(stdout, "blocked:     by OmaStore's maintainers: %s\n", orDash(d.BlockedReason))
+	}
 	if d.Install != nil {
 		fmt.Fprintf(stdout, "installed:   %s on %s\n", d.Install.Version, d.Install.InstalledAt.Local().Format(time.DateTime))
 		fmt.Fprintf(stdout, "executable:  %s\n", d.Install.ExecPath)

@@ -134,6 +134,7 @@ Rules:
 - `installs` — installed app, version, date, list of created files, and the previous version kept on disk.
 - `not_apps` — repositories recently found without an app `omastore.toml`; skipped without requests for 7 days unless a direct seed, manifest search result or GraphQL snapshot warrants rechecking.
 - `settings` — user preferences as key/value text (`auto_update`, `auto_check_at`, `require_provenance`); a missing key is the default.
+- `blocked` — apps on `catalog/blocklist.txt` (OmaStore repo, read every index run): out of the catalog, never installed or updated.
 - `assets.provenance` — verified build provenance (JSON workflow/ref/commit) of the file each architecture installs; '' when none.
 - `apps.sysdeps` — `depends`/`optdepends` read from the repository's PKGBUILD/.SRCINFO at index time (JSON).
 - `repos.release_notes` — body of the latest release (markdown, capped at 16 KiB), shown as "What's new".

@@ -1,0 +1,40 @@
+name: Report an app in the catalog
+description: An app is harmful, misleading or abandoned and should leave OmaStore's catalog.
+title: "Report: "
+labels: [report]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Maintainers review each report. A confirmed one adds the app to
+        [`catalog/blocklist.txt`](https://github.com/KitsuneForgering/OmaStore/blob/master/catalog/blocklist.txt):
+        it leaves the catalog, cannot be installed or updated, and people who
+        have it see why. For a bug in the app itself, open an issue in its own
+        repository. For a security flaw in OmaStore, use a private advisory.
+  - type: input
+    id: app
+    attributes:
+      label: App
+      placeholder: owner/repo
+    validations:
+      required: true
+  - type: dropdown
+    id: reason
+    attributes:
+      label: Reason
+      options:
+        - Malicious or harmful behavior
+        - Pretends to be another app or author
+        - Does not do what its page says
+        - Abandoned and broken
+        - License or copyright problem
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: What you saw
+      description: Links, versions and steps help the review. Do not paste tokens or personal data.
+    validations:
+      required: true

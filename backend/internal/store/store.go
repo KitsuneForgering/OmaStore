@@ -180,6 +180,9 @@ type AppDetail struct {
 	Repo    Repo
 	Assets  []Asset
 	Install *Install
+	// Blocked: the app is on OmaStore's blocklist, for BlockedReason.
+	Blocked       bool
+	BlockedReason string
 }
 
 // ListItem is a catalog row.
@@ -188,6 +191,10 @@ type ListItem struct {
 	Stars            int
 	LatestTag        string
 	InstalledVersion string
+	// Blocked is set for an app on OmaStore's blocklist (only installed ones
+	// are listed); BlockedReason says why.
+	Blocked       bool
+	BlockedReason string
 }
 
 // Filter narrows ListApps.
@@ -362,13 +369,17 @@ func (s *Store) ListApps(ctx context.Context, f Filter) ([]ListItem, error) {
 	}
 	if f.InstalledOnly {
 		where = append(where, "i.full_name IS NOT NULL")
+	} else {
+		// Blocked apps stay visible only to those who have them installed.
+		where = append(where, "b.full_name IS NULL")
 	}
 	query := `
 		SELECT a.full_name, a.name, a.summary, a.icon_url, a.screenshots, a.category, a.score, a.installable,
-		       r.stars, r.latest_tag, COALESCE(i.version, '')
+		       r.stars, r.latest_tag, COALESCE(i.version, ''), b.full_name IS NOT NULL, COALESCE(b.reason, '')
 		FROM apps a
 		JOIN repos r ON r.full_name = a.full_name
-		LEFT JOIN installs i ON i.full_name = a.full_name`
+		LEFT JOIN installs i ON i.full_name = a.full_name
+		LEFT JOIN blocked b ON b.full_name = a.full_name`
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -387,7 +398,7 @@ func (s *Store) ListApps(ctx context.Context, f Filter) ([]ListItem, error) {
 		var it ListItem
 		var shots string
 		if err := rows.Scan(&it.FullName, &it.Name, &it.Summary, &it.IconURL, &shots, &it.Category,
-			&it.Score, &it.Installable, &it.Stars, &it.LatestTag, &it.InstalledVersion); err != nil {
+			&it.Score, &it.Installable, &it.Stars, &it.LatestTag, &it.InstalledVersion, &it.Blocked, &it.BlockedReason); err != nil {
 			return nil, fmt.Errorf("read app: %w", err)
 		}
 		it.Screenshots = decodeList(shots)
@@ -404,7 +415,10 @@ func escapeLike(s string) string {
 // Categories lists the categories that have installable apps.
 func (s *Store) Categories(ctx context.Context) ([]CategoryCount, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT category, COUNT(*) FROM apps WHERE installable = 1 GROUP BY category ORDER BY category`)
+		`SELECT category, COUNT(*) FROM apps
+		 WHERE installable = 1
+		   AND NOT EXISTS (SELECT 1 FROM blocked b WHERE b.full_name = apps.full_name)
+		 GROUP BY category ORDER BY category`)
 	if err != nil {
 		return nil, fmt.Errorf("list categories: %w", err)
 	}
@@ -450,6 +464,9 @@ func (s *Store) GetApp(ctx context.Context, fullName string) (*AppDetail, error)
 
 	d.Assets, err = s.Assets(ctx, d.FullName, d.Repo.LatestTag)
 	if err != nil {
+		return nil, err
+	}
+	if d.BlockedReason, d.Blocked, err = s.Blocked(ctx, d.FullName); err != nil {
 		return nil, err
 	}
 	inst, err := s.GetInstall(ctx, d.FullName)

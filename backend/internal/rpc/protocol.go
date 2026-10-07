@@ -19,7 +19,7 @@ import (
 // ProtocolVersion is returned by daemon.hello. Bump it whenever a method or
 // a DTO changes: the interface compares it with the one it was built for and
 // tells the user when the running daemon is older (docs/ipc.md).
-const ProtocolVersion = 3
+const ProtocolVersion = 4
 
 // Methods are the methods this daemon answers, also returned by
 // daemon.hello so an interface can check for the ones it needs.
@@ -90,6 +90,7 @@ const (
 	CodeUnverified     = -32017
 	CodeStaleDatabase  = -32018
 	CodeNoProvenance   = -32019
+	CodeBlocked        = -32020
 )
 
 // ErrBusy means an equivalent job is already running.
@@ -136,6 +137,8 @@ func toError(err error) *Error {
 		code = CodeUnverified
 	case errors.Is(err, install.ErrNoProvenance):
 		code = CodeNoProvenance
+	case errors.Is(err, install.ErrBlocked):
+		code = CodeBlocked
 	case errors.Is(err, github.ErrNoToken), errors.Is(err, github.ErrStarForbidden):
 		code = CodeAuthRequired
 	case errors.Is(err, sysdeps.ErrDenied):
