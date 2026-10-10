@@ -16,3 +16,4 @@ stays in git; `TODO.md` also drops finished items).
 | [omarchy-integration.md](omarchy-integration.md) | An OmaStore entry in the Omarchy menu | low (waits on Omarchy) |
 | [search-relevance.md](search-relevance.md) | Relevance cutoff and feedback for searches without good results | low (until the catalog grows) |
 | [omarchy-plugins.md](omarchy-plugins.md) | Omarchy shell plugins as a second catalog section | declined for now (2026-09-30) |
+| [older-qt-build.md](older-qt-build.md) | Build the frontend against the oldest supported Qt (6.5/6.8) | low |

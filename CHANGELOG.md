@@ -6,6 +6,14 @@ All notable changes to OmaStore are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The released `omastore-gui` no longer requires a newer Qt than the systems
+  it runs on have: the release and frontend CI builds run in a pinned Arch
+  snapshot (Qt 6.10) instead of the rolling `archlinux:latest`, and
+  `make check-qt-floor` fails the build if the GUI needs Qt symbols above the
+  floor.
+
 ## [0.5.0] - 2026-10-10
 
 ### Added

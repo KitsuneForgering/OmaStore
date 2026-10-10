@@ -36,7 +36,7 @@ DESTDIR ?=
 GOLDFLAGS ?=
 
 .DEFAULT_GOAL := all
-.PHONY: all help build backend frontend test test-backend test-frontend check \
+.PHONY: all help build backend frontend test test-backend test-frontend check-qt-floor check \
         vet fmt fmt-check tidy run run-daemon run-gui clean check-cmake install uninstall release dist \
         pkgbuild-bin test-skills test-installer translations
 
@@ -111,6 +111,23 @@ RELEASE_DIR := $(FRONTEND)/build-release
 release: ## Build everything in Release mode (frontend in frontend/build-release)
 	$(MAKE) backend
 	$(MAKE) frontend BUILD_TYPE=Release BUILD_DIR=$(RELEASE_DIR)
+
+# The shipped GUI is built against this Qt floor (pinned build environment,
+# see CONTRIBUTING.md and .github/workflows/release.yml). A binary that needs
+# Qt symbols above the floor cannot run on systems that are at the floor, so
+# check-qt-floor trips and fails the build instead of silently requiring a
+# newer Qt. Raise the floor deliberately, together with the pinned snapshot.
+QT_FLOOR ?= 6.10
+
+check-qt-floor: GUI_BIN ?= $(RELEASE_DIR)/omastore-gui
+check-qt-floor: ## Fail if the built GUI needs Qt symbols above $(QT_FLOOR)
+	@test -x "$(GUI_BIN)" || { echo "$(GUI_BIN): not built, run 'make release' first"; exit 1; }
+	@max="$$(objdump -T "$(GUI_BIN)" | grep -oE 'Qt_6\.[0-9]+' | sort -uV | tail -1)"; \
+		if [ "$$max" != "Qt_$(QT_FLOOR)" ]; then \
+			echo "$(GUI_BIN) needs $$max, floor is Qt_$(QT_FLOOR)" >&2; \
+			exit 1; \
+		fi; \
+		echo "$(GUI_BIN): Qt symbols up to $$max (floor Qt_$(QT_FLOOR))"
 
 install: ## Install into $(DESTDIR)$(PREFIX) (after make release)
 	install -Dm755 $(BIN)/omastore  $(DESTDIR)$(PREFIX)/bin/omastore

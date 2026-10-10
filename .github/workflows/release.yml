@@ -12,7 +12,12 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    container: archlinux:latest
+    # A fixed Arch snapshot (2026-03-15: Go 1.26, Qt 6.10.2), not the rolling
+    # archlinux:latest. The shipped omastore-gui must run on systems with an
+    # older Qt than the build's: the floor is enforced by `make check-qt-floor`
+    # below. Bump the snapshot and QT_FLOOR only deliberately.
+    container:
+      image: archlinux:base-20260315.0.500537
     env:
       # The tag comes in through an environment variable, never interpolated into the script.
       VERSION: ${{ github.ref_name }}
@@ -24,8 +29,12 @@ jobs:
             exit 1
           fi
 
+      # Live mirrors would upgrade the pinned Qt again, so point pacman at the
+      # Arch Linux Archive for the snapshot's own date.
       - name: Dependencies
-        run: pacman -Syu --noconfirm --needed base-devel git go cmake ninja qt6-base qt6-declarative qt6-svg qt6-tools
+        run: |
+          printf 'Server=https://archive.archlinux.org/repos/2026/03/15/$repo/os/$arch\n' >/etc/pacman.d/mirrorlist
+          pacman -Syu --noconfirm --needed base-devel git go cmake ninja qt6-base qt6-declarative qt6-svg qt6-tools
 
       - uses: actions/checkout@v7
         with:
@@ -47,6 +56,9 @@ jobs:
 
       - name: Frontend tests (release build)
         run: QT_QPA_PLATFORM=offscreen ctest --test-dir frontend/build-release --output-on-failure
+
+      - name: Qt symbol floor
+        run: make check-qt-floor GUI_BIN=frontend/build-release/omastore-gui
 
       - name: Provenance (SLSA)
         uses: actions/attest-build-provenance@v4

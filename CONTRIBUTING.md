@@ -44,6 +44,19 @@ A single backend test: `make test-backend TESTFLAGS='-run TestName ./internal/in
 Set `GITHUB_TOKEN` (or run `gh auth login`) before indexing: anonymous access
 allows 60 GitHub requests per hour.
 
+## The release build is pinned
+
+The **Release** workflow and the frontend CI job build inside a fixed Arch
+snapshot (`archlinux:base-20260315.0.500537`, i.e. 2026-03-15: Go 1.26 and
+Qt 6.10.2), with pacman pointed at the Arch Linux Archive for that date, never
+the rolling `archlinux:latest`. The shipped `omastore-gui` is dynamically
+linked against Qt, so a build made with a newer Qt than the users' systems have
+refuses to load there (`version 'Qt_6.12' not found`, on a system at Qt 6.11).
+`make check-qt-floor` fails the build if the GUI needs Qt symbols above the
+floor (`QT_FLOOR`, default 6.10). Raise the floor only deliberately, in the
+same change that bumps the snapshot and the floor check; the check is what
+catches a silent drift.
+
 ## How the code is organized
 
 The Go daemon (`backend/`) holds all the logic; the Qt interface (`frontend/`)

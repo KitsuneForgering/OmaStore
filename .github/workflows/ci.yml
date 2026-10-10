@@ -21,8 +21,14 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
-    container: archlinux:latest
+    # Same pinned Arch snapshot as the release build (see release.yml): Qt 6.10,
+    # so the floor check runs in the environment the tarball ships from.
+    container:
+      image: archlinux:base-20260315.0.500537
     steps:
-      - run: pacman -Syu --noconfirm --needed base-devel cmake ninja qt6-base qt6-declarative qt6-svg qt6-tools
+      - run: |
+          printf 'Server=https://archive.archlinux.org/repos/2026/03/15/$repo/os/$arch\n' >/etc/pacman.d/mirrorlist
+          pacman -Syu --noconfirm --needed base-devel cmake ninja qt6-base qt6-declarative qt6-svg qt6-tools
       - uses: actions/checkout@v7
       - run: make test-frontend
+      - run: make check-qt-floor GUI_BIN=frontend/build/omastore-gui
