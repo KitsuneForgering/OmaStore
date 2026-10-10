@@ -6,6 +6,21 @@ All notable changes to OmaStore are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-10
+
+### Added
+
+- The Publish your app checker downloads the release files selected for both
+  architectures and inspects their checksums, package contents, executables,
+  architecture and declared user service executables without installing or
+  running them. It also checks whether catalog images can be displayed and
+  reports release notes, README links and system dependency availability.
+
+### Changed
+
+- Tag builds create a draft release. Publication waits for the tag's CI and
+  release build to pass on the same commit.
+
 ## [0.4.1] - 2026-10-07
 
 ### Added

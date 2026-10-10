@@ -108,6 +108,12 @@ type Indexer struct {
 	// Provenance verifies the build provenance of the files an install would
 	// pick (when GH is an AttestationLister); nil leaves it unknown.
 	Provenance ProvenanceVerifier
+	// Inspect checks release contents using the installer's read-only path.
+	Inspect func(context.Context, store.Asset, string, *manifest.Manifest, string) (install.Inspection, error)
+	// ValidateImage fetches and validates an image through the normal image cache.
+	ValidateImage func(context.Context, string) (string, error)
+	// CheckDependencies asks pacman whether declared system packages are available.
+	CheckDependencies func(context.Context, sysdeps.Set) (sysdeps.Report, error)
 	// Blocklist is "owner/repo:path" of the curated list of blocked apps,
 	// read at the start of every run; "" turns it off.
 	Blocklist string

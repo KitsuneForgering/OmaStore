@@ -112,7 +112,11 @@ never accesses the network directly.
 `author.check` runs the indexing rules for one repository and tells its author
 what the store understands and what to fix. `manifest`, when present (even
 `""`), is used instead of the published `omastore.toml`, to test a file before
-pushing it. Costs a handful of GitHub requests; a rate limit is error `-32005`.
+pushing it. It also downloads the selected release assets for both architectures
+and validates their checksums, contents and executables in a temporary directory;
+catalog images are fetched through the image cache. It neither installs nor runs
+the app. Large assets can make this request slow and use significant bandwidth.
+A rate limit is error `-32005`.
 
 `star.get`/`star.set` act as the owner of the daemon's GitHub token
 (`GITHUB_TOKEN`, `GH_TOKEN` or `gh auth token`); without one, or with a token

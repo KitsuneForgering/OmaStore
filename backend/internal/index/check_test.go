@@ -7,8 +7,10 @@ import (
 
 	"github.com/KitsuneForgering/OmaStore/backend/internal/asset"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/github"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/install"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/manifest"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/sysdeps"
 )
 
 func checkOf(r *Report, item string) (Check, bool) {
@@ -153,5 +155,51 @@ func TestCheckLocalManifestAndDiscovery(t *testing.T) {
 	}
 	if c, _ := checkOf(r, "Discovery"); c.Status != CheckWarn || !strings.Contains(c.Fix, "omarchy") {
 		t.Errorf("without the topic: %+v", c)
+	}
+}
+
+func TestCheckReportsPackageAndImageFailures(t *testing.T) {
+	ix, _, _ := setup(t)
+	ix.Inspect = func(_ context.Context, _ store.Asset, _ string, _ *manifest.Manifest, arch string) (install.Inspection, error) {
+		if arch == asset.ArchAMD64 {
+			return install.Inspection{}, &install.InspectionError{Stage: "package", Err: install.ErrNoExecutable}
+		}
+		return install.Inspection{Executable: "bin/omaphoto", Verified: true}, nil
+	}
+	ix.ValidateImage = func(_ context.Context, _ string) (string, error) {
+		return "", install.ErrUnsafePath
+	}
+	r, err := ix.Check(context.Background(), "acme/omaphoto", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Compatible() {
+		t.Fatalf("missing executable should fail: %+v", r.Checks)
+	}
+	if c, _ := checkOf(r, "Package on x86_64"); c.Status != CheckFail {
+		t.Errorf("package = %+v", c)
+	}
+	if c, _ := checkOf(r, "Icon file"); c.Status != CheckWarn {
+		t.Errorf("icon = %+v", c)
+	}
+}
+
+func TestCheckReportsUnavailableSystemDependency(t *testing.T) {
+	ix, gh, _ := setup(t)
+	rp := gh.repos["acme/omaphoto"]
+	rp.files = append(rp.files, ".SRCINFO")
+	rp.extra[".SRCINFO"] = "pkgbase = omaphoto\npkgname = omaphoto\ndepends = missing-lib\n"
+	ix.CheckDependencies = func(_ context.Context, set sysdeps.Set) (sysdeps.Report, error) {
+		if len(set.Deps) != 1 || set.Deps[0].Spec != "missing-lib" {
+			t.Fatalf("unexpected dependencies: %+v", set)
+		}
+		return sysdeps.Report{Deps: []sysdeps.DepState{{Dep: set.Deps[0], Status: sysdeps.StatusUnavailable}}}, nil
+	}
+	r, err := ix.Check(context.Background(), "acme/omaphoto", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := checkOf(r, "Dependency availability"); c.Status != CheckWarn || !strings.Contains(c.Detail, "missing-lib") {
+		t.Errorf("availability = %+v", c)
 	}
 }

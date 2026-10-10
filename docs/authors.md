@@ -285,8 +285,17 @@ omastore check --manifest omastore.toml you/myapp   # local file, before pushing
 omastore check --json you/myapp                 # for CI; exit code 1 = not compatible
 ```
 
-The check writes nothing to your catalog. To see the full path, including a
-real installation:
+The check downloads the selected release files for both architectures and
+opens them in temporary directories. It verifies their checksums, extraction,
+executable and declared service executables without running them. It also
+fetches the catalog images to confirm they can be displayed. It writes nothing
+to your catalog and does not install the app. The check can take time and use
+significant bandwidth for large releases. A failed download leaves the result
+incomplete, so it is reported as a failure to retry.
+
+Content quality and runtime behavior still need a person: read the release
+notes and description, and test a real installation to confirm startup, user
+services, dependencies and the menu entry:
 
 ```sh
 omastore index you/myapp        # indexes only your repository

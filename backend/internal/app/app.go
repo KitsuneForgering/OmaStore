@@ -86,6 +86,9 @@ func Open(ctx context.Context, log *slog.Logger) (*App, error) {
 		Log:       log,
 	}
 	a.Indexer.Snapshot = snapshotFetcher{URL: snapshotURL, HTTP: snapshotClient, Lister: gh, Verifier: prov}.Fetch
+	a.Indexer.Inspect = inst.Inspect
+	a.Indexer.ValidateImage = a.Images.Get
+	a.Indexer.CheckDependencies = a.Pacman.Check
 	return a, nil
 }
 

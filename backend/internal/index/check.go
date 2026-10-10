@@ -2,6 +2,7 @@ package index
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -9,8 +10,10 @@ import (
 
 	"github.com/KitsuneForgering/OmaStore/backend/internal/asset"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/github"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/install"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/manifest"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/sysdeps"
 )
 
 // Check statuses: a failure keeps the app out of the catalog or from
@@ -162,6 +165,47 @@ func (ix *Indexer) Check(ctx context.Context, name string, override *string) (*R
 	}
 	r.Name, r.Summary, r.Category = app.Name, app.Summary, app.Category
 	r.IconURL, r.Screenshots, r.Tag, r.Assets = app.IconURL, app.Screenshots, tagOf(rel), assets
+	if rel != nil {
+		if strings.TrimSpace(app.Readme) == "" {
+			r.add(CheckWarn, "README", "no app description page found", "add a README that explains what the app does")
+		} else if !strings.Contains(strings.ToLower(app.Readme), "omastore://"+strings.ToLower(name)) {
+			r.add(CheckWarn, "Store link", "the README does not link to omastore://"+name,
+				"add a store link and explain how to find the app on GitHub")
+		} else {
+			r.add(CheckOK, "Store link", "found in README", "")
+		}
+		if app.Changelog != "" {
+			r.add(CheckOK, "Changelog", "root CHANGELOG.md appears on the app page", "")
+		}
+		if app.SysDeps != "" {
+			r.add(CheckOK, "System dependencies", "parsed from PKGBUILD or .SRCINFO", "")
+			if ix.CheckDependencies != nil {
+				var set sysdeps.Set
+				if err := json.Unmarshal([]byte(app.SysDeps), &set); err == nil {
+					report, err := ix.CheckDependencies(ctx, set)
+					if err != nil {
+						r.add(CheckWarn, "Dependency availability", err.Error(), "check with omastore deps after indexing")
+					} else {
+						var unavailable []string
+						for _, d := range report.Deps {
+							if d.Status == sysdeps.StatusUnavailable {
+								unavailable = append(unavailable, d.Spec)
+							}
+						}
+						if len(unavailable) > 0 {
+							r.add(CheckWarn, "Dependency availability", "not in configured pacman repositories: "+strings.Join(unavailable, ", "),
+								"bundle these libraries or explain how users should install them")
+						} else {
+							r.add(CheckOK, "Dependency availability", "all declared packages are installed or available from pacman", "")
+						}
+					}
+				}
+			}
+		} else {
+			r.add(CheckWarn, "System dependencies", "none declared; confirm the release is portable",
+				"if system packages are needed, commit .SRCINFO or a PKGBUILD")
+		}
+	}
 
 	if app.Summary != "" {
 		r.add(CheckOK, "Summary", app.Summary, "")
@@ -187,6 +231,12 @@ func (ix *Indexer) Check(ctx context.Context, name string, override *string) (*R
 		return r, nil
 	}
 	r.add(CheckOK, "Release", rel.Tag, "")
+	if strings.TrimSpace(rel.Body) == "" {
+		r.add(CheckWarn, "Release notes", "the latest release has no notes for the app page",
+			"write a short user-facing summary of what changed")
+	} else {
+		r.add(CheckOK, "Release notes", "present", "")
+	}
 
 	if app.IconURL != "" {
 		r.add(CheckOK, "Icon", app.IconURL, "")
@@ -197,6 +247,21 @@ func (ix *Indexer) Check(ctx context.Context, name string, override *string) (*R
 		r.add(CheckOK, "Screenshots", fmt.Sprintf("%d found", n), "")
 	} else {
 		r.add(CheckWarn, "Screenshots", "none found", "add images to the README or screenshots in the manifest")
+	}
+	if ix.ValidateImage != nil {
+		if app.IconURL != "" {
+			if _, err := ix.ValidateImage(ctx, app.IconURL); err != nil {
+				r.add(CheckWarn, "Icon file", err.Error(), "publish a supported image no larger than 15 MiB")
+			} else {
+				r.add(CheckOK, "Icon file", "image can be displayed", "")
+			}
+		}
+		for i, url := range app.Screenshots {
+			if _, err := ix.ValidateImage(ctx, url); err != nil {
+				r.add(CheckWarn, fmt.Sprintf("Screenshot %d", i+1), err.Error(),
+					"publish a supported image no larger than 15 MiB")
+			}
+		}
 	}
 
 	goarch := ix.goarch()
@@ -230,6 +295,43 @@ func (ix *Indexer) Check(ctx context.Context, name string, override *string) (*R
 		r.add(CheckFail, "Installable on "+archLabel(goarch), detail,
 			"publish myapp-<version>-"+archLabel(goarch)+"-linux.tar.gz, or declare the asset in the manifest")
 	}
+	if ix.Inspect != nil {
+		for _, arch := range []string{asset.ArchAMD64, asset.ArchARM64} {
+			sel, ok := install.SelectAsset(assets, arch, m)
+			if !ok {
+				continue
+			}
+			info, err := ix.Inspect(ctx, sel, repo.Name, m, arch)
+			item := "Package on " + archLabel(arch)
+			if err != nil {
+				r.add(CheckFail, item, err.Error(), "check the release asset and try again")
+				continue
+			}
+			r.add(CheckOK, item, "executable: "+info.Executable, "")
+			if info.DeclaredExecError != "" {
+				r.add(CheckWarn, "Declared executable", info.DeclaredExecError,
+					"fix linux."+archLabel(arch)+".exec; the installer used its heuristic")
+			}
+			if !info.Verified {
+				r.add(CheckWarn, "Checksum on "+archLabel(arch), "no verifiable checksum for the downloaded file",
+					"publish a checksum or use GitHub's asset digest")
+			}
+			if info.WrongArch {
+				r.add(CheckFail, "Architecture", item+" contains a binary for another architecture", "rebuild this release asset")
+			}
+			if len(info.Missing) > 0 {
+				r.add(CheckWarn, "Libraries", strings.Join(info.Missing, ", ")+" are unavailable on this machine",
+					"bundle the libraries or declare the required pacman packages in .SRCINFO")
+			}
+			if len(info.Services) > 0 {
+				r.add(CheckOK, "Service executables", strings.Join(info.Services, ", ")+" found in package", "")
+			}
+		}
+	}
+	if len(m.Services) > 0 {
+		r.add(CheckWarn, "Service runtime", "unit conflicts and startup need a real installation on the target machine",
+			"install the app once and verify its user services with systemctl --user")
+	}
 	for _, arch := range []string{asset.ArchAMD64, asset.ArchARM64} {
 		if arch == goarch {
 			continue
@@ -241,7 +343,7 @@ func (ix *Indexer) Check(ctx context.Context, name string, override *string) (*R
 	}
 	var unverified []string
 	for _, a := range assets {
-		if a.Digest == "" && a.ChecksumURL == "" {
+		if !install.Verifiable(a) {
 			unverified = append(unverified, a.Name)
 		}
 	}

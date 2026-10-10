@@ -299,7 +299,7 @@ func printReport(w io.Writer, r *index.Report) {
 		fmt.Fprintf(w, "  Listed after a catalog refresh finds it (without the omarchy topic, only by clients with a\n"+
 			"  GitHub token; a repository checked before the manifest existed may wait up to 7 days).\n"+
 			"  Add it to your own catalog now: omastore index %s\n", r.Repo)
-		fmt.Fprintf(w, "  The check reads the release, it does not download or run the app: omastore install %s\n", r.Repo)
+		fmt.Fprintf(w, "  The check downloads and inspects the release without running it; verify startup with: omastore install %s\n", r.Repo)
 	}
 }
 

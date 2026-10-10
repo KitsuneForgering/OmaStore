@@ -1069,8 +1069,8 @@ Eles são instalados com o pacman, que pede a senha de administrador.</translati
         <translation>Ele é listado quando uma atualização do catálogo o encontra. Quem não tem token do GitHub só encontra repositórios com o tópico omarchy, e um repositório verificado antes de ter um omastore.toml pode esperar até 7 dias para ser olhado de novo. Para vê-lo no seu catálogo agora:</translation>
     </message>
     <message>
-        <source>This check reads your release; it does not download, install or run the app. Install it once to make sure the executable, its libraries and the menu entry work:</source>
-        <translation>Esta verificação lê sua release; ela não baixa, instala nem executa o app. Instale-o uma vez para confirmar que o executável, as bibliotecas e a entrada no menu funcionam:</translation>
+        <source>This check downloads and inspects the release without installing or running it. Install it once to verify startup, user services and the menu entry:</source>
+        <translation>Esta verificação baixa e inspeciona a release sem instalar nem executar o app. Instale-o uma vez para conferir a inicialização, os serviços de usuário e a entrada no menu:</translation>
     </message>
     <message>
         <source>Suggested omastore.toml</source>

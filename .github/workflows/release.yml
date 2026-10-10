@@ -58,9 +58,12 @@ jobs:
           chown -R builder "$GITHUB_WORKSPACE"
           su builder -c "make pkgbuild-bin VERSION=$VERSION"
 
-      - name: Publish
+      - name: Prepare draft release
         uses: softprops/action-gh-release@v3
         with:
+          # CI also runs on tag pushes. Keep the assets private until its
+          # checks and this workflow pass for the exact tagged commit.
+          draft: true
           generate_release_notes: true
           files: |
             dist/*.tar.gz

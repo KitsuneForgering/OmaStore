@@ -179,7 +179,8 @@ Your app joins the catalog in three steps:
    `actions/attest-build-provenance` so users see that your repository built it.
 3. **Check it:** open **Publish your app** in the sidebar, or run
    `omastore check owner/repo`. It shows what the store sees, what blocks it,
-   and a ready-to-commit `omastore.toml`. Nothing is installed.
+   and a ready-to-commit `omastore.toml`. The checker downloads and inspects
+   release files without installing or running the app.
 
 ![Checking a repository in OmaStore](docs/screenshots/publish.png)
 

@@ -363,7 +363,7 @@ Page {
                     }
                     Code { text: "omastore index " + page.report.repo }
                     Body {
-                        text: qsTr("This check reads your release; it does not download, install or run the app. Install it once to make sure the executable, its libraries and the menu entry work:")
+                        text: qsTr("This check downloads and inspects the release without installing or running it. Install it once to verify startup, user services and the menu entry:")
                     }
                     Code { text: "omastore install " + page.report.repo }
                 }
