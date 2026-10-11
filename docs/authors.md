@@ -205,6 +205,9 @@ asset = "rawmakase-{version}-x86_64-linux.tar.gz"   # {version} = tag without "v
 exec = "usr/bin/rawmakase"                 # executable inside the package ({version}/{tag} work here too)
 ```
 
+The catalog groups `Audio`, `Video`, and `AudioVideo` under **Audio/Video**.
+The original manifest categories are kept in the installed `.desktop` file.
+
 Rules:
 
 - **Paths:** must be relative and stay inside the repository (or the

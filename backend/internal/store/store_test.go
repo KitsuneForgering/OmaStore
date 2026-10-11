@@ -43,6 +43,47 @@ func TestOpenIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestExistingMediaCategoriesAreMergedOnOpen(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "catalog.db")
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []string{"Audio", "Video", "AudioVideo", "Graphics"} {
+		seed(t, s, "acme/"+c, 10, c, true)
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE apps SET manifest = '{"categories":["Audio"]}' WHERE category = 'Audio'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version = 18`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	cats, err := s.Categories(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cats) != 2 || cats[0].Category != "AudioVideo" || cats[0].Count != 3 || cats[1].Category != "Graphics" {
+		t.Errorf("categories = %+v", cats)
+	}
+	apps, err := s.ListApps(ctx, Filter{Category: "AudioVideo"})
+	if err != nil || len(apps) != 3 {
+		t.Errorf("media apps = %+v, err = %v", apps, err)
+	}
+	d, err := s.GetApp(ctx, "acme/Audio")
+	if err != nil || d.Category != "AudioVideo" || d.Manifest != `{"categories":["Audio"]}` {
+		t.Errorf("app = %+v, err = %v", d, err)
+	}
+}
+
 func TestMigrationFailureRollsBack(t *testing.T) {
 	s := openTest(t)
 	bad := fstest.MapFS{

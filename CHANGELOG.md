@@ -4,6 +4,15 @@ All notable changes to OmaStore are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.2] - 2026-10-11
+
+### Fixed
+
+- Apps declaring `Audio` or `Video` now appear in the same **Audio/Video**
+  catalog category as apps declaring `AudioVideo`. Existing catalog entries
+  are grouped on database upgrade; installed desktop entries retain the
+  categories declared by each app.
+
 ## [0.5.1] - 2026-10-10
 
 ### Fixed
@@ -297,7 +306,8 @@ First public release.
 - `install.sh`, `omastore-bin` PKGBUILD, reproducible release tarball with
   build provenance attestation, and optional systemd socket and daily timer.
 
-[Unreleased]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/KitsuneForgering/OmaStore/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/KitsuneForgering/OmaStore/compare/v0.4.0...v0.4.1

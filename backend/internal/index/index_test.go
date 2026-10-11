@@ -460,6 +460,30 @@ exec = "bin/omaphoto"
 	}
 }
 
+func TestManifestMediaCategoriesShareCatalogCategory(t *testing.T) {
+	for _, category := range []string{"Audio", "Video", "AudioVideo"} {
+		t.Run(category, func(t *testing.T) {
+			ix, gh, st := setup(t)
+			r := gh.repos["acme/omaphoto"]
+			r.files = append(r.files, "omastore.toml")
+			r.toml = `categories = ["` + category + `"]`
+			if _, err := ix.Run(context.Background(), Options{}); err != nil {
+				t.Fatal(err)
+			}
+			d, err := st.GetApp(context.Background(), "acme/omaphoto")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if d.Category != CatAudioVideo {
+				t.Errorf("catalog category = %q, want %q", d.Category, CatAudioVideo)
+			}
+			if !strings.Contains(d.Manifest, `"`+category+`"`) {
+				t.Errorf("manifest lost original category: %s", d.Manifest)
+			}
+		})
+	}
+}
+
 // A declared asset missing from the release makes the app not installable on
 // that architecture instead of falling back to a file the author did not mean.
 func TestMissingDeclaredAssetIsNotInstallable(t *testing.T) {
