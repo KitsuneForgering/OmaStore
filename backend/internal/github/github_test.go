@@ -102,7 +102,7 @@ func TestGetRepoETag(t *testing.T) {
 	if nm || etag != `"abc"` {
 		t.Errorf("nm=%v etag=%q", nm, etag)
 	}
-	if r.Stars != 42 || r.License != "MIT" || r.DefaultBranch != "main" || len(r.Topics) != 2 ||
+	if r.Stars != 42 || r.CreatedAt.Year() != 2024 || r.License != "MIT" || r.DefaultBranch != "main" || len(r.Topics) != 2 ||
 		!r.PushedAt.Equal(time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC)) || r.Owner != "acme" {
 		t.Errorf("repo = %+v", r)
 	}

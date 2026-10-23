@@ -45,7 +45,7 @@ const maxManifestBytes = 64 << 10
 
 // repoFields are the fields requested for each repository.
 const repoFields = `
-	nameWithOwner name owner { login } description stargazerCount pushedAt isArchived isFork url
+	nameWithOwner name owner { login } description stargazerCount pushedAt createdAt isArchived isFork url
 	licenseInfo { spdxId name }
 	repositoryTopics(first: 20) { nodes { topic { name } } }
 	defaultBranchRef { name target { oid } }
@@ -64,6 +64,7 @@ type gqlRepo struct {
 	Description    string    `json:"description"`
 	StargazerCount int       `json:"stargazerCount"`
 	PushedAt       time.Time `json:"pushedAt"`
+	CreatedAt      time.Time `json:"createdAt"`
 	IsArchived     bool      `json:"isArchived"`
 	IsFork         bool      `json:"isFork"`
 	URL            string    `json:"url"`
@@ -119,6 +120,7 @@ func (g *gqlRepo) snapshot() *Snapshot {
 		Topics:      []string{},
 		HTMLURL:     g.URL,
 		PushedAt:    g.PushedAt,
+		CreatedAt:   g.CreatedAt,
 		Archived:    g.IsArchived,
 		Fork:        g.IsFork,
 	}

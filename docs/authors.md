@@ -40,6 +40,7 @@ file may even be empty: its presence is the signal that you want the app in the 
 - The body of your latest release is shown on the app's page as "What's new":
   write release notes for people, not only a list of commits.
 - Archived repositories are left out; forks do not show up in the topic search.
+- If multiple repositories publish an app with the same display name, the catalog shows the one with more GitHub stars. Equal star counts favor the older repository. Installed copies remain visible on the Installed page.
 
 ## 2. Publish a release with a Linux binary
 

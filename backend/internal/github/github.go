@@ -389,6 +389,7 @@ type Repo struct {
 	HTMLURL       string
 	DefaultBranch string
 	PushedAt      time.Time
+	CreatedAt     time.Time
 	Archived      bool
 	Fork          bool
 }
@@ -424,6 +425,7 @@ func (c *Client) GetRepo(ctx context.Context, fullName, etag string) (repo *Repo
 		HTMLURL:       r.GetHTMLURL(),
 		DefaultBranch: r.GetDefaultBranch(),
 		PushedAt:      r.GetPushedAt().Time,
+		CreatedAt:     r.GetCreatedAt().Time,
 		Archived:      r.GetArchived(),
 		Fork:          r.GetFork(),
 	}

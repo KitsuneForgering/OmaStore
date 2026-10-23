@@ -17,7 +17,7 @@ import (
 const gqlRepoJSON = `{
   "nameWithOwner": "pch/rawmakase", "name": "rawmakase", "owner": {"login": "pch"},
   "description": "Free Lightroom alternative", "stargazerCount": 116,
-  "pushedAt": "2026-09-28T08:24:36Z", "isArchived": false, "isFork": false,
+  "pushedAt": "2026-09-28T08:24:36Z", "createdAt": "2024-01-10T10:00:00Z", "isArchived": false, "isFork": false,
   "url": "https://github.com/pch/rawmakase", "licenseInfo": {"spdxId": "MIT", "name": "MIT License"},
   "repositoryTopics": {"nodes": [{"topic": {"name": "photo"}}]},
   "defaultBranchRef": {"name": "main", "target": {"oid": "5a02a0e6"}},
@@ -76,7 +76,7 @@ func TestSnapshots(t *testing.T) {
 		t.Errorf("missing repo must be nil: %v %v", s, ok)
 	}
 	s := got["pch/rawmakase"]
-	if s.HeadSHA != "5a02a0e6" || s.Repo.Stars != 116 || s.Repo.License != "MIT" || s.Repo.DefaultBranch != "main" ||
+	if s.HeadSHA != "5a02a0e6" || s.Repo.Stars != 116 || s.Repo.CreatedAt.Year() != 2024 || s.Repo.License != "MIT" || s.Repo.DefaultBranch != "main" ||
 		len(s.Repo.Topics) != 1 || s.Release == nil || s.Release.Tag != "v0.1.6" || s.Release.Body != "- Fixes" ||
 		s.Release.Assets[0].Digest != "sha256:abc" || s.Release.Assets[0].Size != 10 ||
 		s.Manifest == nil || *s.Manifest != "kind = \"app\"\n" {

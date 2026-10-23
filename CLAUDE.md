@@ -88,7 +88,7 @@ Two processes with separate responsibilities:
    already stored are never reclassified.
 3. **Extraction** — README (rendered as short + long description), icon, screenshots, license,
    topics, stars and the system dependencies of the repository's PKGBUILD/.SRCINFO. Prefer the API; clone only if you need files the API does not deliver well.
-4. **Classification** — category from the topics; ordering by stars (with recency as tiebreaker).
+4. **Classification** — category from the topics; ordering by stars (with recency as tiebreaker). Repositories with the same app display name share one catalog slot: more stars wins, then the older repository creation date.
 5. **Persistence** — write everything in one transaction and record the processed SHA/tag.
 
 ## Installing an app
@@ -127,7 +127,7 @@ Rules:
 
 ## Database schema (summary)
 
-- `repos` — `full_name` (PK), description, stars, topics, `pushed_at`, `head_sha`, `latest_tag`, `release_sig`, `etag`,
+- `repos` — `full_name` (PK), description, stars, topics, `pushed_at`, `created_at`, `head_sha`, `latest_tag`, `release_sig`, `etag`,
   `indexed_at` (last checked), `changed_at` (last change; drives `catalog.changed` and the search index).
 - `apps` — display data derived from the repo: name, summary, README, icon, category, score.
 - `assets` — release assets per repo/tag (name, url, arch, format, checksum).

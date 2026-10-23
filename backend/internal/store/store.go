@@ -62,6 +62,7 @@ type Repo struct {
 	HTMLURL       string
 	DefaultBranch string
 	PushedAt      time.Time
+	CreatedAt     time.Time
 	HeadSHA       string
 	LatestTag     string
 	ReleaseSig    string // fingerprint of the latest release and its assets
@@ -291,19 +292,20 @@ func (s *Store) SaveIndexed(ctx context.Context, r Repo, a App, assets []Asset) 
 
 	if _, err = tx.ExecContext(ctx, `
 		INSERT INTO repos (full_name, description, stars, topics, license, html_url, default_branch,
-		                   pushed_at, head_sha, latest_tag, release_sig, release_notes, etag, indexed_at, index_version,
+		                   pushed_at, created_at, head_sha, latest_tag, release_sig, release_notes, etag, indexed_at, index_version,
 		                   changed_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(full_name) DO UPDATE SET
 			description = excluded.description, stars = excluded.stars, topics = excluded.topics,
 			license = excluded.license, html_url = excluded.html_url,
 			default_branch = excluded.default_branch, pushed_at = excluded.pushed_at,
+			created_at = excluded.created_at,
 			head_sha = excluded.head_sha, latest_tag = excluded.latest_tag, release_sig = excluded.release_sig,
 			release_notes = excluded.release_notes, etag = excluded.etag,
 			indexed_at = excluded.indexed_at, index_version = excluded.index_version,
 			changed_at = excluded.changed_at`,
 		r.FullName, r.Description, r.Stars, encodeList(r.Topics), r.License, r.HTMLURL, r.DefaultBranch,
-		nullTime(r.PushedAt), r.HeadSHA, r.LatestTag, r.ReleaseSig, r.ReleaseNotes, r.ETag, nullTime(r.IndexedAt), r.IndexVersion,
+		nullTime(r.PushedAt), nullTime(r.CreatedAt), r.HeadSHA, r.LatestTag, r.ReleaseSig, r.ReleaseNotes, r.ETag, nullTime(r.IndexedAt), r.IndexVersion,
 		nullTime(r.IndexedAt)); err != nil {
 		return fmt.Errorf("save repo %s: %w", r.FullName, err)
 	}
@@ -351,6 +353,23 @@ func (s *Store) RemoveRepo(ctx context.Context, fullName string) error {
 	return nil
 }
 
+// catalogWinners keeps one entry per display name. A missing creation date
+// loses an age tie to a known date; the repository name breaks exact ties.
+func catalogWinners(installableOnly bool) string {
+	where := ""
+	if installableOnly {
+		where = "a.installable = 1 AND "
+	}
+	return `WITH winners AS (
+	SELECT a.full_name, ROW_NUMBER() OVER (
+		PARTITION BY lower(trim(a.name))
+		ORDER BY r.stars DESC, r.created_at IS NULL, r.created_at ASC, lower(a.full_name) ASC
+	) AS rank
+	FROM apps a JOIN repos r ON r.full_name = a.full_name
+	WHERE ` + where + `NOT EXISTS (SELECT 1 FROM blocked b WHERE b.full_name = a.full_name)
+) `
+}
+
 // ListApps lists the catalog ordered by score (with name as tiebreaker).
 func (s *Store) ListApps(ctx context.Context, f Filter) ([]ListItem, error) {
 	var where []string
@@ -380,6 +399,9 @@ func (s *Store) ListApps(ctx context.Context, f Filter) ([]ListItem, error) {
 		JOIN repos r ON r.full_name = a.full_name
 		LEFT JOIN installs i ON i.full_name = a.full_name
 		LEFT JOIN blocked b ON b.full_name = a.full_name`
+	if !f.InstalledOnly {
+		query = catalogWinners(!f.All) + query + " JOIN winners w ON w.full_name = a.full_name AND w.rank = 1"
+	}
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -415,10 +437,9 @@ func escapeLike(s string) string {
 // Categories lists the categories that have installable apps.
 func (s *Store) Categories(ctx context.Context) ([]CategoryCount, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT category, COUNT(*) FROM apps
-		 WHERE installable = 1
-		   AND NOT EXISTS (SELECT 1 FROM blocked b WHERE b.full_name = apps.full_name)
-		 GROUP BY category ORDER BY category`)
+		catalogWinners(true)+`SELECT a.category, COUNT(*) FROM winners w
+		 JOIN apps a ON a.full_name = w.full_name WHERE w.rank = 1
+		 GROUP BY a.category ORDER BY a.category`)
 	if err != nil {
 		return nil, fmt.Errorf("list categories: %w", err)
 	}
@@ -439,17 +460,17 @@ func (s *Store) Categories(ctx context.Context) ([]CategoryCount, error) {
 func (s *Store) GetApp(ctx context.Context, fullName string) (*AppDetail, error) {
 	var d AppDetail
 	var shots, topics string
-	var pushed, indexed sql.NullTime
+	var pushed, created, indexed sql.NullTime
 	err := s.db.QueryRowContext(ctx, `
 		SELECT a.full_name, a.name, a.summary, a.readme, a.changelog, a.icon_url, a.screenshots, a.category, a.score,
 		       a.installable, a.manifest, a.sysdeps, r.description, r.stars, r.topics, r.license, r.html_url, r.default_branch,
-		       r.pushed_at, r.head_sha, r.latest_tag, r.release_notes, r.etag, r.indexed_at
+		       r.pushed_at, r.created_at, r.head_sha, r.latest_tag, r.release_notes, r.etag, r.indexed_at
 		FROM repos r JOIN apps a ON a.full_name = r.full_name
 		WHERE r.full_name = ? COLLATE NOCASE
 		ORDER BY r.full_name = ? DESC LIMIT 1`, fullName, fullName).
 		Scan(&d.FullName, &d.Name, &d.Summary, &d.Readme, &d.Changelog, &d.IconURL, &shots, &d.Category, &d.Score,
 			&d.Installable, &d.Manifest, &d.SysDeps, &d.Repo.Description, &d.Repo.Stars, &topics, &d.Repo.License, &d.Repo.HTMLURL,
-			&d.Repo.DefaultBranch, &pushed, &d.Repo.HeadSHA, &d.Repo.LatestTag, &d.Repo.ReleaseNotes, &d.Repo.ETag, &indexed)
+			&d.Repo.DefaultBranch, &pushed, &created, &d.Repo.HeadSHA, &d.Repo.LatestTag, &d.Repo.ReleaseNotes, &d.Repo.ETag, &indexed)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -460,6 +481,7 @@ func (s *Store) GetApp(ctx context.Context, fullName string) (*AppDetail, error)
 	d.Repo.FullName = d.FullName
 	d.Repo.Topics = decodeList(topics)
 	d.Repo.PushedAt = timeOf(pushed)
+	d.Repo.CreatedAt = timeOf(created)
 	d.Repo.IndexedAt = timeOf(indexed)
 
 	d.Assets, err = s.Assets(ctx, d.FullName, d.Repo.LatestTag)

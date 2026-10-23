@@ -198,6 +198,52 @@ func TestListApps(t *testing.T) {
 	}
 }
 
+func TestCatalogChoosesPopularThenOldestManifest(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	put := func(repo string, stars int, created time.Time, category string, installable bool) {
+		t.Helper()
+		if err := s.SaveIndexed(ctx, Repo{FullName: repo, Stars: stars, CreatedAt: created},
+			App{Name: "Same App", Category: category, Score: float64(stars), Installable: installable}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	newer := old.AddDate(2, 0, 0)
+	put("a/original", 10, old, "Graphics", true)
+	put("b/copy", 11, newer, "Office", true)
+	check := func(want string, category string) {
+		t.Helper()
+		items, err := s.ListApps(ctx, Filter{})
+		if err != nil || len(items) != 1 || items[0].FullName != want {
+			t.Fatalf("catalog = %+v, %v; want %s", items, err, want)
+		}
+		cats, err := s.Categories(ctx)
+		if err != nil || len(cats) != 1 || cats[0].Category != category || cats[0].Count != 1 {
+			t.Fatalf("categories = %+v, %v", cats, err)
+		}
+		matches, err := s.ListApps(ctx, Filter{Query: "Same App"})
+		if err != nil || len(matches) != 1 || matches[0].FullName != want {
+			t.Fatalf("search = %+v, %v", matches, err)
+		}
+	}
+	check("b/copy", "Office")
+	put("a/original", 11, old, "Graphics", true)
+	check("a/original", "Graphics")
+	if _, err := s.GetApp(ctx, "b/copy"); err != nil {
+		t.Fatalf("losing repo detail: %v", err)
+	}
+	if err := s.SaveInstall(ctx, Install{FullName: "b/copy", Version: "v1"}); err != nil {
+		t.Fatal(err)
+	}
+	installed, err := s.ListApps(ctx, Filter{InstalledOnly: true})
+	if err != nil || len(installed) != 1 || installed[0].FullName != "b/copy" {
+		t.Fatalf("installed = %+v, %v", installed, err)
+	}
+	put("a/original", 11, old, "Graphics", false)
+	check("b/copy", "Office")
+}
+
 func TestInstalls(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()

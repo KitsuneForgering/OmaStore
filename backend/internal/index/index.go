@@ -34,7 +34,7 @@ import (
 // changelog...):
 // repositories stored with a lower version are reprocessed even without changes
 // on GitHub.
-const Version = 15
+const Version = 16
 
 // GitHub is the subset of the client used by the indexer.
 type GitHub interface {
@@ -812,6 +812,7 @@ func (ix *Indexer) process(ctx context.Context, name string, force, explicit boo
 		HTMLURL:       repo.HTMLURL,
 		DefaultBranch: repo.DefaultBranch,
 		PushedAt:      repo.PushedAt,
+		CreatedAt:     repo.CreatedAt,
 		HeadSHA:       sha,
 		LatestTag:     tagOf(rel),
 		ReleaseSig:    releaseSig(rel),
