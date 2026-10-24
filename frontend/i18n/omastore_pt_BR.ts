@@ -273,6 +273,10 @@
         <source>Copied to the clipboard</source>
         <translation>Copiado para a área de transferência</translation>
     </message>
+    <message>
+        <source>Author skills installed or updated (%1 copies). Previous copies were backed up.</source>
+        <translation>Skills para autores instaladas ou atualizadas (%1 cópias). As cópias anteriores foram preservadas em backup.</translation>
+    </message>
 </context>
 <context>
     <name>CatalogPage</name>
@@ -987,6 +991,26 @@ Eles são instalados com o pacman, que pede a senha de administrador.</translati
     <message>
         <source>Off</source>
         <translation>Desligado</translation>
+    </message>
+    <message>
+        <source>Author skills help your coding agent prepare apps for OmaStore. Install missing skills or update existing copies. Previous copies are backed up.</source>
+        <translation>As skills para autores ajudam seu agente de programação a preparar apps para o OmaStore. Instale as skills ausentes ou atualize as cópias existentes. As cópias anteriores são preservadas em backup.</translation>
+    </message>
+    <message>
+        <source>Please wait…</source>
+        <translation>Aguarde…</translation>
+    </message>
+    <message>
+        <source>Install or update author skills</source>
+        <translation>Instalar ou atualizar skills para autores</translation>
+    </message>
+    <message>
+        <source>Connect to the backend first.</source>
+        <translation>Conecte-se ao backend primeiro.</translation>
+    </message>
+    <message>
+        <source>Wait for the current operation to finish.</source>
+        <translation>Aguarde a conclusão da operação atual.</translation>
     </message>
 </context>
 <context>

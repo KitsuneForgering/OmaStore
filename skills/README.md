@@ -14,6 +14,12 @@ agents Omarchy offers. The store only indexes repositories with an
 
 ## Installation
 
+In OmaStore, open **Settings → Install or update author skills** to install
+missing copies or refresh them after an update. This uses the bundled skills,
+keeps backups of existing copies and works even if you previously selected
+`--no-skills` for automatic installation. Open your coding agent once first
+so its configuration directory exists.
+
 OmaStore's `install.sh` does this for you. It copies these skills into the
 same directories Omarchy links its own skills into, for each agent installed
 (whose directory exists):

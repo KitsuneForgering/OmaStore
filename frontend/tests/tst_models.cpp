@@ -194,6 +194,39 @@ private slots:
         QCOMPARE(d.count("settings.set"), 1);
     }
 
+    void installAuthorSkills()
+    {
+        FakeDaemon d;
+        bool fail = false;
+        d.handler = [&fail](const QString &method, const QJsonObject &) -> QJsonObject {
+            if (method == "skills.install") {
+                if (fail)
+                    return {{"error", QJsonObject{{"code", -32603}, {"message", "No coding agent found"}}}};
+                return {{"result", QJsonObject{{"installed", 3}}}};
+            }
+            return {{"result", QJsonObject{}}};
+        };
+        QVERIFY(d.listen());
+        RpcClient rpc(d.path());
+        rpc.setAutoStart(false);
+        Backend b(&rpc);
+        rpc.start();
+        QTRY_VERIFY(rpc.isConnected());
+        QSignalSpy notices(&b, &Backend::notice);
+        QSignalSpy errors(&b, &Backend::errorOccurred);
+        b.installSkills();
+        QVERIFY(b.settingsBusy());
+        b.installSkills(); // repeated clicks do not send another request
+        QTRY_COMPARE(notices.count(), 1);
+        QVERIFY(!b.settingsBusy());
+        QCOMPARE(d.count("skills.install"), 1);
+        fail = true;
+        b.installSkills();
+        QTRY_COMPARE(errors.count(), 1);
+        QVERIFY(!b.settingsBusy());
+        QCOMPARE(notices.count(), 1);
+    }
+
     void staleResponsesAreIgnored()
     {
         FakeDaemon d;

@@ -478,6 +478,19 @@ func (s *Server) call(method string, raw json.RawMessage) (any, error) {
 		}
 		return s.startInstallJob(kind, p.Repo, p.AllowUnverified)
 
+	case "skills.install":
+		installer, ok := b.(interface {
+			InstallSkills(context.Context) (int, error)
+		})
+		if !ok {
+			return nil, &Error{Code: CodeUnsupported, Message: "skill installation is unavailable"}
+		}
+		count, err := installer.InstallSkills(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"installed": count}, nil
+
 	case "settings.get":
 		return s.settings(ctx, nil)
 

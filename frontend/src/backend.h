@@ -96,7 +96,7 @@ public:
     bool settingsBusy() const { return m_settingsBusy; }
     // The protocol this interface was built for (docs/ipc.md) and the methods
     // it needs from the daemon.
-    static constexpr int Protocol = 5;
+    static constexpr int Protocol = 6;
     static const QStringList &requiredMethods();
     // daemonWarning for a daemon.hello result ("" when it fits).
     static QString helloWarning(const QJsonObject &hello);
@@ -129,6 +129,7 @@ public:
     // belongs to this interface when it reconnects.
     Q_INVOKABLE void restartDaemon();
     Q_INVOKABLE void setAutoUpdate(bool on);
+    Q_INVOKABLE void installSkills();
     Q_INVOKABLE void setRequireProvenance(bool on);
     // What a job is doing, for people: "Downloading", "Checking GitHub"…
     Q_INVOKABLE static QString stageText(const QString &kind, const QString &stage);

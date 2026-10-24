@@ -6,6 +6,11 @@ All notable changes to OmaStore are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Settings can install or update the bundled author skills for coding agents,
+  preserving existing copies in backups and reporting installation failures.
+
 ### Fixed
 
 - `make install` installs missing author skills and refreshes changed copies for

@@ -383,6 +383,21 @@ ApplicationWindow {
         ColumnLayout {
             width: parent.width
             spacing: theme.spaceL
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("Author skills help your coding agent prepare apps for OmaStore. Install missing skills or update existing copies. Previous copies are backed up.")
+                color: theme.foreground
+                font.pixelSize: theme.fontBody
+                wrapMode: Text.Wrap
+            }
+            ActionButton {
+                objectName: "installSkillsButton"
+                text: backend.settingsBusy ? qsTr("Please wait…") : qsTr("Install or update author skills")
+                enabled: backend.connected && !backend.settingsBusy
+                ToolTip.visible: hovered && !enabled
+                ToolTip.text: !backend.connected ? qsTr("Connect to the backend first.") : qsTr("Wait for the current operation to finish.")
+                onClicked: backend.installSkills()
+            }
             Repeater {
                 model: [
                     { key: "autoUpdate", on: backend.autoUpdate,

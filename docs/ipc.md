@@ -2,7 +2,7 @@
 
 The frontend talks to `omastored` over **JSON-RPC 2.0** on a Unix socket at
 `$XDG_RUNTIME_DIR/omastore.sock` (mode `0600`). Implementation:
-`backend/internal/rpc/`. Protocol version: **5** (`daemon.hello`; 3 added `settings.*` and automatic updates, 4 the `blocked` fields, 5 release notes bound to `SelfUpdateResult.to`).
+`backend/internal/rpc/`. Protocol version: **6** (`daemon.hello`; 3 added `settings.*` and automatic updates, 4 the `blocked` fields, 5 release notes bound to `SelfUpdateResult.to`, 6 explicit author skill installation).
 
 The version goes up whenever a method or a DTO changes. On connect the frontend
 calls `daemon.hello` and compares `protocol` (and the `methods` it needs) with
@@ -56,6 +56,7 @@ Missing `params` is the same as `{}`. Unknown fields in `params` are an error
 | `self.status` | — | `SelfInfo` (synchronous; the latest release is cached for 30 min) |
 | `self.update` | — | `Job` (kind `self`): installs OmaStore's latest release over this installation |
 | `self.restart` | — | `{}`; the daemon exits right after replying (`-32002` while jobs run) |
+| `skills.install` | — | `{installed}`: installs bundled author skills; existing copies are backed up |
 | `settings.get` | — | `Settings` |
 | `settings.set` | `{autoUpdate?, requireProvenance?}` | `Settings` after the change; turning `autoUpdate` on starts the waiting updates |
 
@@ -144,6 +145,15 @@ comes from pacman's file database (`pacman -F`) when it exists (`pacman -Fy`
 creates it); those packages join `toInstall`. A script launcher (Python, shell)
 is not checked. `wrongArch` names the machine an executable was built for when
 it is not this one.
+
+### `skills.install`
+
+No parameters. Installs or updates the bundled author skills in existing coding
+agent directories, without network access or executing skill scripts. Returns
+`{"installed": N}` (number of copies). Existing copies are moved to
+`$XDG_DATA_HOME/omastore/skill-backups/`. This explicit action works even with
+`--no-skills`. Missing bundles, absent agents and write failures return an error;
+earlier successful copies are kept. Added in protocol 6.
 
 ### Types
 

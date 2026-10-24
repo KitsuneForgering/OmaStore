@@ -199,7 +199,7 @@ const QStringList &Backend::requiredMethods()
     static const QStringList methods{
         QStringLiteral("catalog.list"), QStringLiteral("catalog.get"), QStringLiteral("install.start"),
         QStringLiteral("install.uninstall"), QStringLiteral("install.rollback"), QStringLiteral("star.get"),
-        QStringLiteral("deps.check"), QStringLiteral("self.status"),
+        QStringLiteral("deps.check"), QStringLiteral("self.status"), QStringLiteral("skills.install"),
     };
     return methods;
 }
@@ -290,6 +290,24 @@ void Backend::saveSetting(const QString &key, bool on, const QString &done)
         }
         applySettings(result);
         emit notice(done);
+    });
+}
+
+void Backend::installSkills()
+{
+    if (m_settingsBusy)
+        return;
+    m_settingsBusy = true;
+    emit settingsChanged();
+    m_rpc->call(QStringLiteral("skills.install"), {}, [this](const QJsonValue &result, const RpcError &err) {
+        m_settingsBusy = false;
+        emit settingsChanged();
+        if (!err.ok()) {
+            emit errorOccurred(friendlyError(err.code, err.message));
+            return;
+        }
+        emit notice(tr("Author skills installed or updated (%1 copies). Previous copies were backed up.")
+                    .arg(result.toObject().value(QStringLiteral("installed")).toInt()));
     });
 }
 
