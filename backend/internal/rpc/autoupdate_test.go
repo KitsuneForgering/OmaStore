@@ -2,23 +2,32 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/KitsuneForgering/OmaStore/backend/internal/index"
+	"github.com/KitsuneForgering/OmaStore/backend/internal/install"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
 )
 
 // autoFake adds automatic updates to fakeBackend.
 type autoFake struct {
 	*fakeBackend
-	amu     sync.Mutex
-	on      bool
-	due     bool
-	marked  bool
-	strict  bool
-	indexed [][]string
+	amu        sync.Mutex
+	on         bool
+	due        bool
+	marked     bool
+	strict     bool
+	indexed    [][]string
+	ready      []store.ListItem
+	indexStats *index.Stats
+	autoLists  int
+	started    chan string
+	finish     chan struct{}
+	active     int
+	peak       int
 }
 
 func (f *autoFake) AutoUpdate(context.Context) (bool, error) {
@@ -35,6 +44,12 @@ func (f *autoFake) SetAutoUpdate(_ context.Context, on bool) error {
 }
 
 func (f *autoFake) AutoUpdates(context.Context) (ready, waiting []store.ListItem, err error) {
+	f.amu.Lock()
+	defer f.amu.Unlock()
+	f.autoLists++
+	if f.ready != nil {
+		return f.ready, nil, nil
+	}
 	return []store.ListItem{{App: store.App{FullName: "acme/photo", Name: "Photo"}, LatestTag: "v2", InstalledVersion: "v1"}},
 		[]store.ListItem{{App: store.App{FullName: "acme/raw", Name: "Raw"}, LatestTag: "v3", InstalledVersion: "v2"}}, nil
 }
@@ -69,7 +84,11 @@ func (f *autoFake) Index(ctx context.Context, opts index.Options) (index.Stats, 
 	f.amu.Lock()
 	f.indexed = append(f.indexed, opts.Only)
 	f.amu.Unlock()
-	return f.fakeBackend.Index(ctx, opts)
+	st, err := f.fakeBackend.Index(ctx, opts)
+	if f.indexStats != nil {
+		st = *f.indexStats
+	}
+	return st, err
 }
 
 func TestSettingsMethods(t *testing.T) {
@@ -171,5 +190,157 @@ func TestNoJobAfterShutdown(t *testing.T) {
 	s.Shutdown()
 	if _, err := s.startInstallJob(KindUpdate, "acme/photo", false); err == nil {
 		t.Error("a job started after Shutdown")
+	}
+}
+
+// A partial check keeps its result, reports failure and remains due on the
+// next startup instead of recording a complete 12-hour refresh.
+func TestPartialAutoCheckDoesNotMarkOrUpdate(t *testing.T) {
+	f := &autoFake{fakeBackend: newFake(), on: true, due: true, indexStats: &index.Stats{Updated: 1, Failed: 2}}
+	close(f.release)
+	s, sock := startServer(t, f)
+	cl := dial(t, sock)
+	cl.call("settings.get", nil, nil)
+	for range 2 {
+		s.AutoUpdateOnStart(time.Hour)
+		failed := cl.waitNote("job.failed", func(j Job) bool { return j.Kind == KindIndex })
+		if failed.State != StateFailed || failed.Error == nil {
+			t.Fatalf("job: %+v", failed)
+		}
+		f.amu.Lock()
+		marked, lists := f.marked, f.autoLists
+		f.amu.Unlock()
+		if marked || lists != 0 {
+			t.Fatalf("partial check: marked=%v automatic lists=%d", marked, lists)
+		}
+	}
+	f.amu.Lock()
+	defer f.amu.Unlock()
+	if len(f.indexed) != 2 {
+		t.Fatalf("checks: %v", f.indexed)
+	}
+}
+
+func (f *autoFake) Update(ctx context.Context, name string, opts install.Options) (*store.Install, error) {
+	if f.started == nil {
+		return f.fakeBackend.Update(ctx, name, opts)
+	}
+	f.amu.Lock()
+	f.active++
+	if f.active > f.peak {
+		f.peak = f.active
+	}
+	f.amu.Unlock()
+	defer func() { f.amu.Lock(); f.active--; f.amu.Unlock() }()
+	select {
+	case f.started <- name:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	select {
+	case <-f.finish:
+		return &store.Install{FullName: name, Version: "v2"}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func TestAutomaticUpdateConcurrencyAndDisable(t *testing.T) {
+	for _, disable := range []bool{false, true} {
+		t.Run(fmt.Sprint(disable), func(t *testing.T) {
+			f := &autoFake{fakeBackend: newFake(), on: true, started: make(chan string, 10), finish: make(chan struct{})}
+			for i := range 6 {
+				f.ready = append(f.ready, store.ListItem{App: store.App{FullName: fmt.Sprintf("acme/app%d", i)}})
+			}
+			s := NewServer(f, nil)
+			t.Cleanup(s.Shutdown)
+			done := make(chan struct{})
+			go func() { s.startAutoUpdates(); close(done) }()
+			next := func() string {
+				t.Helper()
+				select {
+				case name := <-f.started:
+					return name
+				case <-time.After(3 * time.Second):
+					t.Fatal("no update started")
+					return ""
+				}
+			}
+			next()
+			next()
+			// Another trigger must not start another pool while this batch is busy.
+			s.startAutoUpdates()
+			select {
+			case name := <-f.started:
+				t.Fatalf("too many simultaneous updates: %s", name)
+			case <-time.After(30 * time.Millisecond):
+			}
+			if disable {
+				if err := f.SetAutoUpdate(context.Background(), false); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				f.finish <- struct{}{}
+				next() // a queued app starts after one finishes
+			}
+			close(f.finish)
+			select {
+			case <-done:
+			case <-time.After(3 * time.Second):
+				t.Fatal("batch did not finish")
+			}
+			f.amu.Lock()
+			peak := f.peak
+			f.amu.Unlock()
+			if peak != autoUpdateWorkers {
+				t.Fatalf("peak=%d", peak)
+			}
+			if disable && len(f.started) != 0 {
+				t.Fatalf("started pending apps after disabling: %d", len(f.started))
+			}
+		})
+	}
+}
+
+func TestAutomaticBatchAllowsManualUpdateAndShutsDown(t *testing.T) {
+	f := &autoFake{fakeBackend: newFake(), on: true, started: make(chan string, 10), finish: make(chan struct{})}
+	for i := range 5 {
+		f.ready = append(f.ready, store.ListItem{App: store.App{FullName: fmt.Sprintf("acme/app%d", i)}})
+	}
+	s := NewServer(f, nil)
+	t.Cleanup(s.Shutdown)
+	done := make(chan struct{})
+	go func() { s.startAutoUpdates(); close(done) }()
+	next := func() string {
+		t.Helper()
+		select {
+		case name := <-f.started:
+			return name
+		case <-time.After(3 * time.Second):
+			t.Fatal("update did not start")
+			return ""
+		}
+	}
+	next()
+	next()
+	if _, err := s.startInstallJob(KindUpdate, "acme/manual", false); err != nil {
+		t.Fatal(err)
+	}
+	if name := next(); name != "acme/manual" {
+		t.Fatalf("manual update waited behind automatic queue: %s", name)
+	}
+	s.Shutdown()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("automatic queue survived shutdown")
+	}
+	if len(f.started) != 0 {
+		t.Fatalf("queued updates started during shutdown: %d", len(f.started))
+	}
+	f.amu.Lock()
+	defer f.amu.Unlock()
+	if f.active != 0 {
+		t.Fatalf("active updates after shutdown: %d", f.active)
 	}
 }

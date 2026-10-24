@@ -372,18 +372,22 @@ func catalogWinners(installableOnly bool) string {
 
 // ListApps lists the catalog ordered by score (with name as tiebreaker).
 func (s *Store) ListApps(ctx context.Context, f Filter) ([]ListItem, error) {
+	name, repo, category := "a.name", "a.full_name", "a.category"
+	if f.InstalledOnly {
+		name, repo, category = "COALESCE(a.name, i.full_name)", "i.full_name", "COALESCE(a.category, 'Utility')"
+	}
 	var where []string
 	var args []any
-	if !f.All {
+	if !f.All && !f.InstalledOnly {
 		where = append(where, "a.installable = 1")
 	}
 	if f.Category != "" {
-		where = append(where, "a.category = ?")
+		where = append(where, category+" = ?")
 		args = append(args, f.Category)
 	}
 	if q := strings.TrimSpace(f.Query); q != "" {
 		like := "%" + escapeLike(strings.ToLower(q)) + "%"
-		where = append(where, `(lower(a.name) LIKE ? ESCAPE '\' OR lower(a.summary) LIKE ? ESCAPE '\' OR lower(a.full_name) LIKE ? ESCAPE '\')`)
+		where = append(where, fmt.Sprintf(`(lower(%s) LIKE ? ESCAPE '\' OR lower(a.summary) LIKE ? ESCAPE '\' OR lower(%s) LIKE ? ESCAPE '\')`, name, repo))
 		args = append(args, like, like, like)
 	}
 	if f.InstalledOnly {
@@ -399,13 +403,23 @@ func (s *Store) ListApps(ctx context.Context, f Filter) ([]ListItem, error) {
 		JOIN repos r ON r.full_name = a.full_name
 		LEFT JOIN installs i ON i.full_name = a.full_name
 		LEFT JOIN blocked b ON b.full_name = a.full_name`
-	if !f.InstalledOnly {
+	if f.InstalledOnly {
+		// Installations outlive their catalog entries. Start from installs so
+		// an unavailable or removed app remains manageable.
+		query = `SELECT i.full_name, COALESCE(a.name, i.full_name), COALESCE(a.summary, ''),
+            COALESCE(a.icon_url, ''), COALESCE(a.screenshots, '[]'), COALESCE(a.category, 'Utility'),
+            COALESCE(a.score, 0), COALESCE(a.installable, 0), COALESCE(r.stars, 0),
+            COALESCE(r.latest_tag, ''), i.version, b.full_name IS NOT NULL, COALESCE(b.reason, '')
+            FROM installs i LEFT JOIN apps a ON a.full_name = i.full_name
+            LEFT JOIN repos r ON r.full_name = i.full_name
+            LEFT JOIN blocked b ON b.full_name = i.full_name`
+	} else {
 		query = catalogWinners(!f.All) + query + " JOIN winners w ON w.full_name = a.full_name AND w.rank = 1"
 	}
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
-	query += " ORDER BY a.score DESC, lower(a.name)"
+	query += " ORDER BY COALESCE(a.score, 0) DESC, lower(" + name + ")"
 	if f.Limit > 0 {
 		query += " LIMIT ? OFFSET ?"
 		args = append(args, f.Limit, f.Offset)
@@ -472,7 +486,18 @@ func (s *Store) GetApp(ctx context.Context, fullName string) (*AppDetail, error)
 			&d.Installable, &d.Manifest, &d.SysDeps, &d.Repo.Description, &d.Repo.Stars, &topics, &d.Repo.License, &d.Repo.HTMLURL,
 			&d.Repo.DefaultBranch, &pushed, &created, &d.Repo.HeadSHA, &d.Repo.LatestTag, &d.Repo.ReleaseNotes, &d.Repo.ETag, &indexed)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
+		inst, installErr := s.GetInstall(ctx, fullName)
+		if installErr != nil {
+			return nil, installErr
+		}
+		d.App = App{FullName: inst.FullName, Name: inst.FullName, Category: "Utility"}
+		d.Repo.FullName = inst.FullName
+		d.Install = inst
+		d.BlockedReason, d.Blocked, err = s.Blocked(ctx, inst.FullName)
+		if err != nil {
+			return nil, err
+		}
+		return &d, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read app %s: %w", fullName, err)
@@ -750,11 +775,14 @@ type SearchDoc struct {
 	Stars    int
 }
 
-// SearchDocs lists every app (installable or not) with the search fields.
+// SearchDocs includes catalog apps and installations that outlive the catalog.
 func (s *Store) SearchDocs(ctx context.Context) ([]SearchDoc, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT a.full_name, a.name, a.summary, a.readme, r.topics, a.category, r.stars
-		FROM apps a JOIN repos r ON r.full_name = a.full_name`)
+		FROM apps a JOIN repos r ON r.full_name = a.full_name
+        UNION ALL
+        SELECT i.full_name, i.full_name, '', '', '[]', 'Utility', 0
+        FROM installs i WHERE NOT EXISTS (SELECT 1 FROM apps a WHERE a.full_name = i.full_name)`)
 	if err != nil {
 		return nil, fmt.Errorf("read search documents: %w", err)
 	}

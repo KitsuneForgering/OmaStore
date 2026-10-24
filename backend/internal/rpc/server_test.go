@@ -61,7 +61,7 @@ func (f *fakeBackend) GetApp(ctx context.Context, name string) (*store.AppDetail
 		return nil, store.ErrNotFound
 	}
 	return &store.AppDetail{
-		App:    store.App{FullName: name, Name: "Photo", Readme: "# Photo", Changelog: "# Changes"},
+		App:    store.App{FullName: name, Name: "Photo", Readme: "# Photo", Changelog: "# Changes", Installable: true},
 		Repo:   store.Repo{FullName: name, LatestTag: "v2", License: "MIT"},
 		Assets: []store.Asset{{Name: "p.tar.gz", Format: "tar.gz", Digest: "sha256:" + strings.Repeat("ab", 32)}, {Name: "p.bin", Format: "binary"}},
 		Install: &store.Install{FullName: name, Version: "v1", History: []store.InstallEvent{{
@@ -215,7 +215,7 @@ func (f *fakeBackend) SelfUpdate(ctx context.Context, p func(install.Progress)) 
 	if err := f.wait(ctx); err != nil {
 		return nil, err
 	}
-	return &install.SelfResult{From: "0.1.0", To: "0.2.0", GUI: "/home/u/.local/bin/omastore-gui"}, nil
+	return &install.SelfResult{From: "0.1.0", To: "0.2.0", GUI: "/home/u/.local/bin/omastore-gui", Notes: "Installed release notes"}, nil
 }
 
 // client is a test client that separates responses from notifications.
@@ -926,7 +926,7 @@ func TestSelfMethods(t *testing.T) {
 	done := cl.waitNote("job.done", func(x Job) bool { return x.ID == j.ID })
 	var r SelfUpdateResult
 	b, _ := json.Marshal(done.Result)
-	if err := json.Unmarshal(b, &r); err != nil || r.To != "0.2.0" || r.GUI == "" {
+	if err := json.Unmarshal(b, &r); err != nil || r.To != "0.2.0" || r.GUI == "" || r.Notes != "Installed release notes" {
 		t.Errorf("self.update result = %s (%v)", b, err)
 	}
 

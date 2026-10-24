@@ -2,7 +2,7 @@
 
 The frontend talks to `omastored` over **JSON-RPC 2.0** on a Unix socket at
 `$XDG_RUNTIME_DIR/omastore.sock` (mode `0600`). Implementation:
-`backend/internal/rpc/`. Protocol version: **4** (`daemon.hello`; 3 added `settings.*` and automatic updates, 4 the `blocked` fields).
+`backend/internal/rpc/`. Protocol version: **5** (`daemon.hello`; 3 added `settings.*` and automatic updates, 4 the `blocked` fields, 5 release notes bound to `SelfUpdateResult.to`).
 
 The version goes up whenever a method or a DTO changes. On connect the frontend
 calls `daemon.hello` and compares `protocol` (and the `methods` it needs) with
@@ -35,8 +35,8 @@ Missing `params` is the same as `{}`. Unknown fields in `params` are an error
 | Method | Parameters | Result |
 |---|---|---|
 | `daemon.hello` | — | `{name, protocol, methods}`: `methods` lists every method this daemon answers |
-| `catalog.list` | `{category?, query?, installed?, all?, limit?, offset?}` | `AppItem[]`: by score; with `query`, by relevance |
-| `catalog.get` | `{repo}` | `AppDetail` |
+| `catalog.list` | `{category?, query?, installed?, all?, limit?, offset?}` | `AppItem[]`: by score; with `query`, by relevance. `installed=true` includes unavailable apps and installations outside the catalog, regardless of `all` |
+| `catalog.get` | `{repo}` | `AppDetail`: installations outside the catalog retain a minimal detail with their installation record; install/update are unavailable |
 | `catalog.similar` | `{repo, limit?}` (default 8, max. 50) | most similar `AppItem[]`, installable only |
 | `catalog.categories` | — | `[{name, count}]` |
 | `installs.list` | — | `InstallInfo[]` |
@@ -214,7 +214,7 @@ Settings {
   requireProvenance: boolean       // off by default: install/update only files with
                                    // provenance, otherwise -32019
 }
-SelfUpdateResult { from, to, gui: string }   // gui: ~/.local/bin/omastore-gui
+SelfUpdateResult { from, to, gui, notes: string }   // gui: ~/.local/bin/omastore-gui; notes belong to to
 Job {
   id, kind: "index" | "install" | "update" | "deps" | "self", repo?: string
   state: "running" | "done" | "failed" | "canceled"
@@ -230,6 +230,10 @@ Job {
   started, finished?: string
 }
 IndexResult { updated, refreshed, unchanged, removed, skipped, notApps, failed }
+// A partial refresh emits job.failed with this result (failed > 0).
+// Successful changes remain saved. It does not mark the automatic check complete
+// or start automatic updates; the next daemon start can retry without waiting 12 h.
+// Automatic updates run at most two apps at a time; manual jobs start immediately.
 CheckReport {
   repo: string                     // canonical name (follows renames)
   compatible: boolean              // no check failed

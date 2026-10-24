@@ -36,6 +36,9 @@ import (
 // on GitHub.
 const Version = 16
 
+// ErrPartial means some repositories failed; successful changes were retained.
+var ErrPartial = errors.New("catalog refresh incomplete")
+
 // GitHub is the subset of the client used by the indexer.
 type GitHub interface {
 	SearchByTopic(ctx context.Context, topic string, max int) ([]string, error)
@@ -587,6 +590,9 @@ feed:
 		if err != nil {
 			return prog.Stats, err
 		}
+	}
+	if prog.Failed > 0 {
+		return prog.Stats, fmt.Errorf("%w: %d repositories could not be checked; refresh again to retry", ErrPartial, prog.Failed)
 	}
 	return prog.Stats, nil
 }

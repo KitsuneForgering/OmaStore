@@ -84,6 +84,7 @@ ApplicationWindow {
             onSectionSelected: (s) => { window.section = s; window.back() }
             onCategorySelected: (c) => { window.section = "discover"; backend.catalog.category = c; window.back() }
             onSettingsRequested: settingsDialog.open()
+            onReleaseNotesRequested: selfReleaseNotesDialog.open()
         }
 
         ColumnLayout {
@@ -294,6 +295,41 @@ ApplicationWindow {
             depsDialog.repo = repo
             depsDialog.packages = packages
             depsDialog.open()
+        }
+    }
+
+    Dialog {
+        id: selfReleaseNotesDialog
+        objectName: "selfReleaseNotesDialog"
+        anchors.centerIn: parent
+        width: Math.min(theme.fontReading * 44, window.width - theme.spaceXxl * 2)
+        height: Math.min(theme.fontReading * 32, window.height - theme.spaceXxl * 2)
+        modal: true
+        title: qsTr("What’s new in OmaStore %1").arg(backend.selfInstalled || backend.selfStatus.latest || "")
+        standardButtons: Dialog.Close
+        ScrollView {
+            id: selfNotesScroll
+            anchors.fill: parent
+            clip: true
+            contentWidth: availableWidth
+            Text {
+                objectName: "selfReleaseNotesText"
+                width: selfNotesScroll.availableWidth
+                text: backend.selfStatus.notes
+                      ? backend.readmeForDisplay(backend.selfStatus.notes)
+                      : qsTr("No release notes were published for this version.")
+                textFormat: Text.MarkdownText
+                wrapMode: Text.Wrap
+                font.family: theme.fontFamily
+                font.pixelSize: theme.fontReading
+                lineHeight: 1.5
+                color: theme.foreground
+                linkColor: theme.accent
+                onLinkActivated: (link) => {
+                    if (link.startsWith("https://") || link.startsWith("http://"))
+                        Qt.openUrlExternally(link)
+                }
+            }
         }
     }
 

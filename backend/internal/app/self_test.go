@@ -63,6 +63,8 @@ func TestSelfStatusAndUpdate(t *testing.T) {
 	tarball := selfTarball(t)
 	name := install.SelfAssetName("0.2.0", "amd64")
 	var releaseCalls int
+	notes := "Faster search"
+	version := "0.2.0"
 	var srv *httptest.Server
 	srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -70,7 +72,7 @@ func TestSelfStatusAndUpdate(t *testing.T) {
 			releaseCalls++
 			sum := sha256.Sum256(tarball)
 			json.NewEncoder(w).Encode(map[string]any{
-				"tag_name": "v0.2.0", "body": "Faster search",
+				"tag_name": "v" + version, "body": notes,
 				"assets": []map[string]any{{
 					"name": name, "browser_download_url": srv.URL + "/dl/" + name,
 					"size": len(tarball), "digest": "sha256:" + hex.EncodeToString(sum[:]),
@@ -126,18 +128,22 @@ func TestSelfStatusAndUpdate(t *testing.T) {
 		t.Errorf("release fetched %d times; the status should reuse it", releaseCalls)
 	}
 
+	// The fresh release metadata must travel with the installed version.
+	notes = "Updated release notes fetched during installation"
+	version = "0.3.0"
+	name = install.SelfAssetName(version, "amd64")
 	r, err := a.SelfUpdate(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.From != "0.1.0" || r.To != "0.2.0" {
+	if r.From != "0.1.0" || r.To != "0.3.0" || r.Notes != notes {
 		t.Errorf("result = %+v", r)
 	}
 	if b, _ := os.ReadFile(filepath.Join(paths.BinDir, "omastored")); string(b) != "new omastored" {
 		t.Errorf("omastored = %q", b)
 	}
 	// The new binary is now the running one (as after a restart).
-	if s, _ := a.SelfStatus(context.Background()); s.Version != "0.2.0" || s.UpdateAvailable {
+	if s, _ := a.SelfStatus(context.Background()); s.Version != "0.3.0" || s.UpdateAvailable {
 		t.Errorf("status after the update = %+v", s)
 	}
 }

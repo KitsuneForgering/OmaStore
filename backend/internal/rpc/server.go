@@ -41,6 +41,7 @@ type Server struct {
 	catalogInterval time.Duration
 	restart         chan struct{} // closed when a client asked the daemon to restart
 	restartOnce     sync.Once
+	autoMu          sync.Mutex // only one automatic-update batch at a time
 }
 
 // NewServer creates a server on top of the backend.

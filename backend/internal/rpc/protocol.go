@@ -19,7 +19,7 @@ import (
 // ProtocolVersion is returned by daemon.hello. Bump it whenever a method or
 // a DTO changes: the interface compares it with the one it was built for and
 // tells the user when the running daemon is older (docs/ipc.md).
-const ProtocolVersion = 4
+const ProtocolVersion = 5
 
 // Methods are the methods this daemon answers, also returned by
 // daemon.hello so an interface can check for the ones it needs.

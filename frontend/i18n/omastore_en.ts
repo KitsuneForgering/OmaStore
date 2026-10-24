@@ -2,6 +2,16 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="en" sourcelanguage="en">
 <context>
+    <name>Backend</name>
+    <message numerus="yes">
+        <source>The catalog refresh is incomplete: %n app(s) could not be checked. Refresh again to retry.</source>
+        <translation>
+            <numerusform>The catalog refresh is incomplete: %n app could not be checked. Refresh again to retry.</numerusform>
+            <numerusform>The catalog refresh is incomplete: %n apps could not be checked. Refresh again to retry.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>AppCard</name>
     <message numerus="yes">
         <source>%n star(s)</source>

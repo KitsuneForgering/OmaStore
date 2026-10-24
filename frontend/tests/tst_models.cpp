@@ -480,6 +480,10 @@ private slots:
                                  {"error", QJsonObject{{"code", -32005}, {"message", "limit"}}}};
         d.notify("job.failed", failed);
         QTRY_VERIFY(b.indexError().contains("gh auth login"));
+        d.notify("job.failed", QJsonObject{{"id", "partial"}, {"kind", "index"}, {"state", "failed"},
+                                           {"result", QJsonObject{{"updated", 1}, {"failed", 2}}},
+                                           {"error", QJsonObject{{"code", -32603}, {"message", "incomplete"}}}});
+        QTRY_VERIFY(b.indexError().contains("2 app(s)"));
         d.notify("job.done", QJsonObject{{"id", "j10"}, {"kind", "index"}, {"state", "done"}});
         QTRY_VERIFY(b.indexError().isEmpty());
     }
@@ -574,8 +578,10 @@ private slots:
         QSignalSpy notices(&b, &Backend::notice);
         d.notify("job.done", QJsonObject{{"id", "s2"}, {"kind", "self"}, {"state", "done"},
                                          {"result", QJsonObject{{"from", "0.1.0"}, {"to", "0.2.0"},
-                                                                {"gui", "/home/u/.local/bin/omastore-gui"}}}});
+                                                                {"gui", "/home/u/.local/bin/omastore-gui"},
+                                                                {"notes", "Notes from the installed release"}}}});
         QTRY_COMPARE(b.selfInstalled(), QStringLiteral("0.2.0"));
+        QCOMPARE(b.selfStatus().value("notes").toString(), QStringLiteral("Notes from the installed release"));
         QVERIFY(!b.selfStatus().value("updateAvailable").toBool());
         QCOMPARE(notices.count(), 1);
         QVERIFY(b.jobs()->selfJob().isEmpty());

@@ -70,9 +70,12 @@ Backend::Backend(RpcClient *rpc, QObject *parent)
         const QString kind = job.value(QStringLiteral("kind")).toString();
         const QVariantMap error = job.value(QStringLiteral("error")).toMap();
         if (kind == QLatin1String("index")) {
-            const QString why = state == QLatin1String("failed")
-                ? friendlyError(error.value(QStringLiteral("code")).toInt(), error.value(QStringLiteral("message")).toString())
-                : QString();
+            const int failed = job.value(QStringLiteral("result")).toMap().value(QStringLiteral("failed")).toInt();
+            const QString why = failed > 0
+                ? tr("The catalog refresh is incomplete: %n app(s) could not be checked. Refresh again to retry.", nullptr, failed)
+                : state == QLatin1String("failed")
+                    ? friendlyError(error.value(QStringLiteral("code")).toInt(), error.value(QStringLiteral("message")).toString())
+                    : QString();
             if (why != m_indexError) {
                 m_indexError = why;
                 emit indexErrorChanged();
@@ -84,6 +87,8 @@ Backend::Backend(RpcClient *rpc, QObject *parent)
                 m_selfInstalled = result.value(QStringLiteral("to")).toString();
                 m_selfGui = result.value(QStringLiteral("gui")).toString();
                 m_selfStatus.insert(QStringLiteral("updateAvailable"), false);
+                m_selfStatus.insert(QStringLiteral("latest"), m_selfInstalled);
+                m_selfStatus.insert(QStringLiteral("notes"), result.value(QStringLiteral("notes")).toString());
                 emit selfChanged();
                 emit notice(tr("OmaStore %1 is installed. Restart OmaStore to use it.").arg(m_selfInstalled));
             } else if (state == QLatin1String("failed")) {

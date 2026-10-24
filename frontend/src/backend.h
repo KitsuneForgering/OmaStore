@@ -96,7 +96,7 @@ public:
     bool settingsBusy() const { return m_settingsBusy; }
     // The protocol this interface was built for (docs/ipc.md) and the methods
     // it needs from the daemon.
-    static constexpr int Protocol = 4;
+    static constexpr int Protocol = 5;
     static const QStringList &requiredMethods();
     // daemonWarning for a daemon.hello result ("" when it fits).
     static QString helloWarning(const QJsonObject &hello);

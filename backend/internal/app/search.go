@@ -18,7 +18,7 @@ type searchCache struct {
 }
 
 func (a *App) searchIndex(ctx context.Context) (*search.Index, error) {
-	stamp, err := a.Store.CatalogStamp(ctx)
+	stamp, err := a.ChangeStamp(ctx)
 	if err != nil {
 		return nil, err
 	}

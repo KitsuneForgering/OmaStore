@@ -273,8 +273,12 @@ func TestInstalls(t *testing.T) {
 	if err := s.RemoveRepo(ctx, "a/vm"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetApp(ctx, "a/vm"); !errors.Is(err, ErrNotFound) {
-		t.Errorf("app should have been removed: %v", err)
+	if d, err := s.GetApp(ctx, "A/VM"); err != nil || d.Install == nil || d.Installable || d.Name != "a/vm" {
+		t.Fatalf("removed app must still have an installed detail: %+v, %v", d, err)
+	}
+	installed, err := s.ListApps(ctx, Filter{InstalledOnly: true})
+	if err != nil || len(installed) != 1 || installed[0].FullName != "a/vm" || installed[0].LatestTag != "" {
+		t.Fatalf("removed app must remain listed: %+v, %v", installed, err)
 	}
 	list, _ := s.ListInstalls(ctx)
 	if len(list) != 1 {
@@ -543,5 +547,35 @@ func TestAddStarsAndSysDeps(t *testing.T) {
 	}
 	if _, err := s.AddStars(ctx, "acme/none", 1, now); !errors.Is(err, ErrNotFound) {
 		t.Errorf("missing repo: %v", err)
+	}
+}
+
+func TestUnavailableInstallsStayVisible(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+	seed(t, s, "a/unavailable", 10, "Graphics", false)
+	if err := s.SaveInstall(ctx, Install{FullName: "a/unavailable", Version: "v0", InstalledAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	items, err := s.ListApps(ctx, Filter{InstalledOnly: true, Category: "Graphics"})
+	if err != nil || len(items) != 1 || items[0].Installable {
+		t.Fatalf("unavailable installs: %+v, %v", items, err)
+	}
+	if err := s.RemoveRepo(ctx, "a/unavailable"); err != nil {
+		t.Fatal(err)
+	}
+	items, err = s.ListApps(ctx, Filter{InstalledOnly: true, Query: "unavailable", Category: "Utility", Limit: 1})
+	if err != nil || len(items) != 1 {
+		t.Fatalf("removed install filtering: %+v, %v", items, err)
+	}
+	if err := s.DeleteInstall(ctx, "a/unavailable"); err != nil {
+		t.Fatal(err)
+	}
+	items, err = s.ListApps(ctx, Filter{InstalledOnly: true})
+	if err != nil || len(items) != 0 {
+		t.Fatalf("deleted install: %+v, %v", items, err)
+	}
+	if _, err := s.GetApp(ctx, "a/unavailable"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("removed detail after uninstall: %v", err)
 	}
 }

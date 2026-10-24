@@ -193,9 +193,10 @@ type SelfStatus struct {
 
 // SelfResult is a finished self-update.
 type SelfResult struct {
-	From string // previous version
-	To   string // installed version
-	GUI  string // launcher of the new interface (~/.local/bin/omastore-gui)
+	From  string // previous version
+	To    string // installed version
+	GUI   string // launcher of the new interface (~/.local/bin/omastore-gui)
+	Notes string // release notes of To
 }
 
 // SelfUpdate installs rel over the running OmaStore cur, the way install.sh

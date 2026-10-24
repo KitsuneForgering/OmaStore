@@ -29,6 +29,10 @@
 </context>
 <context>
     <name>Backend</name>
+    <message numerus="yes">
+        <source>The catalog refresh is incomplete: %n app(s) could not be checked. Refresh again to retry.</source>
+        <translation><numerusform>A atualização do catálogo está incompleta: não foi possível verificar %n app. Atualize novamente para tentar outra vez.</numerusform><numerusform>A atualização do catálogo está incompleta: não foi possível verificar %n apps. Atualize novamente para tentar outra vez.</numerusform></translation>
+    </message>
     <message>
         <source>OmaStore %1 is installed. Restart OmaStore to use it.</source>
         <translation>O OmaStore %1 foi instalado. Reinicie o OmaStore para usá-lo.</translation>
@@ -456,6 +460,7 @@
 </context>
 <context>
     <name>DetailPage</name>
+    <message><source>This app is currently unavailable. You can still open or remove the installed version.</source><translation>Este app está indisponível no momento. Você ainda pode abrir ou remover a versão instalada.</translation></message>
     <message>
         <source>Installed %1</source>
         <translation>Instalou %1</translation>
@@ -889,6 +894,8 @@ Em execução: %1</translation>
 </context>
 <context>
     <name>Main</name>
+    <message><source>What’s new in OmaStore %1</source><translation>Novidades do OmaStore %1</translation></message>
+    <message><source>No release notes were published for this version.</source><translation>Não foram publicadas notas para esta versão.</translation></message>
     <message>
         <source>Close OmaStore and run: pkill -x omastored</source>
         <translation>Feche o OmaStore e rode: pkill -x omastored</translation>
@@ -1123,6 +1130,7 @@ Eles são instalados com o pacman, que pede a senha de administrador.</translati
 </context>
 <context>
     <name>SideBar</name>
+    <message><source>See what’s new</source><translation>Ver novidades</translation></message>
     <message>
         <source>Discover</source>
         <translation>Descobrir</translation>

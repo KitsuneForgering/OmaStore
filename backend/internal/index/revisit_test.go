@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/KitsuneForgering/OmaStore/backend/internal/github"
 	"github.com/KitsuneForgering/OmaStore/backend/internal/store"
 )
 
@@ -173,5 +174,25 @@ func TestDiscoveryTimeoutIsPartial(t *testing.T) {
 	}
 	if want := []string{StageDiscover, StageIndex}; !slices.Equal(stages, want) {
 		t.Errorf("stages = %v, want %v", stages, want)
+	}
+}
+
+type failingStateGH struct{ *fakeGH }
+
+func (f *failingStateGH) GetRepo(ctx context.Context, name, etag string) (*github.Repo, string, bool, error) {
+	if name == "acme/omaphoto" {
+		return nil, "", false, errors.New("HTTP 502")
+	}
+	return f.fakeGH.GetRepo(ctx, name, etag)
+}
+func TestPartialIndexPreservesSuccessAndReturnsError(t *testing.T) {
+	ix, gh, st := setup(t)
+	ix.GH = &failingStateGH{gh}
+	stats, err := ix.Run(context.Background(), Options{Only: []string{"acme/omaphoto", "acme/omalib"}})
+	if !errors.Is(err, ErrPartial) || stats.Failed != 1 {
+		t.Fatalf("partial: %+v, %v", stats, err)
+	}
+	if _, err := st.RepoState(context.Background(), "acme/omalib"); err != nil {
+		t.Fatalf("successful repository lost: %v", err)
 	}
 }

@@ -43,7 +43,8 @@ type Job struct {
 	Started  time.Time `json:"started"`
 	Finished time.Time `json:"finished,omitzero"`
 
-	cancel context.CancelFunc
+	cancel   context.CancelFunc
+	finished chan struct{} // closed after this job and its completion callback finish
 }
 
 // progress is what a job function reports.
@@ -104,7 +105,7 @@ func (js *jobs) start(parent context.Context, kind, repo string,
 	js.seq++
 	ctx, cancel := context.WithCancel(parent)
 	j := &Job{ID: fmt.Sprintf("job-%d", js.seq), Kind: kind, Repo: repo, State: StateRunning,
-		Started: time.Now(), cancel: cancel}
+		Started: time.Now(), cancel: cancel, finished: make(chan struct{})}
 	js.byID[j.ID] = j
 	js.order = append(js.order, j.ID)
 	snap := *j
@@ -114,6 +115,7 @@ func (js *jobs) start(parent context.Context, kind, repo string,
 	js.notify("job.started", snap)
 	go func() {
 		defer js.wg.Done()
+		defer close(j.finished)
 		defer cancel()
 		var last time.Time
 		lastStage, lastMessage := "", ""

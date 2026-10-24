@@ -21,6 +21,7 @@ Rectangle {
     signal sectionSelected(string section)
     signal categorySelected(string category)
     signal settingsRequested()
+    signal releaseNotesRequested()
 
     component NavItem: ItemDelegate {
         id: item
@@ -183,6 +184,12 @@ Rectangle {
                     value: selfCard.job.total > 0 ? selfCard.job.done / selfCard.job.total : 0
                     Accessible.name: qsTr("OmaStore update progress")
                 }
+                ActionButton {
+                    objectName: "selfReleaseNotesButton"
+                    Layout.fillWidth: true
+                    text: qsTr("See what’s new")
+                    onClicked: root.releaseNotesRequested()
+                }
                 PrimaryButton {
                     objectName: "selfUpdateButton"
                     Layout.fillWidth: true
@@ -190,9 +197,6 @@ Rectangle {
                     enabled: backend.connected
                     text: selfCard.restart ? qsTr("Restart OmaStore") : qsTr("Update OmaStore")
                     onClicked: selfCard.restart ? backend.restartSelf() : backend.updateSelf()
-                    ToolTip.visible: hovered && !selfCard.restart && !!selfCard.st.notes
-                    ToolTip.delay: 400
-                    ToolTip.text: qsTr("What's new:\n%1").arg(String(selfCard.st.notes).slice(0, 600))
                 }
             }
         }

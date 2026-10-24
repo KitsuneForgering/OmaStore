@@ -572,6 +572,35 @@ private slots:
         QVERIFY(inUse->property("processes").toString().contains("4242"));
     }
 
+    void unavailableInstalledAppCanBeRemoved()
+    {
+        DetailHarness h([](const QString &method, const QJsonObject &params) -> QJsonObject {
+            if (method == "catalog.get") {
+                QJsonObject detail = appDetail(params.value("repo").toString(), 0);
+                detail.insert("installable", false);
+                detail.insert("latestVersion", "");
+                detail.insert("install", QJsonObject{{"repo", "demo/app"}, {"version", "v1"}, {"broken", false}});
+                return {{"result", detail}};
+            }
+            return {{"result", QJsonArray{}}};
+        });
+        QVERIFY2(h.page, qPrintable(h.error));
+        QVERIFY(h.open("demo/app"));
+        auto *notice = h.find("unavailableInstalledNotice");
+        auto *remove = h.find("removeButton");
+        auto *open = h.find("openButton");
+        QVERIFY(notice && remove && open);
+        QTRY_VERIFY(notice->isVisible());
+        QVERIFY(remove->isVisible());
+        QVERIFY(open->isVisible());
+        QVERIFY(QMetaObject::invokeMethod(remove, "clicked"));
+        auto *confirm = h.page->findChild<QObject *>("confirmRemove");
+        // Accept the actual removal dialog, then verify the RPC was sent.
+        QVERIFY(confirm);
+        QVERIFY(QMetaObject::invokeMethod(confirm, "accepted"));
+        QTRY_COMPARE(h.daemon.count("install.uninstall"), 1);
+    }
+
     // The gallery is a slideshow: it advances on its own and wraps around,
     // and waits while paused or while the pointer is on it.
     void carouselPlaysAndPauses()
@@ -635,7 +664,11 @@ private slots:
     {
         Theme theme({QStringLiteral("/nonexistent")});
         FakeDaemon daemon;
-        daemon.handler = [](const QString &method, const QJsonObject &params) -> QJsonObject {
+        QString notes = QStringLiteral("# Changes\n\n") + QString(2000, QLatin1Char('x'));
+        daemon.handler = [&notes](const QString &method, const QJsonObject &params) -> QJsonObject {
+            if (method == "self.status")
+                return {{"result", QJsonObject{{"mode", "self"}, {"version", "0.1.0"}, {"latest", "0.2.0"},
+                                               {"updateAvailable", true}, {"notes", notes}}}};
             if (method == "author.check") {
                 return {{"result", QJsonObject{
                     {"repo", params.value("repo")}, {"compatible", false}, {"name", "Demo"},
@@ -671,6 +704,23 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(window));
         rpc.start();
         QTRY_VERIFY(backend.connected());
+        auto *notesButton = window->findChild<QQuickItem *>("selfReleaseNotesButton");
+        auto *notesDialog = window->findChild<QObject *>("selfReleaseNotesDialog");
+        auto *notesText = window->findChild<QQuickItem *>("selfReleaseNotesText");
+        QVERIFY(notesButton && notesDialog && notesText);
+        QTRY_VERIFY(notesButton->isVisible());
+        click(*window, notesButton);
+        QTRY_VERIFY(notesDialog->property("visible").toBool());
+        QVERIFY(notesText->property("text").toString().contains(QString(2000, QLatin1Char('x'))));
+        QTRY_VERIFY(notesText->height() > notesDialog->property("height").toDouble());
+        QVERIFY(QMetaObject::invokeMethod(notesDialog, "close"));
+        notes.clear();
+        backend.checkSelf();
+        QTRY_VERIFY(backend.selfStatus().value("notes").toString().isEmpty());
+        click(*window, notesButton);
+        QTRY_VERIFY(notesDialog->property("visible").toBool());
+        QVERIFY(notesText->property("text").toString().contains("No release notes"));
+        QVERIFY(QMetaObject::invokeMethod(notesDialog, "close"));
 
         auto *invite = window->findChild<QQuickItem *>("authorInvite");
         auto *title = window->findChild<QQuickItem *>("emptyTitle");

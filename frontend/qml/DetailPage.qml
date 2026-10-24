@@ -261,6 +261,15 @@ Page {
                 running: visible
             }
 
+            Text {
+                objectName: "unavailableInstalledNotice"
+                Layout.fillWidth: true
+                visible: page.installed && !page.app.installable
+                text: qsTr("This app is currently unavailable. You can still open or remove the installed version.")
+                wrapMode: Text.Wrap
+                color: theme.muted
+            }
+
             // Header: icon, name, repository, summary, and the star.
             RowLayout {
                 visible: !!page.app.repo

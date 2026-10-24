@@ -2,6 +2,8 @@ package rpc
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"time"
 
 	"github.com/KitsuneForgering/OmaStore/backend/internal/index"
@@ -85,6 +87,9 @@ func (s *Server) startIndex(opts index.Options, after func(error)) (*Job, error)
 			}
 		}
 		st, err := b.Index(ctx, opts)
+		if err == nil && st.Failed > 0 {
+			err = fmt.Errorf("%w: %d repositories could not be checked; refresh again to retry", index.ErrPartial, st.Failed)
+		}
 		if after != nil {
 			after(err)
 		}
@@ -120,10 +125,15 @@ func (s *Server) startInstallJob(kind, repo string, allowUnverified bool) (*Job,
 	})
 }
 
-// startAutoUpdates starts an update job for every installed app whose new
-// release can be verified, when automatic updates are on. Apps already busy
-// are left for the next time.
+// startAutoUpdates runs a bounded batch. Overlapping triggers share one
+// batch; manual jobs keep their existing immediate-start behavior.
+const autoUpdateWorkers = 2
+
 func (s *Server) startAutoUpdates() {
+	if !s.autoMu.TryLock() {
+		return
+	}
+	defer s.autoMu.Unlock()
 	au, ok := s.backend.(AutoUpdater)
 	if !ok || s.ctx.Err() != nil {
 		return
@@ -136,11 +146,43 @@ func (s *Server) startAutoUpdates() {
 		s.log.Warn("automatic updates: listing failed", "err", err)
 		return
 	}
+	pending := make(chan store.ListItem)
+	var workers sync.WaitGroup
+	for range autoUpdateWorkers {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for it := range pending {
+				if on, err := au.AutoUpdate(s.ctx); err != nil || !on {
+					continue
+				}
+				job, err := s.startInstallJob(KindUpdate, it.FullName, false)
+				if err != nil {
+					s.log.Debug("automatic update not started", "repo", it.FullName, "err", err)
+					continue
+				}
+				select {
+				case <-job.finished:
+				case <-s.ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+feed:
 	for _, it := range ready {
-		if _, err := s.startInstallJob(KindUpdate, it.FullName, false); err != nil {
-			s.log.Debug("automatic update not started", "repo", it.FullName, "err", err)
+		// A settings change can stop both workers, so feeding also checks it.
+		if on, err := au.AutoUpdate(s.ctx); err != nil || !on {
+			break
+		}
+		select {
+		case pending <- it:
+		case <-s.ctx.Done():
+			break feed
 		}
 	}
+	close(pending)
+	workers.Wait()
 }
 
 // AutoUpdateOnStart refreshes the installed apps and installs their updates

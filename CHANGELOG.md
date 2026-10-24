@@ -4,6 +4,24 @@ All notable changes to OmaStore are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-10-24
+
+### Added
+
+- A “See what’s new” action alongside OmaStore updates opens the full release
+  notes with Markdown formatting and scrolling, including before restarting.
+
+### Fixed
+
+- Installed apps remain visible, searchable and removable when their release is
+  unavailable or their repository leaves the catalog.
+- Partial catalog refreshes report failures while retaining successful changes;
+  incomplete automatic checks remain due for the next startup.
+- Automatic updates run at most two apps at a time and stop starting queued apps
+  when automatic updates are disabled.
+- OmaStore's update dialog shows the notes returned with the installed release,
+  even when release metadata changes after the initial update check.
+
 ## [0.5.3] - 2026-10-23
 
 ### Fixed
@@ -315,7 +333,8 @@ First public release.
 - `install.sh`, `omastore-bin` PKGBUILD, reproducible release tarball with
   build provenance attestation, and optional systemd socket and daily timer.
 
-[Unreleased]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/KitsuneForgering/OmaStore/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.0...v0.5.1

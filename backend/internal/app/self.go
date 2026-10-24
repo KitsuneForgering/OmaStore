@@ -94,5 +94,9 @@ func (a *App) SelfUpdate(ctx context.Context, progress func(install.Progress)) (
 	if target.AssetURL == "" && version != "" && install.NewerVersion(version, cur.Version) {
 		return nil, install.ErrSelfNoAsset
 	}
-	return a.Installer.SelfUpdate(ctx, cur, target, progress)
+	result, err := a.Installer.SelfUpdate(ctx, cur, target, progress)
+	if result != nil && result.To == version {
+		result.Notes = rel.Body
+	}
+	return result, err
 }

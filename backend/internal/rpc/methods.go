@@ -215,7 +215,7 @@ func toItem(it store.ListItem) AppItem {
 		Screenshots: nonNil(it.Screenshots), Category: it.Category, Stars: it.Stars, Score: it.Score,
 		Installable: it.Installable, LatestVersion: it.LatestTag, InstalledVersion: it.InstalledVersion,
 		// A blocked app is never updated, so it offers no update.
-		UpdateAvailable: !it.Blocked && it.InstalledVersion != "" && it.LatestTag != "" && it.InstalledVersion != it.LatestTag,
+		UpdateAvailable: it.Installable && !it.Blocked && it.InstalledVersion != "" && it.LatestTag != "" && it.InstalledVersion != it.LatestTag,
 		Blocked:         it.Blocked, BlockedReason: it.BlockedReason,
 	}
 }
@@ -293,9 +293,10 @@ type SelfInfo struct {
 
 // SelfUpdateResult is the result of a self.update job.
 type SelfUpdateResult struct {
-	From string `json:"from"`
-	To   string `json:"to"`
-	GUI  string `json:"gui"` // launcher of the new interface, to restart into
+	From  string `json:"from"`
+	To    string `json:"to"`
+	GUI   string `json:"gui"`   // launcher of the new interface, to restart into
+	Notes string `json:"notes"` // release notes of To
 }
 
 // Method parameters.
@@ -625,7 +626,7 @@ func (s *Server) call(method string, raw json.RawMessage) (any, error) {
 				report(progress{Stage: ip.Stage, Done: ip.Done, Total: ip.Total})
 			})
 			if r != nil {
-				return SelfUpdateResult{From: r.From, To: r.To, GUI: r.GUI}, err
+				return SelfUpdateResult{From: r.From, To: r.To, GUI: r.GUI, Notes: r.Notes}, err
 			}
 			return nil, err
 		}, nil)

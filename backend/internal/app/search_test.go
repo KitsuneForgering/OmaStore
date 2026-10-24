@@ -101,3 +101,30 @@ func TestSimilarApps(t *testing.T) {
 		t.Errorf("missing: %v", err)
 	}
 }
+
+func TestInstalledSearchIncludesRemovedApps(t *testing.T) {
+	a := testApp(t)
+	ctx := context.Background()
+	// Warm the cache before installing an app unknown to the catalog.
+	if _, err := a.ListApps(ctx, store.Filter{Query: "lostapp"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Store.SaveInstall(ctx, store.Install{FullName: "a/lostapp", Version: "v1", InstalledAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := a.ListApps(ctx, store.Filter{InstalledOnly: true, Query: "lostapp"})
+	if err != nil || len(got) != 1 || got[0].FullName != "a/lostapp" {
+		t.Fatalf("installed search: %+v, %v", got, err)
+	}
+	public, err := a.ListApps(ctx, store.Filter{Query: "lostapp", All: true})
+	if err != nil || len(public) != 0 {
+		t.Fatalf("removed app leaked into catalog: %+v, %v", public, err)
+	}
+	if err := a.Store.DeleteInstall(ctx, "a/lostapp"); err != nil {
+		t.Fatal(err)
+	}
+	got, err = a.ListApps(ctx, store.Filter{InstalledOnly: true, Query: "lostapp"})
+	if err != nil || len(got) != 0 {
+		t.Fatalf("uninstalled search: %+v, %v", got, err)
+	}
+}
