@@ -4,6 +4,15 @@ All notable changes to OmaStore are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.3] - 2026-10-23
+
+### Fixed
+
+- Apps with the same display name now share one catalog entry, preferring
+  the repository with more stars and then the oldest repository when tied.
+  Search results and category counts follow the same selection; installed
+  apps remain accessible even when another repository wins the catalog slot.
+
 ## [0.5.2] - 2026-10-11
 
 ### Fixed
@@ -306,7 +315,8 @@ First public release.
 - `install.sh`, `omastore-bin` PKGBUILD, reproducible release tarball with
   build provenance attestation, and optional systemd socket and daily timer.
 
-[Unreleased]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/KitsuneForgering/OmaStore/compare/v0.4.1...v0.5.0
