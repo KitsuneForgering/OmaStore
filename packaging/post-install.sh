@@ -83,6 +83,55 @@ if [ "$home_bin" != "$bindir" ] && [ -e "$home_bin/omastore-gui" ]; then
   fi
 fi
 
+# Refresh author skills even when there was no per-user installation to replace.
+# Respect the opt-out retained by an installation the user chose to keep.
+sync_skills() {
+  [ ! -f "$self_root/.no-skills" ] || return 0
+  for agent_home in "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CODEX_HOME:-$HOME/.codex}" \
+    "$HOME/.agents" "$HOME/.pi/agent" "$HOME/.hermes" "$HOME"/.hermes/profiles/*; do
+    [ -d "$agent_home" ] || continue
+    dir="$agent_home/skills"
+    for src in "$datadir"/omastore/skills/omastore-*; do
+      [ -f "$src/SKILL.md" ] || continue
+      name=${src##*/}
+      dest="$dir/$name"
+      mkdir -p "$dir" || continue
+      stage=$(mktemp -d "$dir/.omastore-new.XXXXXX") || continue
+      if ! cp -R "$src/." "$stage/" || ! touch "$stage/.omastore-managed"; then
+        rm -rf "$stage"
+        say "could not prepare skill $name in $dir."
+        continue
+      fi
+      if [ -d "$dest" ] && [ ! -L "$dest" ] && diff -r "$stage" "$dest" >/dev/null 2>&1; then
+        rm -rf "$stage"
+        continue
+      fi
+      old=
+      if [ -e "$dest" ] || [ -L "$dest" ]; then
+        if [ -d "$dest" ] && [ ! -L "$dest" ] && [ -f "$dest/.omastore-managed" ]; then
+          old="$stage.previous"
+        else
+          backups="$data_home/omastore/skill-backups"
+          if ! mkdir -p "$backups"; then rm -rf "$stage"; continue; fi
+          backup=$(mktemp -d "$backups/$name.XXXXXX") || { rm -rf "$stage"; continue; }
+          old="$backup/$name"
+        fi
+        if ! mv "$dest" "$old"; then rm -rf "$stage"; continue; fi
+      fi
+      previous="$stage.previous"
+      if mv "$stage" "$dest"; then
+        [ "$old" != "$previous" ] || rm -rf "$previous"
+        say "installed or updated skill $name in $dir."
+      else
+        [ -z "$old" ] || mv "$old" "$dest"
+        rm -rf "$stage"
+        say "could not install skill $name in $dir."
+      fi
+    done
+  done
+}
+sync_skills
+
 # The daemons of this account running a replaced copy of $bindir/omastored
 # (the kernel marks the old file " (deleted)").
 pids=

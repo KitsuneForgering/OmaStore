@@ -4,6 +4,13 @@ All notable changes to OmaStore are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- `make install` installs missing author skills and refreshes changed copies for
+  installed coding agents, backing up unmanaged copies.
+
 ## [0.6.0] - 2026-10-24
 
 ### Added

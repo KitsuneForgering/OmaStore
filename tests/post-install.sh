@@ -82,4 +82,29 @@ case "$out" in *"per-user installation is in"*) ;; *) fail "OMASTORE_KEEP_USER_I
 rm -rf "$HOME/.local/bin/omastore-gui" "$self"
 out=$(sh "$project/packaging/post-install.sh" "$prefix/bin" "$prefix/share" 2>&1)
 [ -z "$out" ] || fail "unexpected output with nothing to hand over"
+# A fresh agent receives missing skills, existing managed copies get updates,
+# and unmanaged copies are backed up. Custom agent paths may contain spaces.
+export CODEX_HOME="$HOME/custom codex"
+mkdir -p "$CODEX_HOME" "$HOME/.agents/skills/omastore-check"
+printf 'personal copy\n' > "$HOME/.agents/skills/omastore-check/SKILL.md"
+printf 'updated skill\n' > "$prefix/share/omastore/skills/omastore-check/SKILL.md"
+out=$(sh "$project/packaging/post-install.sh" "$prefix/bin" "$prefix/share" 2>&1)
+for agent in "$HOME/.claude" "$CODEX_HOME" "$HOME/.agents"; do
+  grep -q 'updated skill' "$agent/skills/omastore-check/SKILL.md" || fail "skill not refreshed in $agent"
+  [ -f "$agent/skills/omastore-check/.omastore-managed" ] || fail "missing marker in $agent"
+done
+found=no
+for backup in "$XDG_DATA_HOME"/omastore/skill-backups/omastore-check.*/omastore-check/SKILL.md; do
+  [ -f "$backup" ] || continue
+  grep -q 'personal copy' "$backup" && found=yes
+done
+[ "$found" = yes ] || fail "unmanaged skill was not backed up"
+[ ! -d "$HOME/.pi" ] || fail "created a home for an absent agent"
+out=$(sh "$project/packaging/post-install.sh" "$prefix/bin" "$prefix/share" 2>&1)
+[ -z "$out" ] || fail "unchanged skills were installed again"
+mkdir -p "$self"
+: > "$self/.no-skills"
+rm -rf "$CODEX_HOME/skills/omastore-check"
+out=$(sh "$project/packaging/post-install.sh" "$prefix/bin" "$prefix/share" 2>&1)
+[ ! -e "$CODEX_HOME/skills/omastore-check" ] || fail "ignored the skills opt-out"
 echo "post-install: ok"

@@ -32,7 +32,16 @@ OmaStore's self-update and `install.sh` runs keep them current, and
 OmaStore, or copied by hand) gives way to the new version and is moved to
 `~/.local/share/omastore/skill-backups/`, which uninstalling keeps. `--no-skills` opts out, and the choice is remembered by the self-update.
 
-The pacman packages and `make install` put them in
+`make install` also installs missing skills and refreshes changed copies for
+the current user (or `SUDO_USER` when run through sudo). Unchanged copies are
+left in place, and unmanaged copies are backed up as above. To rerun this
+post-install step after adding a coding agent:
+
+```sh
+sh packaging/post-install.sh /usr/bin /usr/share
+```
+
+The pacman packages and `make install` put the source copies in
 `/usr/share/omastore/skills/`; copy them into your agent's directory, for
 example the shared one:
 
