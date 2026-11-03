@@ -4,6 +4,14 @@ All notable changes to OmaStore are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.1] - 2026-11-02
+
+### Fixed
+
+- Opening an app whose README is long and contains a table no longer crashes
+  the interface on Qt 6.12 (#15). Long Markdown is shown in sections, one text
+  item each, keeping tables, code blocks and reference-style links intact.
+
 ## [0.7.0] - 2026-10-24
 
 ### Added
@@ -345,7 +353,9 @@ First public release.
 - `install.sh`, `omastore-bin` PKGBUILD, reproducible release tarball with
   build provenance attestation, and optional systemd socket and daily timer.
 
-[Unreleased]: https://github.com/KitsuneForgering/OmaStore/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/KitsuneForgering/OmaStore/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/KitsuneForgering/OmaStore/compare/v0.7.0...v0.7.1
+[0.7.0]: https://github.com/KitsuneForgering/OmaStore/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/KitsuneForgering/OmaStore/compare/v0.5.1...v0.5.2
