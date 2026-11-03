@@ -660,6 +660,51 @@ private slots:
 
     // A fresh store (empty catalog) invites authors in; the publish page
     // checks a repository and shows the report with a manifest to copy.
+    // Issue #15: a long README with a table crashed Qt 6.12's renderer when
+    // one Text held all of it. It is shown as several Text items, none long,
+    // with the table intact in one of them.
+    void longReadmeIsSplitIntoSections()
+    {
+        QString readme = QStringLiteral("# Demo App\n\n");
+        for (int i = 0; i < 12; ++i) {
+            readme += QStringLiteral("## Part %1\n\n").arg(i);
+            for (int p = 0; p < 4; ++p)
+                readme += QString(QStringLiteral("Some words about this part. ")).repeated(20) + QStringLiteral("\n\n");
+            if (i == 6)
+                readme += QStringLiteral("| | Box | Machine |\n|---|---|---|\n| Runs | userspace | own kernel |\n\n");
+        }
+        QVERIFY(readme.size() > 25000);
+        DetailHarness h([readme](const QString &method, const QJsonObject &params) -> QJsonObject {
+            if (method == "catalog.get") {
+                QJsonObject detail = appDetail(params.value("repo").toString(), 0);
+                detail.insert("readme", readme);
+                return {{"result", detail}};
+            }
+            return {{"result", QJsonArray{}}};
+        });
+        QVERIFY2(h.page, qPrintable(h.error));
+        QVERIFY(h.open("demo/app"));
+        auto *body = h.find("detailReadme");
+        QVERIFY(body);
+        QTRY_VERIFY(body->property("sections").toStringList().size() > 1);
+        QList<QQuickItem *> texts;
+        for (QQuickItem *child : body->childItems())
+            if (child->property("textFormat").isValid())
+                texts.append(child);
+        QCOMPARE(texts.size(), body->property("sections").toStringList().size());
+        int tables = 0;
+        for (QQuickItem *text : texts) {
+            const QString shown = text->property("text").toString();
+            QVERIFY2(shown.size() < 8000, qPrintable(QString::number(shown.size())));
+            tables += shown.contains(QStringLiteral("| Runs | userspace | own kernel |")) ? 1 : 0;
+            QVERIFY(text->height() > 0);
+        }
+        QCOMPARE(tables, 1);
+        // Sections follow each other down the page.
+        for (qsizetype i = 1; i < texts.size(); ++i)
+            QVERIFY(texts[i]->y() > texts[i - 1]->y());
+    }
+
     void emptyCatalogLeadsAuthorsToPublish()
     {
         Theme theme({QStringLiteral("/nonexistent")});

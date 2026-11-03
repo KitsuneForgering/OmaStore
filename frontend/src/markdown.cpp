@@ -184,3 +184,58 @@ QString Markdown::forDisplay(const QString &markdown)
     }
     return output + simplifyHtml(stripImages(prose));
 }
+
+QStringList Markdown::sections(const QString &markdown, int maxChars)
+{
+    static const QRegularExpression fence(QStringLiteral(R"(^ {0,3}(`{3,}|~{3,}))"));
+    static const QRegularExpression heading(QStringLiteral(R"(^ {0,3}#{1,6}(\s|$))"));
+    static const QRegularExpression reference(QStringLiteral(R"(^ {0,3}\[[^\]]+\]:\s*\S)"));
+
+    QStringList chunks, references;
+    QString current;
+    QChar fenceChar;
+    int fenceLength = 0;
+    bool previousBlank = false;
+    const auto flush = [&] {
+        if (!current.trimmed().isEmpty())
+            chunks.append(current);
+        current.clear();
+    };
+    for (const QString &line : markdown.split(QLatin1Char('\n'))) {
+        const auto match = fence.match(line);
+        if (fenceLength > 0) {
+            current += line + QLatin1Char('\n');
+            if (match.hasMatch() && match.captured(1).at(0) == fenceChar &&
+                match.captured(1).size() >= fenceLength)
+                fenceLength = 0;
+            previousBlank = false;
+            continue;
+        }
+        const bool blank = line.trimmed().isEmpty();
+        if (reference.match(line).hasMatch()) {
+            references.append(line);
+            previousBlank = false;
+            continue;
+        }
+        // A heading opens a section; a long section also ends before a new
+        // block that is not indented (an indented line may continue a list).
+        const bool newBlock = !blank && !line.startsWith(QLatin1Char(' ')) &&
+                              !line.startsWith(QLatin1Char('\t'));
+        if (heading.match(line).hasMatch() ||
+            (newBlock && previousBlank && current.size() >= maxChars))
+            flush();
+        if (match.hasMatch()) {
+            fenceChar = match.captured(1).at(0);
+            fenceLength = match.captured(1).size();
+        }
+        current += line + QLatin1Char('\n');
+        previousBlank = blank;
+    }
+    flush();
+    if (!references.isEmpty()) {
+        const QString definitions = QLatin1Char('\n') + references.join(QLatin1Char('\n')) + QLatin1Char('\n');
+        for (QString &chunk : chunks)
+            chunk += definitions;
+    }
+    return chunks;
+}

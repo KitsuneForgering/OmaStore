@@ -82,23 +82,39 @@ Page {
 
     // One theme-aware renderer for all repository prose: README, changelog and
     // release notes share typography, wrapping and safe external links.
-    component MarkdownBody: Text {
+    // Each section is its own Text: Qt 6.12 crashes rendering one Text that
+    // holds a long document with a table (issue #15).
+    component MarkdownBody: ColumnLayout {
+        id: body
         property string markdown: ""
+        readonly property var sections: markdown ? backend.markdownSectionsForDisplay(markdown) : []
+        readonly property font font: Qt.font({ family: theme.fontFamily, pixelSize: theme.fontReading })
+        readonly property real lineHeight: 1.5
+        readonly property color color: theme.foreground
         Layout.fillWidth: true
-        text: markdown ? backend.readmeForDisplay(markdown) : ""
-        textFormat: Text.MarkdownText
-        wrapMode: Text.Wrap
-        font.family: theme.fontFamily
-        font.pixelSize: theme.fontReading
-        lineHeight: 1.5
-        lineHeightMode: Text.ProportionalHeight
-        color: theme.foreground
-        linkColor: theme.accent
-        onLinkActivated: (link) => {
-            if (link.startsWith("https://") || link.startsWith("http://"))
-                Qt.openUrlExternally(link)
+        // The first block of each Text loses its top margin: this restores
+        // the gap before a section's heading.
+        spacing: theme.spaceL
+        Repeater {
+            model: body.sections
+            delegate: Text {
+                required property string modelData
+                Layout.fillWidth: true
+                text: modelData
+                textFormat: Text.MarkdownText
+                wrapMode: Text.Wrap
+                font: body.font
+                lineHeight: body.lineHeight
+                lineHeightMode: Text.ProportionalHeight
+                color: body.color
+                linkColor: theme.accent
+                onLinkActivated: (link) => {
+                    if (link.startsWith("https://") || link.startsWith("http://"))
+                        Qt.openUrlExternally(link)
+                }
+                HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
+            }
         }
-        HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
     }
 
     Dialog {

@@ -135,6 +135,8 @@ public:
     Q_INVOKABLE static QString stageText(const QString &kind, const QString &stage);
     // README markdown ready to display (without remote images).
     Q_INVOKABLE QString readmeForDisplay(const QString &markdown) const;
+    // The same, cut into sections for one Text item each (Markdown::sections).
+    Q_INVOKABLE QStringList markdownSectionsForDisplay(const QString &markdown) const;
     // Asks the daemon what the store sees of a repository (owner/repo or a
     // GitHub URL). With testManifest, manifest is tested instead of the
     // published one, even when empty (an empty omastore.toml is a valid opt-in).

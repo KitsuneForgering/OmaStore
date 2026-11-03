@@ -7,6 +7,8 @@
 #include <QTextDocument>
 #include <QtTest>
 
+#include <algorithm>
+
 class TestMarkdown : public QObject {
     Q_OBJECT
 
@@ -90,6 +92,63 @@ private slots:
         QVERIFY(prepared.contains(QStringLiteral("![literal](logo.png)")));
         QVERIFY(prepared.contains(QStringLiteral("<img src=\"logo.png\">")));
         QVERIFY(prepared.contains(QStringLiteral("    ![indented literal](logo.png)")));
+    }
+
+    // Issue #15: one Text holding a long document with a table crashes Qt
+    // 6.12's renderer, so the README is cut into sections, one Text each.
+    void sectionsStartAtHeadings()
+    {
+        const QString source = QStringLiteral(
+            "# App\n\nIntro.\n\n## Usage\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n"
+            "```sh\n# not a heading\nrun\n```\n\n## License\n\nMIT\n");
+        const QStringList sections = Markdown::sections(source);
+        QCOMPARE(sections.size(), 3);
+        QVERIFY(sections[0].startsWith(QStringLiteral("# App\n")));
+        QVERIFY(sections[1].startsWith(QStringLiteral("## Usage\n")));
+        // The table and the fence (with its # comment) stay whole.
+        QVERIFY(sections[1].contains(QStringLiteral("| a | b |\n|---|---|\n| 1 | 2 |\n")));
+        QVERIFY(sections[1].contains(QStringLiteral("```sh\n# not a heading\nrun\n```\n")));
+        QVERIFY(sections[2].startsWith(QStringLiteral("## License\n")));
+        // Nothing is lost or reordered.
+        QCOMPARE(sections.join(QString()), source + QLatin1Char('\n'));
+    }
+
+    void longSectionsAreCutBetweenBlocks()
+    {
+        QString source = QStringLiteral("# Long\n\n");
+        const QString paragraph = QString(QStringLiteral("word ")).repeated(100).trimmed() + QStringLiteral("\n\n");
+        for (int i = 0; i < 40; ++i) {
+            source += paragraph;
+            if (i == 20)
+                source += QStringLiteral("| a | b |\n|---|---|\n| 1 | 2 |\n\n- item\n\n  continued\n\n");
+        }
+        const int max = 2000;
+        const QStringList sections = Markdown::sections(source, max);
+        QVERIFY(sections.size() > 5);
+        for (const QString &section : sections) {
+            QVERIFY2(section.size() <= max + paragraph.size(), qPrintable(QString::number(section.size())));
+            // Each cut falls before a block, never inside one.
+            QVERIFY(!section.startsWith(QLatin1Char('|')) || section.startsWith(QStringLiteral("| a |")));
+            QVERIFY(!section.startsWith(QStringLiteral("  continued")));
+        }
+        QVERIFY(std::any_of(sections.cbegin(), sections.cend(), [](const QString &s) {
+            return s.contains(QStringLiteral("| a | b |\n|---|---|\n| 1 | 2 |\n"));
+        }));
+        QCOMPARE(sections.join(QString()), source + QLatin1Char('\n'));
+    }
+
+    void referenceLinksWorkInEverySection()
+    {
+        const QString source = QStringLiteral(
+            "# One\n\nSee [the docs][docs].\n\n# Two\n\nAnd [again][docs].\n\n[docs]: https://example.com/docs\n");
+        const QStringList sections = Markdown::sections(source);
+        QCOMPARE(sections.size(), 2);
+        for (const QString &section : sections) {
+            QTextDocument document;
+            document.setMarkdown(section);
+            QVERIFY2(document.toHtml().contains(QStringLiteral("href=\"https://example.com/docs\"")),
+                     qPrintable(section));
+        }
     }
 
     void offlineNamBlocksRemote()

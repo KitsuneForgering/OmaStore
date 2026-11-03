@@ -645,6 +645,11 @@ QString Backend::readmeForDisplay(const QString &markdown) const
     return Markdown::forDisplay(markdown);
 }
 
+QStringList Backend::markdownSectionsForDisplay(const QString &markdown) const
+{
+    return Markdown::sections(Markdown::forDisplay(markdown));
+}
+
 // On the first run the catalog is empty: index automatically. A failed
 // query is asked again on the next connection.
 void Backend::maybeIndexOnFirstRun()
